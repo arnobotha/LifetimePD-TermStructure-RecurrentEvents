@@ -84,24 +84,43 @@ d <- 3 # default threshold for g0/g1-measures of delinquency (payments in arrear
 k <- 6 # Probation period
 
 
-# --- User specific paths
-# - Setting the paths conditional on the current active user
-# - Paths for Bernard
-  # Custom path where R-scripts are saved
-  path_cust <- "C:/Users/R8873885/OneDrive - FRG/Documents/Project/Scripts/"
-  
-  # Common path for storing important R-objects as back-up
-  genObjPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/Project/Objects/"
- 
-   # Common path for saving important analytics (e.g., sampling)
-  genFigPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/Project/Figures/" # General folder path
+# -- Path variables | General
 
-# --- General paths
 # - Common path for saving big data objects
-genPath <- "C:/BMI Data/Generated/"
+genPath <- "E:/DataDump/FNB SLC/LifetimePD-Termstructure_RecurrentEvents_Data/"
 
 # - Common path for importing raw data
-genRawPath <- "C:/BMI Data/Raw/"
+genRawPath <- "E:/DataDump/FNB SLC/"
+
+
+# -- Path variables | User-dependent
+
+if (Sys.getenv("USERNAME") == "Arno Botha") {
+  path_cust <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  
+  # - Common path for storing important R-objects as back-up
+  genObjPath <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  
+  # - Common path for saving important analytics (e.g., sampling)
+  genFigPath <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Figures/"
+  
+  # - Common path for saving big data objects
+  genPath <- "E:/DataDump/FNB SLC/LifetimePD-TermStructure-RecurrentEvents_Data/"
+  
+  # - Common path for importing raw data
+  genRawPath <- "E:/DataDump/FNB SLC/"
+  
+} else if (Sys.getenv("USERNAME") == "") { # Bernard
+  # - Custom path where R-scripts are saved
+  path_cust <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  
+  # - Common path for storing important R-objects as back-up
+  genObjPath <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  
+  # - Common path for saving important analytics (e.g., sampling)
+  genFigPath <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEventss/Figures/"
+  
+}
 
 
 

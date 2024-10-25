@@ -83,16 +83,6 @@ sc.Thres <- 0.9; # repayment ratio - g1
 d <- 3 # default threshold for g0/g1-measures of delinquency (payments in arrears)
 k <- 6 # Probation period
 
-
-# -- Path variables | General
-
-# - Common path for saving big data objects
-genPath <- "E:/DataDump/FNB SLC/LifetimePD-Termstructure_RecurrentEvents_Data/"
-
-# - Common path for importing raw data
-genRawPath <- "E:/DataDump/FNB SLC/"
-
-
 # -- Path variables | User-dependent
 
 if (Sys.getenv("USERNAME") == "Arno Botha") {
@@ -110,15 +100,22 @@ if (Sys.getenv("USERNAME") == "Arno Botha") {
   # - Common path for importing raw data
   genRawPath <- "E:/DataDump/FNB SLC/"
   
-} else if (Sys.getenv("USERNAME") == "") { # Bernard
+} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard
+  
+  # - Common path for saving big data objects
+  genPath <- "C:/BMI Data/LifetimePD-TermStructure-RecurrentEvents_Data/"
+  
+  # - Common path for importing raw data
+  genRawPath <- "C:/BMI Data/"
+  
   # - Custom path where R-scripts are saved
-  path_cust <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  path_cust <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
   
   # - Common path for storing important R-objects as back-up
-  genObjPath <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  genObjPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Objects/"
   
   # - Common path for saving important analytics (e.g., sampling)
-  genFigPath <- "C:/Users/R5532132/OneDrive - FRG/GCRM/Classfier-Diagnostics Repository/LifetimePD-TermStructure-RecurrentEventss/Figures/"
+  genFigPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/"
   
 }
 
@@ -138,4 +135,8 @@ source(paste0(path_cust,'0a(iii).DelinqM.R'))
 
 # - Survival functions
 source(paste0(path_cust,'0a(iv).SurvFunc.R'))
+
+# - Survival functions - Recurrent events
+source(paste0(path_cust,'0a(v).SurvFunc_RecurrentEvents.R'))
+
 

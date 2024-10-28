@@ -24,7 +24,7 @@
 #   - 2d.Data_Fusion
 
 # -- Inputs:
-#   - datCredit_AG | Prepared from script 3b.Data_Fusion2.
+#   - datCredit_AG | Prepared from script 3a.Data_Fusion2.
 #
 # -- Outputs:
 #   - Series of graphs for testing the time-dependent sampling bias of the chosen (simple clustered sampling)
@@ -316,7 +316,7 @@ dat_anno_perf <- data.table(MAE = rep(0,anno_n*3),
                             x = rep(x_pos,anno_n*3),
                             y = rep(Inf, anno_n*3), # c(c(0.9,0.83,0.76),c(0.6,0.55,0.5),c(0.9,0.83,0.76)),
                             vjust = rep(c(1,2,3),anno_n),
-                            hjust=c(0.5,0.5,0.5,0,0,0,0.5,0.5,0.5))
+                            hjust=c(0.3,0.3,0.3,0.1,0.1,0.1,0.5,0.5,0.5))
 # - Getting the column names to help compute the MAEs
 colnames <- colnames(port.aggr_perf2)
 # - Populating the annotation dataset
@@ -341,10 +341,10 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 
 # - Create graph
 
-(g3 <- ggplot(port.aggr_perf, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-    labs(x=bquote("Performing spell cohorts of AG (ccyymm): entry time "*italic(t[e])), y=bquote("Resolution rate (%) of type "*~italic(kappa))) +
+(g2 <- ggplot(port.aggr_perf, aes(x=timeVar, y=Prop)) + theme_minimal() + 
+    labs(x=bquote("Performing spell cohorts of AG (ccyymm): entry time "*italic(t[e])), y=bquote("AG resolution rate (%) of type "*~italic(kappa))) +
     theme(text=element_text(family=chosenFont),legend.position = "bottom",
-          axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
+          axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
           strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
     # main line graph with overlaid points
@@ -361,7 +361,7 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
     scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
 # - Save graph
-ggsave(g3, file=paste0(genFigPath, "AG/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g2, file=paste0(genFigPath, "AG/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 # - Cleanup
 rm(dat_anno_perf, resolPerf_levels, chosenFont, col.v, label.v, colnames, datGraph_Perf, port.aggr_perf, port.aggr_perf2, maxDate, minDate, Facet_Label_Perf)
@@ -412,7 +412,7 @@ dat_anno_perf <- data.table(MAE = rep(0,anno_n*4),
                                           paste0("'TTC-mean '*E(italic(B[t]))*'")), anno_n),
                             x = rep(x_pos,anno_n*4),
                             y = rep(Inf, anno_n*4), # c(c(0.48,0.45,0.42,0.38),c(0.65,0.62,0.59,0.55)), 
-                            vjust = c(1,2,3,4,27,28,29,24.2),
+                            vjust = c(18,19,20,18,1,2,3,4),
                             hjust=rep(0.5, anno_n*4))
 # - Getting the column names to help compute the MAEs
 colnames <- colnames(port.aggr_perf2)
@@ -442,10 +442,10 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
              "c_Valid"=bquote(italic(C)[t]*": Validation set "*italic(D)[italic(V)]~"("*.(round(datCredit_valid_AG[,.N]/1000))*"k)"))
 
 # - Create graph
-(g5_1 <- ggplot(port.aggr_perf, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-      labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa))) +
+(g3 <- ggplot(port.aggr_perf, aes(x=timeVar, y=Prop)) + theme_minimal() + 
+      labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("AG resolution rate (%) of type "*italic(kappa))) +
       theme(text=element_text(family=chosenFont),legend.position = "bottom",
-            axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
+            axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
             strip.background=element_rect(fill="snow2", colour="snow2"),
             strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
       # main line graph with overlaid points
@@ -462,12 +462,12 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
       scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
 # - Save graph
-ggsave(g5_1, file=paste0(genFigPath, "AG/ResolutionRates_Perf_ts_Subsample-", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g3, file=paste0(genFigPath, "AG/ResolutionRates_Perf_ts_Subsample-", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 # - Create graph using only the first facet (conditional on the faceting variable having more than one level)
 if (!is.na(resolPerf_stop2)){
   # Create graph
-  (g5_2 <- ggplot(port.aggr_perf[PerfSpell_Resol_Stop==resolPerf_stop2,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
+  (g4 <- ggplot(port.aggr_perf[PerfSpell_Resol_Stop==resolPerf_stop2,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
      labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa))) +
      theme(text=element_text(family=chosenFont),legend.position = "bottom",
            axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
@@ -488,11 +488,11 @@ if (!is.na(resolPerf_stop2)){
   
   # Save graph
   dpi <- 170
-  ggsave(g5_2, file=paste0(genFigPath, "AG_ResolutionRates_Perf_ts_Subsample_Single_Facet-", round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+  ggsave(g4, file=paste0(genFigPath, "AG_ResolutionRates_Perf_ts_Subsample_Single_Facet-", round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 }
 
 # - Cleanup
 rm(dat_anno_perf, resolPerf_levels, ind, chosenFont, col.v, label.v, colnames, datGraph_Perf, port.aggr_perf, port.aggr_perf2, maxDate, minDate, Facet_Label_Perf)
 
 # --- Cleanup
-suppressWarnings(rm(g1, g2, g3, g4, g5_1, g5_2, g6, datCredit, datCredit_smp, stratifiers, clusVar, Counter, timeVar, End_Dte, Start_Dte, datGraph))
+suppressWarnings(rm(g1, g2, g3, g4, datCredit, datCredit_smp, stratifiers, clusVar, Counter, timeVar, End_Dte, Start_Dte, datGraph, datCredit_train_AG, datCredit_valid_AG))

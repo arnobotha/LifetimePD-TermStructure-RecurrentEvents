@@ -99,5 +99,5 @@ pack.ffdf(paste0(genPath,"creditdata_final_PWP_TT"), datCredit_PWPTT)
 pack.ffdf(paste0(genPath,"creditdata_final_PWP_ST"), datCredit_PWPST)
 
 # -- 4. Housekeeping
-rm(datCredit_real)
+rm(datCredit_real, datCredit_TFD, datCredit_AG, datCredit_PWPTT, datCredit_PWPST)
 suppressWarnings(rm(exclusions_all, exclusions_credit)); gc()

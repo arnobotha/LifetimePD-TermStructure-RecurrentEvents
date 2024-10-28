@@ -23,7 +23,7 @@
 # NOTE: This script predominantly comes from another project (Kasmeer).
 # =======================================================================================
 
-
+### QUESTION: [Partition] was never created?
 
 # ------ 1. Portfolio diagnostics: general distributions and prevalence rates
 

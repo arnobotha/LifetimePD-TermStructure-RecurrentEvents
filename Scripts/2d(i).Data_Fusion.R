@@ -56,7 +56,8 @@ datCredit_real <- subset(datCredit_real, ExclusionID == 0); gc()
 sum(datCredit_real$ExclusionID > 0) == 0 # check - success
 
 # - Remove fields that will not likely be used in the eventual analysis/ modelling of default risk, purely to save memory
-datCredit_real <- subset(datCredit_real, select = -c(ExclusionID))
+# datCredit_real <- subset(datCredit_real, select = -c(ExclusionID))
+### QUESTION: Why do we remove if we refer to it later?
 
 
 
@@ -203,9 +204,3 @@ pack.ffdf(paste0(genPath,"creditdata_final4"), datCredit_real)
 
 # --- Housekeeping
 suppressWarnings(rm(exclusions_all, exclusions_credit)); gc()
-
-
-
-
-
-

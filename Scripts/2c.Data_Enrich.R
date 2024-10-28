@@ -3,7 +3,7 @@
 # calculating the realised LGD from resolved default spells
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha
 # ---------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -57,7 +57,6 @@ datCredit_real[ExclusionID==0, Account_Censored := ifelse(Date >= maxDate_observ
 
 
 
-
 # --- 1.2. Data abstractions into simpler more manageable objects for delinquency measurement
 
 # - Scalars
@@ -83,8 +82,8 @@ matInstal_real <- as.matrix(pivot_wider(data=datCredit_real[ExclusionID == 0 & o
 # Note: Append a zero-valued row at the start to represent t=0 | Purely as an expedient to align 
 #   with pre-existing functions that use delinquency matrices
 matg0 <- rbind(rep(0, n_observed),
-  as.matrix(pivot_wider(data=datCredit_real[ExclusionID == 0 & order(LoanID),list(LoanID,Counter,g0_Delinq)], 
-                                        id_cols=Counter:Counter, names_from=LoanID, values_from=g0_Delinq))[,-1] )
+               as.matrix(pivot_wider(data=datCredit_real[ExclusionID == 0 & order(LoanID),list(LoanID,Counter,g0_Delinq)], 
+                                     id_cols=Counter:Counter, names_from=LoanID, values_from=g0_Delinq))[,-1] )
 
 
 
@@ -116,8 +115,6 @@ rm(datTemp); gc()
 
 
 
-
-
 # --- 1.4. Create Default Status field, given (d,k)-thresholds
 # d: default threshold for g0/g1 measures; k; probation period for leaving k-curable state back into performing state
 
@@ -138,6 +135,8 @@ datTemp[, LoanID := as.numeric(LoanID)]; datTemp[, Counter := (1:.N)-1,by=list(L
 #   1) S_D (Default); 2) S_C (K-curable); 3) S_P (Performing);
 datTemp[, DelinqState_g1 := case_when(Value==3 ~ "S_P", Value==1 ~ "S_D", Value==2 ~ "S_C")]
 
+# - Assign Default Indicator Accordingly
+datTemp[, DefaultStatus2 := ifelse(Value==3,0,1)]
 
 
 # -- g0-Delinquency | "Observed"
@@ -163,27 +162,31 @@ datTemp2[, DefaultStatus1 := ifelse(Value==3,0,1)]
 # -- Preparing for data fusion
 # - Ensure variables are not present in dataset before fusion (useful during debugging)
 suppressWarnings({
-  datCredit_real[, `:=`(DelinqState_g1 = NULL, DefaultStatus1 = NULL, DelinqState_g0 = NULL)]   
+  datCredit_real[, `:=`(DefaultStatus2 = NULL, DelinqState_g1 = NULL, 
+                        DefaultStatus1 = NULL, DelinqState_g0 = NULL)]   
 })
 
 # - Merge extra information together, to be fused with main dataset later
-datTemp_Final <- merge(datTemp[, list(LoanID, Counter, DelinqState_g1)], 
-              datTemp2[, list(LoanID, Counter, DelinqState_g0, DefaultStatus1)], by=c("LoanID", "Counter"), all.x=T)
+datTemp_Final <- merge(datTemp[, list(LoanID, Counter, DelinqState_g1, DefaultStatus2)], 
+                       datTemp2[, list(LoanID, Counter, DelinqState_g0, DefaultStatus1)], by=c("LoanID", "Counter"), all.x=T)
 
 # - Intermediate cleanup | Memory optimisation
 rm(datTemp, datTemp2, lstCurables, matInstal_real, matReceipt_real, matCD_real, matg0); gc()
 
 # - Merge delinquency state information back to the base dataset, reorder new fields, and reset key
 datCredit_real <- merge(datCredit_real, 
-                        datTemp_Final[, list(LoanID, Counter, DelinqState_g1, DelinqState_g0, DefaultStatus1)],
-                   by=c("LoanID", "Counter"), all.x=T) %>% relocate(DelinqState_g1, .after=g1_Delinq) %>%
+                        datTemp_Final[, list(LoanID, Counter, DelinqState_g1, DefaultStatus2, DelinqState_g0, DefaultStatus1)],
+                        by=c("LoanID", "Counter"), all.x=T) %>% relocate(DelinqState_g1, DefaultStatus2, .after=g1_Delinq) %>%
   relocate(DelinqState_g0, DefaultStatus1, .after=g0_Delinq) %>% setkey(LoanID, Counter)
 
 # [SANITY CHECK] Missingness?
 check_fuse2a <- datCredit_real[ExclusionID==0 & is.na(DelinqState_g1), .N] == 0
 cat( check_fuse2a %?% 'SAFE: No missingness in newly-created 3-state delinquency state vector [DelinqState_g1].\n' %:% 
        'WARNING: Missingness detected in newly-created 3-state delinquency state vector[DelinqState].\n')
-check_fuse2b <- datCredit_real[ExclusionID==0 & is.na(DelinqState_g0), .N] == 0
+check_fuse2b <- datCredit_real[ExclusionID==0 & is.na(DefaultStatus2), .N] == 0
+cat( check_fuse2b %?% 'SAFE: No missingness in newly-created default indicator [DefaultStatus2].\n' %:% 
+       'WARNING: Missingness detected in newly-created default indicator [DefaultStatus2].\n')
+check_fuse2c <- datCredit_real[ExclusionID==0 & is.na(DelinqState_g0), .N] == 0
 cat( check_fuse2c %?% 'SAFE: No missingness in newly-created 3-state delinquency state vector [DelinqState_g0].\n' %:% 
        'WARNING: Missingness detected in newly-created 3-state delinquency state vector[DelinqState_g0].\n')
 check_fuse2c <- datCredit_real[ExclusionID==0 & is.na(DefaultStatus1), .N] == 0
@@ -200,15 +203,17 @@ datCredit_real <- datCredit_real %>%
   # Re-order and group together fields related to terminal events or behavioural dynamics
   relocate(Event_Time, Event_Type, Account_Censored, HasWOff, WOff_Ind, WriteOff_Amt, 
            HasSettle, EarlySettle_Ind, EarlySettle_Amt, HasFurtherLoan, FurtherLoan_Ind, FurtherLoan_Amt, 
-           HasRedraw, Redraw_Ind, Redrawn_Amt, HasClosure, CLS_STAMP, .after=DefaultStatus1) %>%
+           HasRedraw, Redraw_Ind, Redrawn_Amt, HasClosure, CLS_STAMP, .after=DefaultStatus2) %>%
   # Re-order and group together other fields
   relocate(ExclusionID, TreatmentID, HasTrailingZeroBalances, ZeroBal_Start, .after=CLS_STAMP)
 
-  
 
 
 
+### QUESTION: Since we don't require default spells, can we leave out the code to create them?
 # ------- 2. Platform-aligned Advanced Feature engineering & Enrichment | Default Spells
+# NOTE: [DefaultStatus1] will be used for now given the deficiencies in the underlying [Receipt_Inf]
+# that corrupts [DefaultStatus2].
 
 # --- 2.0 Preliminaries & intermediary fields
 
@@ -227,7 +232,7 @@ datCredit_real[ExclusionID==0, DefaultStatus_Prev := shift(DefaultStatus1, n=1, 
 
 # [DIAGNOSTIC] Prevalence of performing statuses at the write-off point
 diag.real11_1a <- datCredit_real[ExclusionID==0 & Event_Type == "WOFF" & Counter==Max_Counter & 
-                                  DefaultStatus1==0, .N] / 
+                                   DefaultStatus1==0, .N] / 
   datCredit_real[ExclusionID==0 & Event_Type == "WOFF" & Counter==Max_Counter, .N] * 100
 # - Conditional reporting
 if (diag.real11_1a > 0) {
@@ -286,7 +291,7 @@ datCredit_real[ExclusionID==0,
                                            Age_Adj, as.integer(NA)), by=list(LoanID)]
 datCredit_real[ExclusionID==0, 
                LastTime_Default := ifelse(DefaultStatus1 == 1 & (is.na(DefaultStatus_Next) | DefaultStatus_Next == 0), 
-                                            Age_Adj, as.integer(NA)), by=list(LoanID)]
+                                          Age_Adj, as.integer(NA)), by=list(LoanID)]
 
 # - Calculate the index of each default episode, starting with 0 for the performing parts 
 # Naturally, whenever [Time_EnterDefault] has a value, a new default episode has begun
@@ -321,7 +326,6 @@ diag.real11_1c <- datCredit_real[ExclusionID == 0 & Counter==1 & HasLeftTruncDef
 if (diag.real11_1c > 0) { cat("NOTE:", round(diag.real11_1c,digits=3), "% of accounts are left-truncated wrt default spells, i.e., 
     observation started after the default spell's true start.\n") }
 
-### HERE---------------------------------------------------------------------------------------------------------
 # - Copy starting/ending times of a default episode across all periods within a default episode
 # Exclude all histories that have not yet experienced a default event.
 # In creating [Time_EnterDefault], mean() is used merely to extract a singular value amidst NA-values, per default episode
@@ -377,7 +381,7 @@ suppressWarnings({
 datCredit_real[ExclusionID==0 & DefaultStatus1==1, DefSpell_Censored :=
                  ifelse(Account_Censored == 1 | # time-censoring
                           ( TimeInDefSpell == .N + DefSpell_LeftTrunc[1]*(Age_Adj[1] - 1) & # Last record in spell AND
-                             LastTime_Default != Event_Time) | # curing-event
+                              LastTime_Default != Event_Time) | # curing-event
                           (Age_Adj == Event_Time[1] & Event_Type != "WOFF"), # competing risk terminal event
                         1, 0), by=list(LoanID, DefSpell_Num)]
 
@@ -408,7 +412,7 @@ datCredit_real[ExclusionID==0 & DefaultStatus1==1, DefSpellResol_Type_Hist :=
                  ifelse(Event_Type == "WOFF" & LastTime_Default == Event_Time & Date[.N] <= maxDate_observed, "WOFF", 
                         ifelse( (!is.na(LastTime_Default) & Date[.N] < maxDate_observed ) | # normal cures
                                   (Event_Type == "SETTLE" & LastTime_Default == Event_Time & Date[.N] <= maxDate_observed), # settlement-related cures
-                               "Cured", "Censored")), by=list(LoanID, DefSpell_Num)]
+                                "Cured", "Censored")), by=list(LoanID, DefSpell_Num)]
 
 # [SANITY CHECK] Prevalence of unjustified missingness in newly-created field?
 check4b_real <- datCredit_real[ExclusionID==0 & DefaultStatus1==1 & is.na(DefSpellResol_Type_Hist), .N] / 
@@ -429,7 +433,7 @@ datCredit_real[ExclusionID==0 & DefaultStatus1 == 1, DefSpellResol_TimeEnd :=
                         ifelse(Date[1] <= maxDate_observed, 
                                .SD[Date == maxDate_observed, Age_Adj], # Return age at last observed 'current' date
                                0 # future default episode that has not yet commenced
-                               )), by=list(LoanID, DefSpell_Num)]
+                        )), by=list(LoanID, DefSpell_Num)]
 
 # [SANITY CHECK] Prevalence of unexpected values in newly-created field?
 check4c_real <- datCredit_real[ExclusionID==0 & DefaultStatus1==1 & DefSpellResol_TimeEnd == 0, .N] / 
@@ -442,7 +446,7 @@ cat ( (check4c_real == 0) %?% "SAFE: No unexpected zero-values in [DefSpellResol
 # Only for uncensored default episodes
 datCredit_real[ExclusionID==0 & DefaultStatus1 == 1 & DefSpellResol_TimeEnd > 0, 
                DefSpell_Age := DefSpellResol_TimeEnd - (1-DefSpell_LeftTrunc[1])*(Age_Adj[1] - 1), 
-          by=list(LoanID, DefSpell_Num)]
+               by=list(LoanID, DefSpell_Num)]
 
 # - Housekeeping
 suppressWarnings({
@@ -503,7 +507,7 @@ datCredit_real <- merge(datCredit_real, datTemp, by="LoanID", all.x=T) %>%
 
 # - Lookup the corresponding [Age_Adj]-value, given that the new field only lists the position currently
 datCredit_real[ExclusionID == 0, DefSpell_LastStart := 
-         ifelse(DefSpell_LastStart[1] > 0, Age_Adj[DefSpell_LastStart[1]], -1), by=list(LoanID)]
+                 ifelse(DefSpell_LastStart[1] > 0, Age_Adj[DefSpell_LastStart[1]], -1), by=list(LoanID)]
 
 # [SANITY CHECK] Missingness?
 check_fuse3 <- datCredit_real[ExclusionID==0 & is.na(DefSpell_LastStart), .N] == 0
@@ -588,7 +592,7 @@ suppressWarnings( datCredit_real[, `:=`(ReceiptPV = NULL, LossRate_Real = NULL)]
 
 # - Fuse data and reorder
 datCredit_real <- merge(datCredit_real, datLGD_L[,list(LoanID, Counter, ReceiptPV, LossRate_Real)], 
-                   by=c("LoanID","Counter"), all.x=T) %>% relocate(ReceiptPV, LossRate_Real, .after=DefSpell_LastStart)
+                        by=c("LoanID","Counter"), all.x=T) %>% relocate(ReceiptPV, LossRate_Real, .after=DefSpell_LastStart)
 
 # [SANITY CHECK] Missingness?
 check_fuse4d <- datCredit_real[ExclusionID==0 & DefSpellResol_Type_Hist == "WOFF" & DefSpellResol_TimeEnd == Event_Time & 
@@ -630,8 +634,8 @@ cat( check_5_real %?% "SAFE: Zero-loss-on-cure assumption successfully imposed s
 
 # - Cleanup
 rm(datLGD_L, test); gc()
-### TO HERE ------------------------------------------------------------------------------------------------
- 
+
+
 
 
 
@@ -693,7 +697,7 @@ diag.real11_1d2 <- datCredit_real[ExclusionID == 0 & PerfSpell_Num==1 & PerfSpel
   datCredit_real[ExclusionID == 0 & PerfSpell_Num==1 & PerfSpell_Counter==1, .N] * 100
 if (diag.real11_1d > 0) { cat("NOTE:", round(diag.real11_1d,digits=2), "% of accounts are left-truncated wrt performing spells, i.e., 
     observation started after the performing spell's true start. Similarly, ", round(diag.real11_1d2, digits=2), 
-    "% of performing spells are left-truncated.\n") }
+                              "% of performing spells are left-truncated.\n") }
 
 
 
@@ -730,7 +734,7 @@ datCredit_real[ExclusionID==0 & !is.na(PerfSpell_Num), PerfSpell_TimeEnd :=
                         ifelse(Date[1] <= maxDate_observed, 
                                .SD[Date == maxDate_observed, Age_Adj], # Return age at current date
                                0 # future performance spell that has not yet commenced
-                               )), by=list(LoanID, PerfSpell_Num)]
+                        )), by=list(LoanID, PerfSpell_Num)]
 
 # [SANITY CHECK] Prevalence of unexpected values in newly-created field?
 check6b_real <- datCredit_real[ExclusionID==0 & !is.na(PerfSpell_Num) & PerfSpell_TimeEnd == 0, .N] / 
@@ -800,51 +804,3 @@ pack.ffdf(paste0(genObjPath,"matState_g1"), matState_real);
 # - Cleanup
 rm(matState_g0, matState_real, advance_adjterm_v_real); gc()
 
-
-
-
-# [LOOKUP] Specific case with g1-delinquency not matching with observed [AccountStatus], ending in settlement
-# Lookup <- subset(datCredit_real, LoanID == 155721) #  Treatments 1,3,7 would not have affected the instalment
-# [LOOKUP] Specific left-truncated write-off case that was performing prior write-off
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 134247)
-# [Lookup] Specific write-off case starting in performing
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 69708)
-# [LOOKUP] Specific written-off new loan with multiple default spells (also PerfSpell_TimeEnd != PerfSpell_Age)
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 3000012424328)
-# [LOOKUP] Specific left-truncated/old-loan case that settled early
-# Lookup <- subset(datCredit_real, ExclusionID == 0 & LoanID ==  13342)
-# [LOOKUP] Specific old/left-truncated case starting in performing with multiple default spells
-# Lookup <- subset(datCredit_real, ExclusionID == 0 & LoanID ==  145862)
-# [LOOKUP] Newly disbursed loan that was subsequently written off
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 
-  #                 unique(datCredit_real[ExclusionID == 0 & New_Ind==1 & HasWOff==T, LoanID])[1])
-# [LOOKUP] Newly disbursed loan that was time-censored (active) case
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 
-#                   unique(datCredit_real[ExclusionID == 0 & New_Ind==1 & Account_Censored==1, LoanID])[1])
-# [LOOKUP] Newly disbursed case that was settled early with multiple default spells, ending in settlement
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 
-  #                 unique(datCredit_real[ExclusionID == 0 & New_Ind==1 & HasSettle==1 & DefSpell_Num>1, LoanID])[1])
-# [LOOKUP] Case that started off in default
-#Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 
-  #                  unique(datCredit_real[ExclusionID == 0 & Counter==1 & DefaultStatus1==1, LoanID])[1])
-# [LOOKUP] Old left-truncated loan starting in default with multiple default spells
-#Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 
- #                  unique(datCredit_real[ExclusionID == 0 & New_Ind==0 & DefSpell_Num > 1 &
-  #                                         HasLeftTruncDefSpell == 1,  LoanID])[1])
-# [LOOKUP] Old left-truncated loan starting in performing with multiple default spells
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID ==
-#                     unique(datCredit_real[ExclusionID == 0 & New_Ind==0 & DefSpell_Num > 1 &
-#                                            HasLeftTruncDefSpell == 0,  LoanID])[1])
-# [LOOKUP] Specific left-truncated case that settled at the study-end out of default
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 3000001183014)
-# [LOOKUP] Specific left-truncated case that defaulted at study-end
-# Lookup <- subset(datCredit_real, LoanID == 3000000154495 & ExclusionID == 0)
-# [LOOKUP] Specific left-truncated case that was written-off at study-end
-# Lookup <- subset(datCredit_real, ExclusionID == 0 & LoanID == 3000001565979)
-# [LOOKUP] Specific left-truncated case that was in performing at study-end after a default spell the previous period
-#Lookup <- subset(datCredit_real, ExclusionID == 0 & LoanID == 3000001377773)
-# [LOOKUP] Specific write-off case with redraws upon which the [Receipt_Inf] field was refined
-# Lookup <- subset(datCredit_real, ExclusionID==0 & LoanID == 3000000184289)
-
-# - Write a Lookup-case to Excel:
-# write_xlsx(Lookup, "ExampleReal_WOff_MultipleSpells.xlsx")

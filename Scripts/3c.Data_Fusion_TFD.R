@@ -390,7 +390,7 @@ describe(datCredit_smp$pmnt_method_grp)
 ### RESULTS: Bins grouped logically such that each bin now has sufficient observations
 
 # - [PerfSpellResol_Type_Hist]
-varInfo_Cat$PerfSpellResol_Type_Hist
+describe(datCredit_smp$PerfSpellResol_Type_Hist)
 datCredit_smp$PerfSpellResol_Type_Hist %>% table() %>% prop.table()
 barplot(table(datCredit_smp$PerfSpellResol_Type_Hist))
 ### RESULTS [PerfSpellResol_Type_Hist] has 5 levels and no missing values. 12.1% of performance spells defaulted; 41.71% of performance spells have been right-censored.
@@ -399,7 +399,7 @@ datCredit_smp[,PerfSpellResol_Type_Hist:=factor(PerfSpellResol_Type_Hist)]
 ### RESULTS: No further treatment necessary
 
 # - [LN_TPE]
-varInfo_Cat$LN_TPE
+describe(datCredit_smp$LN_TPE)
 datCredit_smp$LN_TPE %>% table() %>% prop.table()
 ### RESULTS: [LN_TPE] has 2 levels and no missing values. 89% of observations are in level 'CHL' and 11% are in level 'WHL'
 # [TREATMENT] Apply factor transformation
@@ -430,7 +430,7 @@ hist(datCredit_smp$AgeToTerm, breaks='FD'); skewness(datCredit_smp$AgeToTerm, na
 # Create [BalanceToTerm] variable
 datCredit_smp <- datCredit_smp %>% mutate(BalanceToTerm = Balance/Term)
 # Distributional analysis
-describe(datCredit_smp$BalanceToTerm))
+describe(datCredit_smp$BalanceToTerm)
 ## RESULTS: [BalanceToTerm] has scale [-0.611292;90577.9], with 1531.3769 at 50% quantile and 2919.7919 at 75% quantile and mean of 2081
 hist(datCredit_smp$BalanceToTerm, breaks='FD'); skewness(datCredit_smp$BalanceToTerm, na.rm = T); datCredit_smp[BalanceToTerm==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 3.769301; 3.8% of variables have zero values.

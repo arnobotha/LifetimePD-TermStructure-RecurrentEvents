@@ -188,7 +188,7 @@ cph_schoen <- function(cph, var=NULL, dat_train, id, time, status, verbose=T, ma
   
   # Clean up
   suppressWarnings(rm(dat_train2, dat_temp, dat_temp2, dat_temp3, dat_temp4, var, var_type, var_name, col_names, g, g_name, k, levels, levels_n))
-  
+
   return(list(data = dat_return_wider, CorTest = cor_test, plots = gplots))
   
   # rm(dat_temp, dat_temp2, dat_return, id, var, time, status, max_time, verbose)

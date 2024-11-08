@@ -33,6 +33,7 @@ require(readr)
 require(bit64) # for very big numeric values
 require(stringr) # common string operations, e.g, str_pad
 require(purrr) # mapping functions from tidyverse in working with matrices, lists
+require(broom)
 
 # for advanced looping functionality in simulation tasks
 require(doBy)

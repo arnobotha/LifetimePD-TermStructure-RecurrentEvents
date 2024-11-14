@@ -5,7 +5,7 @@
 # SCRIPT AUTHOR(S): Dr Arno Botha, Roundel Bester, Marcel Muller, Roland Breedt, Bernard Scheepers
 
 # DESCRIPTION: 
-# This script installs and loads various libraries and packages, compiles all
+# This script installs and  loads various libraries and packages, compiles all
 # custom functions, and set requisite parameters.
 # ---------------------------------------------------------------------------------------
 # -- Inputs:
@@ -53,6 +53,7 @@ require(survivalROC) # for time-dependent ROC-analysis from Heagerty et al.
 #require(survAUC) # for time-dependent ROC-analysis (alternative from Potapov et al.)
 #require(tdROC) # for time-dependent ROC-analysis ([outdated?] alternative from Li et al.)
 #require(timeROC) # for time-dependent ROC-analysis ([outdated?] alternative from Blanche)
+require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method from Heagerty, P.J., Zheng Y. (2005))
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
 require(discSurv)
 require(MASS)

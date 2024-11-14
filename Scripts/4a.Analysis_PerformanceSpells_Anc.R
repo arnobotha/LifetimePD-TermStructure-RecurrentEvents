@@ -134,18 +134,17 @@ datAggr2[, PerfSpell_Num := paste0("Spell: ", PerfSpell_Num)]
 (g2 <- ggplot(datAggr2, aes(x=Date,y=RiskEvent_Num,fill=factor(RiskEvent))) +
     theme_minimal() + 
     theme(text=element_text(family=chosenFont), axis.text.x=element_text(angle=90),
-          axis.title=element_text(size=15),
           strip.background = element_rect(fill="snow2", colour="snow2"),
           legend.position = "inside",legend.position.inside=c(0.1,0.15),
           legend.background=element_rect(fill="snow2"),
           strip.text=element_text(size=8, colour="black")) + 
-    labs(y="Number of Risk Events", x="Date: (mmm yy)") + 
-    geom_col() + geom_text(aes(x=as.Date("2008-01-31"),y=Inf,label=Label),
-                           vjust=1, hjust=-0.35, size=3.5, color="snow4") +
+    labs(y="Number of Risk Events", x=bquote("Cohort Date ("*italic(mmm)*" "*italic(ccyy)*")")) + 
+    geom_col() + geom_text(aes(x=as.Date("2008-01-31"),family=chosenFont,y=Inf,label=Label),
+                           vjust=1, hjust=-0.35, size=2.5, color="snow4") +
     facet_wrap(PerfSpell_Num ~ ., scales="free_y",nrow=maxSpell, strip.position="right") +
     scale_fill_manual(name="Risk Type", values=vCol, labels=vLabel) +
     scale_y_continuous(breaks=pretty_breaks()) +
-    scale_x_date(date_labels = "%b %y", date_breaks = "4 months",
+    scale_x_date(date_labels = "%b %y", date_breaks = "6 months",
                  limits = c(as.Date("2007-01-31"),as.Date("2022-12-31"))))
 ### RESULTS:  1)  The default behavior of the first performance spell is different from that of the rest, since it 
 #                 significant competing risks are present.

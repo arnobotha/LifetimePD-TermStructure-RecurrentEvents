@@ -38,7 +38,7 @@ cs_ks_test <- function(cox,GraphInd=T,legPos=c(0.5,0.5)) {
   exp <- rexp(length(cs),1)
   
   # Perform the Kolmogorov-Smirnov test
-  KS <- round(1 - ks.test(cs,exp)$statistic,4)
+  KS <- round(ks.test(cs,exp)$statistic,4)
   if(GraphInd==T){
     # Get the ECDFs of cs
     EmpDist <- ecdf(cs)
@@ -79,9 +79,9 @@ cs_ks_test <- function(cox,GraphInd=T,legPos=c(0.5,0.5)) {
         scale_linetype_discrete(name = "Distributions",labels=vLabel) +
         scale_y_continuous(label=percent))
     # Prepare return object
-    retOb <- list(KS_stat = 1-KS, KS_graph=gg)
+    retOb <- list(Stat = 1 - KS, KS_graph=gg)
   }else{
-    retOb <- list(KS_stat = 1-KS)
+    retOb <- list(Stat = 1-KS)
   }
   
   return(retOb)
@@ -113,22 +113,26 @@ cs_graph <- function(cox){
   return(Graph)
 }
 
-# Unit test
-# cgd dataset: Data from a study on chronic granulomatous disease (CGD), focusing
-# on repeated infections in patients.
-
-# Load dataset
-data(cgd)
-
-# Fit a cox model
-coxExample <- coxph(Surv(tstart,tstop,status) ~ sex + age + height + weight,cgd)
-
-# Test cs_ks_test function
-cs_ks_test(coxExample,T)
-### RESULTS: D=0.1921
-
-# Test cs_graph function
-cs_graph(coxExample)
+# # Unit test
+# # cgd dataset: Data from a study on chronic granulomatous disease (CGD), focusing
+# # on repeated infections in patients.
+# 
+# # Load dataset
+# data(cgd)
+# 
+# # Fit a cox model
+# coxExample <- coxph(Surv(tstart,tstop,status) ~ sex + age + height + weight,cgd)
+# 
+# # Test cs_ks_test function
+# csResult <- cs_ks_test(coxExample,T)
+# csResult$KS_stat;csResult$KS_graph
+# ### RESULTS: D=0.1921
+# 
+# # Test cs_graph function
+# cs_graph(coxExample)
+# 
+# # House keeping
+# rm(cgd,cgd0,coxExample)
 
 # # p <- ggplot(datGraph, aes(x = x)) +
 # geom_line(aes(y = cs, color = "Residuals")) +

@@ -12,6 +12,19 @@
 # Functions are grouped thematically.
 # ================================================================================
 
+# ----------------- 0. Dataset for unit tests ---
+'The cgd dataset from the survival package contains survival data from a clinical
+trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency.'
+Test <- FALSE
+if (Test){
+  data(cgd) # Load data set
+  cgd <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight)] %>% 
+            rename(Start=tstart,End=tstop,Default_Ind=status)
+  dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
+                   start="Start",end="End",event="Default_Ind") # Apply the counting process
+  coxExample <- coxph(Surv(Start,End,Default_Ind) ~ . ,data=dat) # Build a cox model
+}
+
 # ----------------- 1. Cox-Snell residuals analysis ---
 
 # Function to calculate Cox-Snell residuals adjusted for censoring.
@@ -146,3 +159,176 @@ cs_graph <- function(cox){
 #   scale_color_manual(name = "Distributions", values = c("Residuals" = "#4DAF4A", "Exponential" = "#377EB8")) +
 #   theme_minimal() + theme(text = element_text(family="Cambria"), legend.position.inside = c(1,0),
 #                           legend.justification = c(1,0), legend.background = element_rect(fill = "white", color = "black", linewidth = 0.5))
+
+# ----------------- 2. Time-Dependent ROC analysis ---
+
+# Function to graph the time dependent ROC curve and calculate the AUC.
+# Input:  dat - Dataset containing the [Start], [Stop] and [Default_Ind] variables
+#         cox - cox model
+#         month - desired month to test ROC curve on.
+#         span - % size of the neighborhood (will be symmetrical around the same point)
+#         numDigits - rounding scheme applied to markers (specifically if the vectors memory consuming)
+# Output: AUC - Area under the curve
+#         ROC_graph - ggplot object for ROC curve
+tdROC <- function(dat, cox, month, Graph=TRUE, span=0.05, numDigits=2){
+  # Initialize data set
+  dat <- dat %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
+  dat[, Marker := round(predict(cox,type="risk"),numDigits)] # Create a marker value based on the risk score
+  thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent thresholds
+  nThresh <- length(thresholds) # number of thresholds for the ROC curve
+  
+  # Sort data set according to time
+  setorder(dat,End)
+
+  # Initialize Nearest Neighbor Estimation variables
+  uEnd <- dat$End %>% unique() %>% sort() # Unique endpoints
+  #nTimes <- sum(uEnd <= month) # Number of months before and including the final month
+  #uMarker <- dat$Marker %>%  unique() %>% sort() # Obtain unique markers
+  uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort()
+  DTimes <- uDTime[uDTime <= month] # Unique defaulting times before given month
+  S_t <- numeric(nThresh) # Vector to contain survival estimates
+  n <- NROW(dat) # Total number of markers
+  weights <- matrix(0, nrow = n, ncol = nThresh) # weight matrix containing 1/0's
+  
+  # Loop through unique markers
+  for (j in 1:nThresh) {
+    # Calculate differences
+    Diff <- dat$Marker - thresholds[j] # Take the difference between unique markers and each other marker
+    sDiff <- Diff[order(Diff)]  # Sort Diff
+    
+    # Determine indices for lower bound
+    index0 <- sum(sDiff < 0) + 1 # Index of first marker equal to threshold j
+    index1 <- min(index0 + trunc(n * span * 0.5), n) # Upper bound of neighbourhood and check that it remains within the data set
+    lambda <- sDiff[index1]
+    
+    # Assign weights for positive bounds
+    wt <- (Diff <= lambda) & (Diff >= 0)
+
+    # Determine indices for upper bound
+    index0 <- sum(sDiff <= 0) # Index of last marker last marker equal to threshold j
+    index1 <- max(index0 - trunc(n * span * 0.5), 1) # Lower bound of neighbourhood and check that it remains within the data set
+    lambda <- sDiff[index1]
+    
+    # Add weights for negative range
+    wt <- wt | ((Diff >= lambda) & (Diff <= 0))
+    
+    # Store weights
+    weights[, j] <- c(as.integer(wt))
+  }
+  
+  # Initialized boolean population matrices
+  start_before_time <- outer(dat$Start, DTimes, "<=")# Ensure observation existed before time t
+  end_after_time <- outer(dat$Start, DTimes, ">=")# Ensure observation exists after time t
+  end_at_time <- outer(dat$End, DTimes, "==")# Ensure observation exists at time t  
+  at_risk <- (start_before_time & end_after_time) # Populations at risk at each time point
+  events <- (start_before_time & end_at_time & (dat$Default_Ind == 1)) # Number of defaults at each time point
+  
+  for (i in 1:NCOL(weights)){
+    # Calculate weighted sums of n and d across uTimes
+    n_values <- colSums(weights[,i] * at_risk) # Weighed populations at risk
+    d_values <- colSums(weights[,i] * events) # Weighed loans leaving the populations
+    
+    # Calculate survival factors and handle division by zero cases
+    survival_factors <- 1 - (d_values / n_values)
+    survival_factors[is.na(survival_factors)] <- 1  # Set NaN cases to 1
+    S_t[i] <- prod(survival_factors)
+  }
+  
+  dat[,S_t := S_t[match(dat$Marker, thresholds)]] # Allocate survival probability to each Marker
+  S_Marg <- sum(dat$S_t)/n # Calculate marginal survival probability
+  
+  # Initialize ROC matrix
+  roc.matrix <- matrix(NA, nThresh, 2)
+  roc.matrix[nThresh, ] <- c(0, 1)
+  
+  for (c in 1:(nThresh - 1)) {
+    p1 <- sum(dat$Marker > thresholds[c])/n
+    Sx <- sum(dat$S_t[dat$Marker > thresholds[c]])/n
+    roc.matrix[c, 1] <- (p1 - Sx)/(1 - S_Marg)
+    roc.matrix[c, 2] <- 1 - Sx/S_Marg
+  }
+  sensitivity = roc.matrix[, 1]
+  specificity = roc.matrix[, 2]
+  x <- 1 - c(0, specificity)
+  y <- c(1, sensitivity)
+  n <- length(x)
+  dx <- x[-n] - x[-1]
+  mid.y <- (y[-n] + y[-1])/2
+  area <- sum(dx * mid.y)
+  
+  if(Graph){
+    # Create a data frame for plotting
+    datGraph <- data.frame(x = x, y=y)
+    datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
+    vCol <- brewer.pal(8,"Set1")[c(2)]
+    
+    # Plot ROC curve
+    gg <- ggplot(datGraph,aes(x=x,y=y)) + theme_minimal() + 
+        theme(text = element_text(family="Cambria"), legend.position="inside",
+              legend.background = element_rect(fill="snow2", color="black",
+                                               linetype="solid")) +
+        labs(x = "FP", y = "TP") + geom_line(color=vCol) +
+        geom_segment(data = datSegment,aes(x = x, y = y, xend = xend, yend = yend),
+                     color = "grey", linetype = "dashed") +
+      annotate("label", x = 0.75, y = 0.25,label = paste("AUC: ", percent(area)),
+               fill="grey") + 
+      scale_y_continuous(label=percent) + scale_x_continuous(label=percent)
+    
+    retObj <- list(AUC = area, ROC_graph=gg)
+  }else{
+    retObj <- list(AUC = area)
+  }
+  return(retObj)
+}
+
+if(Test){
+  tdROC(dat,coxExample,12)
+}
+
+# ----------------- 2. Scaled Schoenfeld residuals ---
+
+# Function to graph the time dependent ROC curve and calculate the AUC.
+# Input:  dat - Dataset containing the [Start], [Stop] and [Default_Ind] variables
+#         cox - cox model
+#         month - desired month to test ROC curve on.
+#         span - % size of the neighborhood (will be symmetrical around the same point)
+#         numDigits - rounding scheme applied to markers (specifically if the vectors memory consuming)
+# Output: AUC - Area under the curve
+#         ROC_graph - ggplot object for ROC curve
+
+sfResiduals <- function(cox,dat){
+  dat <- dat %>% subset(select=c(LoanID,Start,End,Default_Ind)) %>% data.table()
+  dat[,RiskScore := predict(cox,dat,type="risk")]
+  dat[,TotalScore := sum(RiskScore), by=End]
+  
+  if(class(dat_temp$Var_Val)=="numeric"){
+    dat[, Var_Name_Level := var]
+    dat[, RW_Val := Var_Val*RiskScore/TotalScore]
+    dat[, Exp_Val := sum(RW_Val), by=list(End)]
+    datReturn <- dat[Default_Ind == 1, Sch_Res := Var_Val - Exp_Val]
+  } else if (class(dat$Var_Val) %in% c("character","factor")){
+    Levels <- substring(row_names[grep(var,row_names)], nchar(var)+1)
+    nLevels <- length(grep(var, row_names))
+    dat_return <- data.table(ID=as.character(), Time=as.numeric(),
+                             Var_Val=as.character(), Sch_Res=as.numeric(),
+                             Var_Name_Level=as.character())
+    for(i in 1:nLevels){
+      dat2 <- copy(dat)
+      dat2[,Var_Name_Level := levels[j]]
+      dat2[,RW_Val := as.numeric(Var_Val == levels[j])*RiskScore/SumScore]
+      dat2[,Exp_Val := sum(RW_Val), by=End]
+      dat_return <- dat2[Default_Ind == 1, Sch_Res := as.numeric(Var_Val==levels[j])-Exp_Val]
+    }
+  }
+  return(dat_return)
+}
+
+
+
+
+
+
+
+
+
+

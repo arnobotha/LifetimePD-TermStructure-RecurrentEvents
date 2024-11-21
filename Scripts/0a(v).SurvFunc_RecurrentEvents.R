@@ -31,11 +31,12 @@ if (Test){
 # Input: cox - Cox proportional hazard model.
 # Output: cs - Cox-Snell residuals
 
-cs_adjusted <- function(cox){
-  cs <- get_csvec(cox) + log(2)*(1 - cox$y[, "status"]) # Add log(2) to all observations that have a 0.
+cs_adjusted <- function(cox, dat){
+  cs <-  dat[Removed==1,Default_Ind] - 
+    residuals(cox,type="martingale",collapse=dat$LoanID) +
+    log(2)*(1 - dat[Removed==1,Default_Ind]) # Add log(2) to all observations that have a 0.
   return(cs)
 }
-
 # Function to compute the Kolmogorov-Smirnov statistic (1-KS) for Cox-Snell 
 # residuals as well as a ggplot graph to display it.
 # Input: cox - Cox proportional hazard model.
@@ -43,15 +44,17 @@ cs_adjusted <- function(cox){
 #         KS_graph -  Graph of the Cox-Snell empirical cumulative distribution
 #                     function and the unit exponential distribution function.
 
-cs_ks_test <- function(cox,GraphInd=T,legPos=c(0.5,0.5)) {
+cs_ks_test <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
   # Obtain adjusted Cox-Snell residuals
-  cs <- cs_adjusted(cox)
+  cs <- cs_adjusted(cox, dat)
   
   # Initialize null distribution
   exp <- rexp(length(cs),1)
   
   # Perform the Kolmogorov-Smirnov test
-  KS <- round(ks.test(cs,exp)$statistic,4)
+  KS <- round(suppressWarnings(ks.test(cs,exp))$statistic,4)
+  
+  # Code to create ggplot object
   if(GraphInd==T){
     # Get the ECDFs of cs
     EmpDist <- ecdf(cs)
@@ -87,14 +90,14 @@ cs_ks_test <- function(cox,GraphInd=T,legPos=c(0.5,0.5)) {
         geom_segment(data=segment_data,aes(x = x, xend = xend, y = y, yend = yend),
                      linetype = "dashed", color = "black") +
         annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
-                 label = paste("D =", percent(1-KS)), hjust = -0.1, vjust = -0.1, fill="white", alpha=0.6) +
+                 label = paste("D =", percent(KS)), hjust = -0.1, vjust = -0.1, fill="white", alpha=0.6) +
         scale_color_manual(name = "Distributions", values = vCol, labels=vLabel) +
         scale_linetype_discrete(name = "Distributions",labels=vLabel) +
         scale_y_continuous(label=percent))
     # Prepare return object
-    retOb <- list(Stat = 1 - KS, KS_graph=gg)
+    retOb <- list(Stat = as.vector(1 - KS), KS_graph=gg)
   }else{
-    retOb <- list(Stat = 1-KS)
+    retOb <- list(Stat = as.vector(1-KS))
   }
   
   return(retOb)
@@ -170,10 +173,10 @@ cs_graph <- function(cox){
 #         numDigits - rounding scheme applied to markers (specifically if the vectors memory consuming)
 # Output: AUC - Area under the curve
 #         ROC_graph - ggplot object for ROC curve
-tdROC <- function(dat, cox, month, Graph=TRUE, span=0.05, numDigits=2){
+tdROC <- function(dat, cox, month_Start=0, month, Graph=TRUE, span=0.05, numDigits=2){
   # Initialize data set
   dat <- dat %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
-  dat[, Marker := round(predict(cox,type="risk"),numDigits)] # Create a marker value based on the risk score
+  dat[, Marker := round(predict(cox,type="lp"),numDigits)] # Create a marker value based on the linear predictor
   thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
   
@@ -185,10 +188,10 @@ tdROC <- function(dat, cox, month, Graph=TRUE, span=0.05, numDigits=2){
   #nTimes <- sum(uEnd <= month) # Number of months before and including the final month
   #uMarker <- dat$Marker %>%  unique() %>% sort() # Obtain unique markers
   uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort()
-  DTimes <- uDTime[uDTime <= month] # Unique defaulting times before given month
+  DTimes <- uDTime[uDTime >= month_Start & uDTime <= month] # Unique defaulting times before given month
   S_t <- numeric(nThresh) # Vector to contain survival estimates
   n <- NROW(dat) # Total number of markers
-  weights <- matrix(0, nrow = n, ncol = nThresh) # weight matrix containing 1/0's
+  weights <- matrix(FALSE, nrow = n, ncol = nThresh);gc() # weight matrix containing 1/0's
   
   # Loop through unique markers
   for (j in 1:nThresh) {
@@ -216,7 +219,7 @@ tdROC <- function(dat, cox, month, Graph=TRUE, span=0.05, numDigits=2){
     weights[, j] <- c(as.integer(wt))
   }
   
-  # Initialized boolean population matrices
+   # Initialized boolean population matrices
   start_before_time <- outer(dat$Start, DTimes, "<=")# Ensure observation existed before time t
   end_after_time <- outer(dat$Start, DTimes, ">=")# Ensure observation exists after time t
   end_at_time <- outer(dat$End, DTimes, "==")# Ensure observation exists at time t  
@@ -296,39 +299,56 @@ if(Test){
 # Output: AUC - Area under the curve
 #         ROC_graph - ggplot object for ROC curve
 
-sfResiduals <- function(cox,dat){
-  dat <- dat %>% subset(select=c(LoanID,Start,End,Default_Ind)) %>% data.table()
-  dat[,RiskScore := predict(cox,dat,type="risk")]
-  dat[,TotalScore := sum(RiskScore), by=End]
+sfResiduals <- function(cox, dataset, var) {
   
-  if(class(dat_temp$Var_Val)=="numeric"){
-    dat[, Var_Name_Level := var]
-    dat[, RW_Val := Var_Val*RiskScore/TotalScore]
-    dat[, Exp_Val := sum(RW_Val), by=list(End)]
-    datReturn <- dat[Default_Ind == 1, Sch_Res := Var_Val - Exp_Val]
-  } else if (class(dat$Var_Val) %in% c("character","factor")){
-    Levels <- substring(row_names[grep(var,row_names)], nchar(var)+1)
-    nLevels <- length(grep(var, row_names))
-    dat_return <- data.table(ID=as.character(), Time=as.numeric(),
-                             Var_Val=as.character(), Sch_Res=as.numeric(),
-                             Var_Name_Level=as.character())
-    for(i in 1:nLevels){
-      dat2 <- copy(dat)
-      dat2[,Var_Name_Level := levels[j]]
-      dat2[,RW_Val := as.numeric(Var_Val == levels[j])*RiskScore/SumScore]
-      dat2[,Exp_Val := sum(RW_Val), by=End]
-      dat_return <- dat2[Default_Ind == 1, Sch_Res := as.numeric(Var_Val==levels[j])-Exp_Val]
-    }
+  # Select relevant columns and convert to data.table
+  dat <- dataset[, .(LoanID, Start, End, Default_Ind, Var=get(var))]
+  
+  # Add risk score and total risk score
+  dat[, RiskScore := predict(cox, dataset, type = "risk")]
+  dat[, TotalScore := sum(RiskScore), by = End]
+  
+  # Process numeric and categorical variables differently
+  if (is.numeric(dat$Var)) {
+    # Handling numeric Var
+    dat[, RW_Val := Var * RiskScore / TotalScore]
+    dat[, Exp_Val := sum(RW_Val), by = End]
+    #dat[, RW_V := sum(RiskScore*(Var-Exp_Val)^2) / sum(RiskScore), by=End]
+    dat[, sfRes := Var - Exp_Val]
+    p <- sfTest(cox)
+  } else if (is.character(dat$Var) || is.factor(dat$Var)) {
+    # Handling categorical Var
+    Levels <- unique(dat$Var)
+    dat[, Var_Name_Level := as.character(Var_Val)]  # Add level information
+    
+    # Calculate RW_Val, Exp_Val, and residuals for all levels at once
+    dat[, RW_Val := (Var == Var_Name_Level) * RiskScore / TotalScore]
+    dat[, Exp_Val := sum(RW_Val), by = .(End, Var_Name_Level)]
+    dat[, sfRes := (Var == Var_Name_Level) - Exp_Val]
   }
-  return(dat_return)
+  
+  # Create a data frame for plotting
+  datGraph <- dat[Default_Ind == 1,]
+  vCol <- brewer.pal(8,"Set1")[c(1)]
+  segment_data <- data.frame(x = 1,xend = max(datGraph$End),y = 0,yend = 0)
+  
+  (gg <- ggplot(datGraph,aes(x=End,y=sfRes)) + theme_minimal() + 
+                theme(text = element_text(family="Cambria"),
+                legend.position = "inside", legend.position.inside=c(0.1,.01),
+                legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
+                annotate("label",x=50, y=-25, label = paste("p-value for ",var,": ", percent(p)),
+                         fill="grey", alpha=0.6) +
+                geom_segment(data= segment_data, aes(x = x, xend = xend, y = y, yend = yend),
+                             linetype = "dashed", color = "black")) +
+                geom_point(alpha=0.7, color = "cornflowerblue") + 
+                labs(x = bquote("Default Time "*italic(T)), y = bquote("Schoenfeld Residuals "*italic(r)^(s)))
+                
+      
+  # Return final result
+  return(gg)
 }
 
-
-
-
-
-
-
-
-
-
+sfTest <- function(cox){
+  ans <- cox.zph(cox)$table[1,"p"]
+  return(ans)
+}

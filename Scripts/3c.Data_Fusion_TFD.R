@@ -36,7 +36,7 @@ if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD")
 
 # --- Some feature engineering
 # - Creating a variable for the first observation of a loan (used as stratification variable)
-datCredit_TFD[, Date_First := Date[1], by=LoanID]
+datCredit_TFD[, Date_First := Date[1], by=LoanID] 
 # [SANITY CHECK] Checking if the variable was created correctly
 (check.1 <- datCredit_TFD[is.na(Date_First),.N] == 0) # Should be TRUE
 cat(check.1 %?% 'SAFE: variable [Date_First] was successfully created.\n' %:% 'WARNING: variable [Date_First] was not successfully created!\n')

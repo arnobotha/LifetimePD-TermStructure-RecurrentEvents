@@ -47,6 +47,9 @@ datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
 # - Creating a variable for the first observation of a loan (used as stratification variable)
 datCredit_real[, Date_First := Date[1], by=LoanID]
 
+# - Creating an indication variable variable for a loan leaving a performance spell
+datCredit_real[,Removed := ifelse(Date==PerfSpell_Max_Date,1,0)]
+
 # - Creating new spell resolution types
 # Performance spells
 datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",

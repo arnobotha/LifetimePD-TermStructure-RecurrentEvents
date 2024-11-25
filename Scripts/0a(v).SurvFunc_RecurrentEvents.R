@@ -175,8 +175,8 @@ cs_graph <- function(cox){
 #         ROC_graph - ggplot object for ROC curve
 tdROC <- function(dat, cox, month_Start=0, month, Graph=TRUE, span=0.05, numDigits=2){
   # Initialize data set
-  dat <- dat %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
-  dat[, Marker := round(predict(cox,type="lp"),numDigits)] # Create a marker value based on the linear predictor
+  #dat <- dat %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
+  dat[, Marker := round(predict(cox, newdata=dat, type="lp"),numDigits)] # Create a marker value based on the linear predictor
   thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
   
@@ -288,7 +288,7 @@ if(Test){
   tdROC(dat,coxExample,12)
 }
 
-# ----------------- 2. Scaled Schoenfeld residuals ---
+# ----------------- 2. Schoenfeld residuals ---
 
 # Function to graph the time dependent ROC curve and calculate the AUC.
 # Input:  dat - Dataset containing the [Start], [Stop] and [Default_Ind] variables
@@ -299,8 +299,7 @@ if(Test){
 # Output: AUC - Area under the curve
 #         ROC_graph - ggplot object for ROC curve
 
-sfResiduals <- function(cox, dataset, var) {
-  
+sfResiduals <- function(cox, dataset, var, legPos = c(50,1), legPosCat = c(0.9,0.1)){
   # Select relevant columns and convert to data.table
   dat <- dataset[, .(LoanID, Start, End, Default_Ind, Var=get(var))]
   
@@ -313,42 +312,79 @@ sfResiduals <- function(cox, dataset, var) {
     # Handling numeric Var
     dat[, RW_Val := Var * RiskScore / TotalScore]
     dat[, Exp_Val := sum(RW_Val), by = End]
-    #dat[, RW_V := sum(RiskScore*(Var-Exp_Val)^2) / sum(RiskScore), by=End]
     dat[, sfRes := Var - Exp_Val]
+    #dat[, RW_V := var(sfRes), by=End]
+    #dat[, ssfRes := sfRes/RW_V]
     p <- sfTest(cox)
-  } else if (is.character(dat$Var) || is.factor(dat$Var)) {
-    # Handling categorical Var
-    Levels <- unique(dat$Var)
-    dat[, Var_Name_Level := as.character(Var_Val)]  # Add level information
     
-    # Calculate RW_Val, Exp_Val, and residuals for all levels at once
-    dat[, RW_Val := (Var == Var_Name_Level) * RiskScore / TotalScore]
-    dat[, Exp_Val := sum(RW_Val), by = .(End, Var_Name_Level)]
-    dat[, sfRes := (Var == Var_Name_Level) - Exp_Val]
+    # Create a data frame for plotting
+    datGraph <- dat[Default_Ind == 1,]
+    segment_data <- data.frame(x = 1,xend = max(datGraph$End),y = 0,yend = 0)
+    
+    gg <- ggplot(datGraph,aes(x=End,y=sfRes)) + theme_minimal() + 
+      theme(text = element_text(family="Cambria"),
+            legend.position = "inside",
+            legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
+      geom_point(alpha=0.7, color = "cornflowerblue") + geom_smooth(method="loess", color="navy") +
+      annotate("label",x=legPos[1], y=legPos[2], label = paste("p-value for ",var,": ", percent(p)),
+               fill="grey", alpha=0.6) +
+      geom_segment(data= segment_data, aes(x = x, xend = xend, y = y, yend = yend),
+                   linetype = "dashed", color = "black") +
+      labs(x = bquote("Default Time "*italic(T)), y = bquote("Schoenfeld Residuals "*italic(r)^(s)))
+    
+  } else if (is.character(dat$Var) || is.factor(dat$Var)) {
+    # # Handling categorical Var
+    Levels <- unique(dat$Var)
+    # dat[, Var_Name_Level := as.character(Var)]  # Add level information
+    # p <- sfTest(cox)
+    # 
+    # # Calculate RW_Val, Exp_Val, and residuals for all levels at once
+    # dat[, RW_Val := (Var == Var_Name_Level) * RiskScore / TotalScore]
+    # dat[, Exp_Val := sum(RW_Val), by = .(End, Var_Name_Level)]
+    # dat[, sfRes := (Var == Var_Name_Level) - Exp_Val]
+    # 
+    if(length(Levels) == 2){
+      r <- residuals(cox, type = "schoenfeld")
+      r <- data.frame(End=as.numeric(names(r)), residuals = r )
+      setnames(r, "residuals", paste0(var,Levels[2]))
+      vCol <- brewer.pal(ncol(r)-1,"Set1")[1]
+    }else{
+      r <- residuals(cox,type="schoenfeld") %>% data.table()
+      r <- cbind(End=as.numeric(rownames(r)),r) %>% as.data.table()
+      vCol <- brewer.pal(ncol(r)-1,"Set1")
+    }
+    
+    # Create a data frame for plotting
+    datGraph <- pivot_longer(r,cols=starts_with(var),names_to=var, values_to = "sfRes")
+    segment_data <- data.frame(x = 1,xend = max(datGraph$End),y = 0,yend = 0)
+    #vLabel <- separate(unique(datGraph[,var]), strings, into=c("before", "after"), sep=var)$after
+    
+
+    gg <- ggplot(datGraph,aes(x=End, y=sfRes, color=get(var))) + theme_minimal() +
+      theme(text = element_text(family="Cambria"),
+            legend.position = "top",legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
+      labs(x = bquote("Default Time "*italic(T)), y = bquote("Schoenfeld Residuals "*italic(r)^(s))) +
+      geom_point(alpha=0.7) + geom_smooth(method="loess", se=FALSE) + facet_wrap( ~ get(var), scales="free_y") +
+      geom_segment(data= segment_data, aes(x = x, xend = xend, y = y, yend = yend),
+                   linetype = "dashed", color = "black") +
+      scale_color_manual(name=var, values=vCol)
   }
-  
-  # Create a data frame for plotting
-  datGraph <- dat[Default_Ind == 1,]
-  vCol <- brewer.pal(8,"Set1")[c(1)]
-  segment_data <- data.frame(x = 1,xend = max(datGraph$End),y = 0,yend = 0)
-  
-  (gg <- ggplot(datGraph,aes(x=End,y=sfRes)) + theme_minimal() + 
-                theme(text = element_text(family="Cambria"),
-                legend.position = "inside", legend.position.inside=c(0.1,.01),
-                legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
-                annotate("label",x=50, y=-25, label = paste("p-value for ",var,": ", percent(p)),
-                         fill="grey", alpha=0.6) +
-                geom_segment(data= segment_data, aes(x = x, xend = xend, y = y, yend = yend),
-                             linetype = "dashed", color = "black")) +
-                geom_point(alpha=0.7, color = "cornflowerblue") + 
-                labs(x = bquote("Default Time "*italic(T)), y = bquote("Schoenfeld Residuals "*italic(r)^(s)))
-                
       
   # Return final result
-  return(gg)
+  print(gg)
+  
+  return(list(p_value = round(p,2),sumRes = sum(datGraph$sfRes)))
 }
 
 sfTest <- function(cox){
   ans <- cox.zph(cox)$table[1,"p"]
   return(ans)
 }
+
+
+r <- residuals(cox,type="schoenfeld")
+plot(names(r), r)
+
+sr <- residuals(cox,type="scaledsch")
+plot(names(sr),sr)
+abline(0,0, col="red")

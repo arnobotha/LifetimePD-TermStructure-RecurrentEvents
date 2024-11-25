@@ -1248,6 +1248,11 @@ c <- data.table(var = names(c), coef = c, expCoef = round(exp(c),2))
 
 concordance(cox_TFD)
 # 0.9278
-tdROC(datCredit_valid_TFD, cox_TFD, month=12, numDigits=1)
+
+tdROC(datCredit_valid_TFD, cox_TFD, month_Start = 0, month=3, numDigits=1);gc()
+tdROC(datCredit_valid_TFD, cox_TFD, month_Start = 4, month=12, numDigits=1);gc()
 
 
+
+
+cox.zph(cox_TFD)

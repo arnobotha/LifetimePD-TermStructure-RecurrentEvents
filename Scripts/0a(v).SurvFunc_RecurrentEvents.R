@@ -183,11 +183,11 @@ cs_graph <- function(cox){
 # Output: AUC - Area under the curve
 #         ROC_graph - ggplot object for ROC curve
 
-tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, numDigits=2, method="NNE-0/1"){
+tdROC <- function(dat_valid, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, numDigits=2, method="NNE-0/1", Name="tdROC"){
   # HW: Error handling (MIssingness mont_END, is dat a data table, cox coxph function)
   #dat = dat;cox=coxExample;month_End=12;numDigits=2;Graph=TRUE;month_Start=0;method="NNE-0/1";lambda=0.05;
   # Initialize data set
-  #dat <- dat %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
+  #dat <- dat_valid %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
   dat[, Marker := round(predict(cox, newdata=dat, type="lp"),numDigits)] # Create a marker value based on the linear predictor
   thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
@@ -276,10 +276,8 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
   
   for (c in 1:(nThresh - 1)) {
     #HW: Better names
-    # c <- 32
     cumulMark = mean(dat[,list(sum(Marker <= thresholds[c])/.N), by=list(id)]$V1)
     #cumulMark <- sum(dat$Marker <= thresholds[c])/n # Number of observations with a Marker value less < threshold divided by observations
-    #sum(dat$Surv_prob[dat$Marker > thresholds[c]]
     #S_lam <- sum(dat$Surv_prob[dat$Marker > thresholds[c]])/n # Sum of survival probabilities for Marker values greater than threshold
     S_lam <- mean(dat[,list(sum(Surv_prob*(Marker > thresholds[c]),na.rm=T)/.N), by=list(id)]$V1,na.rm=T)
     roc.matrix[c, 1] <- ((1-cumulMark) - S_lam)/(1 - S_Overall) # Sensitivity
@@ -302,14 +300,15 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
     datGraph <- data.frame(x = x, y=y)
     datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
     vCol <- brewer.pal(8,"Set1")[c(2)]
-    dpi <- 180
+    dpi <- 200
     
     # Plot ROC curve
     gg <- ggplot(datGraph,aes(x=x,y=y,group=1)) + theme_minimal() + 
         theme(text = element_text(family="Cambria"), legend.position="inside",
               legend.background = element_rect(fill="snow2", color="black",
                                                linetype="solid")) +
-        labs(x = "FP", y = "TP") + geom_path(color=vCol) +
+        labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
+               bquote("True Positive Rate "*italic(T^"+"))) + geom_path(color=vCol) +
         geom_segment(data = datSegment,aes(x = x, y = y, xend = xend, yend = yend),
                      color = "grey", linetype = "dashed") +
       annotate("label", x = 0.75, y = 0.25,label = paste("AUC: ", percent(area)),
@@ -317,7 +316,7 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
       scale_y_continuous(label=percent) + scale_x_continuous(label=percent)
     
     # Save graph
-    ggsave(gg, file=paste0(genFigPath, "TFD/tdROC(",month_Start,",",month_End,")",".png"),width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+    ggsave(gg, file=paste0(genFigPath, "TFD/tdROC/",Name,"(",month_Start,",",month_End,").png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
     
     retObj <- list(AUC = area, ROC_graph=gg)
   }else{
@@ -325,7 +324,7 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
   }
   return(retObj)
 }
-end="End",event="Default_Ind"
+
 if(Test){
   survivalROC(Stime=dat$Start,status=dat$Default_Ind, entry=dat$Start,
               marker=round(predict(coxExample, type="lp"),2),span=0.05, predict.time=12)

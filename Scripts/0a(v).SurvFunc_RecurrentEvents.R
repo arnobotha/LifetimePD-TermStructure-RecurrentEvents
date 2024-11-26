@@ -12,59 +12,165 @@
 # Functions are grouped thematically.
 # ================================================================================
 
-# ----------------- 0. Dataset for unit tests ---
-# 'The cgd dataset from the survival package contains survival data from a clinical
+
+
+
+# ----------------- 0. Dataset and models for unit tests ---
+# The cgd dataset from the survival package contains survival data from a clinical
 # trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency.
 Test <- FALSE # Toggle for unit tests; Test <- T
 if (Test){
   force(data(cgd,package="survival"))
   data(cgd) # Load data set
+  # Lightly prepare data into a generic format that can span our eventual credit dataset as well
   dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
-            rename(LoanID=id, Start=tstart,End=tstop,Default_Ind=status) #HW:  Generalize variable names.
+            rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
   #dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
   #                start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
-  coxExample <- coxph(Surv(Start,End,Default_Ind) ~ sex + age + height + weight + inherit + enum + steroids + treat,data=dat, id=LoanID) # Build a cox model
+  
+  # --- Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
+  # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
+  # All competing events preclude the main event from happening and are therefore considered as censored
+  # ID is set as the spell key, with no stratification
+  kmExample <- survfit(Surv(time=Start, time2=End, event=Event_Ind==1,type="counting") ~ 1, 
+                       id=ID, data=dat)
+  summary(kmExample)$table # overall summary
+  ### RESULTS: 76 events, with median survival probability at time 334 \in [280, 373] as a 95% Confidence Interval
+  (kmExample_survFitSummary <- surv_summary(kmExample))
+  ### RESULTS: Median survival time of 334 has standard error of 5.8%, which is relatively large
+  
+  
+  # --- Graphing survival and related quantities from fitted KM-model | S(t), h(t)
+  
+  # -- Graphing parameters
+  vCol <- brewer.pal(10, "Paired")[c(10)] # for S(t)
+  vCol2 <- brewer.pal(10, "Paired")[c(10,9)] # for h(t)
+  sSpan <- 0.1; # span for LOESS-smoother in h(t)
+  vlabel <- paste0("Loess-smoothed hazard [span: ", sSpan, "]") # for h(t)
+  mainEventName <- "CGD"
+  chosenFont <- "Cambria"
+  
+  # -- Survival probability, S(t)=y
+  (gsurv1c_a <- ggsurvplot(kmExample, fun="pct", conf.int=T, legend="none", 
+                           break.time.by=round(max(kmExample$time)/8), palette=vCol,
+                           xlab = bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell"),
+                           ylab = bquote(Survival~probability~"["*.(mainEventName)*"]"*~italic(S(t))*": spell-level (Kaplan-Meier)"), 
+                           xlim=c(0, max(kmExample$time)+1), surv.median.line = "hv", censor=F, 
+                           ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
+                           tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
+                           cumevents=T, cumevents.title="Cumulative number of events", 
+                           cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
+                           risk.table.title = "Number in (% of) sample at risk of main event", font.family=chosenFont, fontsize=2.5))
+  
+  
+  # -- Discrete baseline hazard function: h(t) | Empirical estimation method
+  # - create plotting data object
+  haz_dat <- data.table(Time=kmExample$time, AtRisk_n=kmExample$n.risk, 
+                        Event_n = kmExample$n.event, Censored_n=kmExample$n.censor,
+                        hazard=kmExample$n.event/kmExample$n.risk, 
+                        CumulHazard = kmExample$cumhaz, #Nelson-Aalen estimator
+                        Group="1",Surv_KM = kmExample$surv) %>% 
+    filter(Event_n > 0 | Censored_n >0) %>%
+    # Discrete-time variants
+    mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
+    mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
+  haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
+  # - create alternative versions for sanity checks
+  haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
+  haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
+  # - conduct sanity checks
+  all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
+  all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
+  all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
+  plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
+  ### RESULTS: The discrepancy is very small difference due to estimator method differences
+  
+  # - Graph object for shorter time, informed by previous graphs
+  (gsurv1c_d <- ggplot(haz_dat[Time<=300,], aes(x=Time,y=hazard)) + theme_minimal() +
+      geom_line(linetype="solid", colour=vCol2[1]) + geom_point(colour=vCol2[1]) + 
+      geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
+      labs(y=bquote(plain(Estimated~hazard*" function ["*.(mainEventName)*"]"*~italic(h(t))*": spell-level (Kaplan-Meier)")), 
+           x=bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell")) + 
+      theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+      scale_colour_manual(name="", values=vCol2[2], labels=vlabel) + 
+      scale_fill_manual(name="", values=vCol2[2], labels=vlabel) + 
+      scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
+      scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
+  ### RESULTS: The hazard appears to be near-constant over time, with some notable oscillation over some prediction periods.
+  # However, when viewed in tandem with S(t), itself almost a straight downward-sloping line, it makes sense for hazard
+  # to be near-flat. The oscillation also seems more pronounced towards later prediction periods than earlier ones.
+  
+  # -- Save plots
+  dpi <- 150 # need to decrease size for risk tables' text
+  ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"/SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+         width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+  dpi <- 180 # reset
+  ggsave(gsurv1c_d, file=paste0(genFigPath,"/SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+         width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+  
+  
+  
+  # --- Fit Cox Regression Model, where observations are clustered around a given ID
+  coxExample <- coxph(Surv(Start,End,Event_Ind) ~ sex + age + height + weight + inherit + enum + steroids + treat,
+                      data=dat, id=ID)
   summary(coxExample)
 }
 
-# ----------------- 1. Cox-Snell residuals analysis ---
 
-# Function to calculate Cox-Snell residuals adjusted for censoring.
-# Input: cox - Cox proportional hazard model.
-# Output: cs - Cox-Snell residuals
 
-cs_adjusted <- function(cox, dat){
+
+# ----------------- 1. Functions related to Cox-Snell residuals ---
+
+# --- Function to calculate Cox-Snell residuals, as adjusted for censoring.
+### AB: Insert article link that explains the rationale for this adjustment, e.g., "... as discussed by John2004 (DOI: ...)"
+# Input: [cox], A fitted Cox proportional hazard model.
+# Output: [cs], Cox-Snell residuals
+CoxSnell_adjusted <- function(cox, dat){
+  ### AB: This [Removed]-field seems hard-coded. I could not run GoF_CoxSnell_KS(coxExample) ...
+  #       Though I suppose it is because you do not yet know how to program dynamically for given field names
+  #       I will therefore move to the timedROC-function, make it dynamically programmable and trust that you
+  #       will retro-apply the logic to this function, as well as possibly to GoF_CoxSnell_KS().
   cs <-  dat[Removed==1,Default_Ind] - 
     residuals(cox,type="martingale",collapse=dat$LoanID) +
     log(2)*(1 - dat[Removed==1,Default_Ind]) # Add log(2) to all observations that have a 0.
   return(cs)
 }
-# Function to compute the Kolmogorov-Smirnov statistic (1-KS) for Cox-Snell 
-# residuals as well as a ggplot graph to display it.
-# Input: cox - Cox proportional hazard model.
-# Output: KS_stat - 1 - Kolmogorov-Smirnov statistic
-#         KS_graph -  Graph of the Cox-Snell empirical cumulative distribution
-#                     function and the unit exponential distribution function.
 
-cs_ks_test <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
-  # Obtain adjusted Cox-Snell residuals
-  cs <- cs_adjusted(cox, dat)
+
+# --- Function to calculate the Goodness-of-Fit (GoF) of a given Cox regression model, mainly 
+# achieved by calculating the degree of similarity between Cox-Snell residuals
+# and a random unit exponential distribution. The similarity degree is summarised by
+# using the complement of the Kolmogorov-Smirnov test statistic (1-KS), which becomes
+# our similarity measure; higher values = greater similarity = better fit.
+# Input: [cox]: A fitted Cox proportional hazard model.
+# Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
+#         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
+#                     with the unit exponential distribution function.
+GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
   
-  # Initialize null distribution
+  # --- Preliminaries
+  # - Obtain adjusted Cox-Snell residuals
+  cs <- CoxSnell_adjusted(cox, dat)
+  
+  # - Initialize a unit exponential distribution
   exp <- rexp(length(cs),1)
   
-  # Perform the Kolmogorov-Smirnov test
+  # - Perform the two-sample Kolmogorov-Smirnov test of distribution equality
+  # H_0: cs and exp originates from the same distribution
+  # NOTE: We only desire the KS test statistic in measuring distributional dissimilarity
   KS <- round(suppressWarnings(ks.test(cs,exp))$statistic,4)
   
-  # Code to create ggplot object
-  if(GraphInd==T){
-    # Get the ECDFs of cs
+  # Conditional execution towards creating a graphical output in accompanying main output (dissimilarity degree)
+  if (GraphInd==T){
+    # Calculate the empirical cumulative distribution of the obtained Cox-Snell residuals (cs)
     EmpDist <- ecdf(cs)
     
-    # Create a grid of x values for plotting
+    # Create a grid of x-values for plotting purposes
     x <- sort(unique(c(cs, exp)))
     
-    # Calculate CDF values for each sample at each x value
+    # Calculate CDF-values for each observation at each x value
+    ### AB: From where is this function EmpDist?? I could not find it within any of the standad packages in script 0 ... 
+    ### AB: As such, I'm ceasing my review of this function until we clarify this point.
     y1 <- EmpDist(x)
     y2 <- pexp(x,1)
     
@@ -110,17 +216,21 @@ cs_ks_test <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
   return(retOb)
 }
 
-# HW: Unit Test (mine vs standard)
+### AB: I provided the following structure for you to complete, after addressing other comments
+# --- Unit test: GoF_CoxSnell_KS()
+# csResult <- GoF_CoxSnell_KS(coxExample,T)
+# csResult$Stat;csResult$KS_graph
+# ### RESULTS: D=0.1921
 
+### AB: Rewrite function header according to the previous bits I wrote for you
 # Function to graphically test the Cox-Snell residuals by plotting them against 
 # their respective hazard rate. The line should tend towards the 45 degree line for
 # a good fit.
 # Input: cox - cox proportional hazard model
 # Output: Graph - ggplot object to showcase the relationship
-
-cs_graph <- function(cox){
+GoF_CoxSnell_graph <- function(cox){
   # Obtain adjusted Cox-Snell residuals
-  cs <- cs_adjusted(cox)
+  cs <- CoxSnell_adjusted(cox)
   
   # Create data for graph
   datGraph <- survfit(coxph(Surv(cs, cox$y[, "status"]) ~ 1, method = "breslow"), type = "aalen") %>% tidy() %>%
@@ -138,27 +248,12 @@ cs_graph <- function(cox){
   return(Graph)
 }
 
-# # Unit test
-# # cgd dataset: Data from a study on chronic granulomatous disease (CGD), focusing
-# # on repeated infections in patients.
+### AB: I provided the following structure for you to complete, after addressing other comments
+# --- Unit test: GoF_CoxSnell_graph()
+# GoF_CoxSnell_graph(coxExample)
 # 
-# # Load dataset
-# data(cgd)
-# 
-# # Fit a cox model
-# coxExample <- coxph(Surv(tstart,tstop,status) ~ sex + age + height + weight,cgd)
-# 
-# # Test cs_ks_test function
-# csResult <- cs_ks_test(coxExample,T)
-# csResult$KS_stat;csResult$KS_graph
-# ### RESULTS: D=0.1921
-# 
-# # Test cs_graph function
-# cs_graph(coxExample)
-# 
-# # House keeping
-# rm(cgd,cgd0,coxExample)
 
+### AB: Is the following still truly necessary? If so, then comment what this is all about
 # # p <- ggplot(datGraph, aes(x = x)) +
 # geom_line(aes(y = cs, color = "Residuals")) +
 #   geom_line(aes(y = exp, color = "Exponential")) +
@@ -171,24 +266,45 @@ cs_graph <- function(cox){
 #   scale_color_manual(name = "Distributions", values = c("Residuals" = "#4DAF4A", "Exponential" = "#377EB8")) +
 #   theme_minimal() + theme(text = element_text(family="Cambria"), legend.position.inside = c(1,0),
 #                           legend.justification = c(1,0), legend.background = element_rect(fill = "white", color = "black", linewidth = 0.5))
-# HW:
-# ----------------- 2. Time-Dependent ROC analysis ---
 
-# Function to graph the time dependent ROC curve and calculate the AUC.
-# Input:  dat - validation dataset containing the variables for testing accuracy.
-#         cox - cox model used to obtain linear predictor marker values.
-#         month_Start - starting month included in time range over which accuracy is tested on.
-#         month_End - last month included in time range over which accuracy is tested on.
-#         Graph - toggle output to not include the ggplot object.
-#         lambda - smoothing parameter representing % neighborhood size symmetrically around a each unique marker.
-#         numDigits - rounding scheme applied to markers (specifically if the vectors are memory intensive).
-#         method - estimator method to be used to obtain TPR and FPR.
-#         name - name for ggplot graph to be saved.
-# Output: AUC - Area under the curve
-#         ROC_graph - ggplot object for ROC curve
 
-tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, numDigits=2, method="NNE-0/1", Name="tdROC"){
-  # Error handling
+
+
+# ----------------- 2. Functions for time-Dependent ROC-analysis ---
+
+# --- Function to calculate an ROC-graph (True vs false positive rates) for a given prediction time interval,
+# as adjusted for right-censoring by estimating both the overall and marker-conditional survivor functions.
+# For a given/fitted Cox regression model, this function chiefly implements the Nearest Neighbours estimator from 
+# Heagerty2000 (DOI: https://doi.org/10.1111/j.0006-341x.2000.00337.x) in estimating the 
+# aforementioned survivor functions. This function then culminates in producing both the associated
+# ROC-graph, itself constructed using the trapezoidal rule from Mason2002 (DOI: https://doi.org/10.1256/003590002320603584),
+# and the AUC-statistic in summarising the ROC-graph.
+# Input:  [dat]: A validation dataset containing the variables of interest for testing prediction accuracy.
+#         [cox]: A fitted cox model used to obtain marker values (theoretically either the risk scores exp(\beta.X)
+#               or simply just the linear combination \beta.X.
+#         [month_Start]: The prediction starting period of the time range over which prediction accuracy is tested.
+#         [month_End], The last prediction period of the time range over which prediction accuracy is tested.
+#         [Graph]: A boolean-valued toggle to produce the ROC-graph as a ggplot-object.
+#         [lambda]: A smoothing parameter representing the %-valued neighborhood size,
+#                  symmetrically calculated around each unique marker.
+#         [numDigits]: The number of digits to which unique marker values are rounded, as an algorithmic efficiency boost
+#         [method]: The estimation method by which True Positive Rates (TPR) and False Positive Rates (FPR) are calculated
+#         [graphName]: The base name under which the produced ggplot graph will be saved in the given path directory
+#         [genFigPath], A given path directory in which the ROC-graph (if produced) will be saved
+#         []
+# Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
+#         [ROC_graph]: The associated ROC-graph as a ggplot-object
+timedROC <- function(dat, cox, month_Start=0, month_End, fld_ID="ID", fld_Event="MainEvent_Ind", 
+                     fld_StartTime="Start", fld_EndTime="Stop",
+                     numDigits=2, Graph=TRUE, lambda=0.05,  method="NNE-0/1", 
+                     graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/")){
+  
+  # - Testing Conditions
+  # dat = dat; cox=coxExample; month_End=334; numDigits=2; Graph=TRUE; month_Start=0; method="NNE-0/1";lambda=0.05;
+  # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End"; graphName="coxExample_cgd"; genFigPath=genFigPath
+  
+  
+  # - Error handling
   if (!is.data.table(dat)) {
     stop("Error: 'dat' must be a data table.")
   }# Test whether dat is a data table
@@ -207,23 +323,34 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
   if (month_Start > month_End) {
     stop("Error: 'month_Start' cannot be greater or equal to 'month_End'.")
   }# Test whether [month_Start] is less than [month_End]
+  ### AB: Build additional sanity checks for the new arguments in the function header
   
-  # Unit test
-  # dat = dat;cox=coxExample;month_End=12;numDigits=2;Graph=TRUE;month_Start=0;method="NNE-0/1";lambda=0.05;
-  
-  # Initialize data set
+  # - Preliminaries
   dat[, Marker := round(predict(cox, newdata=dat, type="lp"),numDigits)] # Create marker values based on linear predictors
   thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent different thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
+  setorderv(dat, cols = fld_EndTime) #  Sort data set according to the given end time field
   
-  # Sort data set according to time
-  setorder(dat,End) # FOR AB -> make programmable (Stop time = ENd)
+  
+  ### AB [2024-11-27]: Busy here .. 
+  # - Reassign given field names to standardised naming conventions, if only within this function
+  # Get all given fields and combine first
+  dat[ mget(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event))]
+  
+  dat[, StartTime.(fld_StartTime) := ]
+  dat[, EndTime := get(fld_EndTime)]
+  dat[, ]
 
-  # Initialize Nearest Neighbor Estimation variables
-  uEnd <- dat$End %>% unique() %>% sort() # Unique time points in the [dat] data table
+  # - Initialize Nearest Neighbor Estimation variables
+  # Obtain unique end points (or ages) in the [dat] object 
+  uEnd <- dat[,get(fld_EndTime)] %>% unique() %>% sort() 
   #nTimes <- sum(uEnd <= month) # Number of months before and including the final month
   #uMarker <- dat$Marker %>%  unique() %>% sort() # Obtain unique markers
-  uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort() # Distinct time points in the [dat] data table where the target event takes place
+  
+  # Obtain unique end points (or ages) at which the main event of interest occurred
+  uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort() 
+  dat[, list(EndPoints = get(fld_EndTime), get(..fld_event))]
+  [get(fld_event)==1, EndPoints]
   DTimes <- uDTime[uDTime >= month_Start & uDTime <= month_End] # Distinct time points within range [mont_Start,month_End] in the [dat] data table where the target event takes place
   S_t <- numeric(nThresh) # Initialize vector to contain survival estimates
   n <- NROW(dat) # Total number of markers
@@ -348,7 +475,7 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
       scale_y_continuous(label=percent) + scale_x_continuous(label=percent)
     
     # Save graph
-    ggsave(gg, file=paste0(genFigPath, "TFD/tdROC/",Name,"(",month_Start,",",month_End,").png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+    ggsave(gg, file=paste0(genFigPath, graphName,"(",month_Start,",",month_End,").png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
     
     retObj <- list(AUC = area, ROC_graph=gg)
   }else{
@@ -357,16 +484,32 @@ tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, n
   return(retObj)
 }
 
+
+# --- Unit test: timedROC()
+# GoF_CoxSnell_graph(coxExample)
+
 if(Test){
   survivalROC(Stime=dat$Start,status=dat$Default_Ind, entry=dat$Start,
-              marker=round(predict(coxExample, type="lp"),2),span=0.05, predict.time=12)
-  tdROC(dat,coxExample,12)
-  # tdROC(datCredit_valid_TFD, coxDelinq, month_Start=0, month_End=3, Graph=TRUE, 
-  #       lambda=0.05, numDigits=0, method="NNE-0/1", Name="coxDelinq",
-  #       fld_id="PerfSpell_Key", fld_event="Default_Ind")
+              marker=round(predict(coxExample, type="lp"),2),span=0.05, predict.time=334)
+  
+  timedROC(dat=dat,cox=coxExample,month_End=334,fld_id="ID", fld_event="MainEvent_Ind", 
+           fld_StartTime="Start", fld_EndTime="Stop",
+           numDigits=2, graphName="coxExample_cgd", genFigPath=genFigPath)
+  
+  
+  ### AB: Need to rewire the fields here, though I need an actual dataset to do that.
+  timedROC(dat=datCredit_valid_TFD, cox=coxDelinq, month_Start=0, month_End=12, 
+        fld_id="PerfSpell_Key", fld_event="Default_Ind", fld_StartTime="Start", fld_EndTime="Stop",
+        numDigits=2, graphName="DefaultSurvModel-Cox", genFigPath=paste0(genFigPath, "TFD/tdROC/")
+      )
+
 }
 
-# ----------------- 2. Schoenfeld residuals ---
+
+
+
+
+# ----------------- 3. Schoenfeld residuals ---
 
 # Function to graph the time dependent ROC curve and calculate the AUC.
 # Input:  dat - Dataset containing the [Start], [Stop] and [Default_Ind] variables
@@ -469,3 +612,10 @@ sfTest <- function(cox){
 # sr <- residuals(cox,type="scaledsch")
 # plot(names(sr),sr)
 # abline(0,0, col="red")
+
+
+
+# --- House keeping
+if (Test) {
+  rm(cgd,cgd0,coxExample) 
+}

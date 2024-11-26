@@ -128,7 +128,7 @@ getKS <- function(data,variables){
     model <- coxph(formula, data = data)
     
     # Apply the test function and extract the statistic
-    test_stat <- cs_ks_test(model, data, GraphInd = F)$Stat
+    test_stat <- GoF_CoxSnell_KS(model, data, GraphInd = F)$Stat
     
     # Append to results
     results <- rbind(results, data.frame(Variable = var, KS = test_stat))

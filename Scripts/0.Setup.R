@@ -34,7 +34,7 @@ require(readr)
 require(bit64) # for very big numeric values
 require(stringr) # common string operations, e.g, str_pad
 require(purrr) # mapping functions from tidyverse in working with matrices, lists
-require(broom)
+require(broom) ### AB: ??? why necessary?
 
 # for advanced looping functionality in simulation tasks
 require(doBy)
@@ -58,7 +58,7 @@ require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
 require(discSurv)
 require(MASS)
-require(ldatools)
+require(ldatools) ### AB: ??? why necessary?
 
 #for plots
 require(ggplot2)
@@ -71,8 +71,8 @@ require(survminer)
 require(gridExtra)
 require(corrplot)
 require(Metrics)
-require(treem)
-require(treemapify)
+require(treem) ### AB: ??? why necessary?
+require(treemapify) ### AB: ??? why necessary?
 
 
 

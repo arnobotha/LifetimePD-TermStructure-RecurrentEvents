@@ -2,7 +2,8 @@
 # Setting up R environment, parameters, and function definitions
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Roundel Bester, Marcel Muller, Roland Breedt, Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha, Roundel Bester, Marcel Muller, Roland Breedt, 
+#                   Bernard Scheepers
 
 # DESCRIPTION: 
 # This script installs and  loads various libraries and packages, compiles all
@@ -87,38 +88,29 @@ k <- 6 # Probation period
 
 # -- Path variables | User-dependent
 
-if (Sys.getenv("USERNAME") == "Arno Botha") {
-  path_cust <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-machine
+  # - Common path for saving large R-objects as back-up and/or as reusable checkpoints
+  genPath <- "E:/DataDump/RetailMortgages-FNB/LifetimePD-TermStructure-RecurrentEvents_Data/"
+  # - Common path from which raw big datasets are imported
+  genRawPath <- "E:/DataDump/RetailMortgages-FNB/"
+  # - Common path for sourcing R-scripts in main codebase
+  path_cust <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  # - Common path for storing important (but small!) R-objects as back-up
+  genObjPath <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  # - Common path for saving important analytics and figures
+  genFigPath <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Figures/"
   
-  # - Common path for storing important R-objects as back-up
-  genObjPath <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Objects/"
-  
-  # - Common path for saving important analytics (e.g., sampling)
-  genFigPath <- "E:/WorkLife/Analytix/Research/LifetimePD-TermStructure-RecurrentEvents/Figures/"
-  
-  # - Common path for saving big data objects
-  genPath <- "E:/DataDump/FNB SLC/LifetimePD-TermStructure-RecurrentEvents_Data/"
-  
-  # - Common path for importing raw data
-  genRawPath <- "E:/DataDump/FNB SLC/"
-  
-} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard
-  
-  # - Common path for saving big data objects
+} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard Scheepers
+  # - Common path for saving large R-objects as back-up and/or as reusable checkpoints
   genPath <- "C:/BMI Data/LifetimePD-TermStructure-RecurrentEvents_Data/"
-  
-  # - Common path for importing raw data
+  # - Common path from which raw big datasets are imported
   genRawPath <- "C:/BMI Data/"
-  
-  # - Custom path where R-scripts are saved
+  # - Common path for sourcing R-scripts in main codebase
   path_cust <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
-  
-  # - Common path for storing important R-objects as back-up
+  # - Common path for storing important (but small!) R-objects as back-up
   genObjPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Objects/"
-  
-  # - Common path for saving important analytics (e.g., sampling)
+  # - Common path for saving important analytics and figures
   genFigPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/"
-  
 }
 
 

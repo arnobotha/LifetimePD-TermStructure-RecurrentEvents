@@ -15,7 +15,7 @@
 # ----------------- 0. Dataset for unit tests ---
 # 'The cgd dataset from the survival package contains survival data from a clinical
 # trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency.
-Test <- FALSE # Toggle for unit tests
+Test <- FALSE # Toggle for unit tests; Test <- T
 if (Test){
   force(data(cgd,package="survival"))
   data(cgd) # Load data set

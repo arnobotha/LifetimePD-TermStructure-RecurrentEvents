@@ -20,10 +20,10 @@ if (Test){
   force(data(cgd,package="survival"))
   data(cgd) # Load data set
   dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
-            rename(Start=tstart,End=tstop,Default_Ind=status) #HW:  Generalize variable names.
+            rename(LoanID=id, Start=tstart,End=tstop,Default_Ind=status) #HW:  Generalize variable names.
   #dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
   #                start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
-  coxExample <- coxph(Surv(Start,End,Default_Ind) ~ sex + age + height + weight + inherit + enum + steroids + treat,data=dat, id=dat$id) # Build a cox model
+  coxExample <- coxph(Surv(Start,End,Default_Ind) ~ sex + age + height + weight + inherit + enum + steroids + treat,data=dat, id=LoanID) # Build a cox model
   summary(coxExample)
 }
 
@@ -175,72 +175,96 @@ cs_graph <- function(cox){
 # ----------------- 2. Time-Dependent ROC analysis ---
 
 # Function to graph the time dependent ROC curve and calculate the AUC.
-# Input:  dat - Dataset containing the [Start], [Stop] and [Default_Ind] variables
-#         cox - cox model
-#         month - desired month to test ROC curve on.
-#         lambda - % size of the neighborhood (will be symmetrical around the same point) (Smoothing parameter \lambda)
-#         numDigits - rounding scheme applied to markers (specifically if the vectors memory consuming)
+# Input:  dat - validation dataset containing the variables for testing accuracy.
+#         cox - cox model used to obtain linear predictor marker values.
+#         month_Start - starting month included in time range over which accuracy is tested on.
+#         month_End - last month included in time range over which accuracy is tested on.
+#         Graph - toggle output to not include the ggplot object.
+#         lambda - smoothing parameter representing % neighborhood size symmetrically around a each unique marker.
+#         numDigits - rounding scheme applied to markers (specifically if the vectors are memory intensive).
+#         method - estimator method to be used to obtain TPR and FPR.
+#         name - name for ggplot graph to be saved.
 # Output: AUC - Area under the curve
 #         ROC_graph - ggplot object for ROC curve
 
-tdROC <- function(dat_valid, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, numDigits=2, method="NNE-0/1", Name="tdROC"){
-  # HW: Error handling (MIssingness mont_END, is dat a data table, cox coxph function)
-  #dat = dat;cox=coxExample;month_End=12;numDigits=2;Graph=TRUE;month_Start=0;method="NNE-0/1";lambda=0.05;
+tdROC <- function(dat, cox, month_Start=0, month_End, Graph=TRUE, lambda=0.05, numDigits=2, method="NNE-0/1", Name="tdROC"){
+  # Error handling
+  if (!is.data.table(dat)) {
+    stop("Error: 'dat' must be a data table.")
+  }# Test whether dat is a data table
+  if (!inherits(cox, "coxph")) {
+    stop("Error: 'cox' must be a valid 'coxph' model object.")
+  }# Test whether [cox] is a coxph model
+  if (!all(all.vars(formula(cox)) %in% colnames(dat))){
+    stop("Error: 'dat' does not contain the variables in the 'cox' object")
+  }# Test whether [dat] contains the variables on which [cox] was built
+  if (!is.numeric(month_Start) || !is.numeric(month_End)) {
+    stop("Error: 'month_Start' and 'month_End' must be numeric.")
+  }# Test whether [month_Start] and [month_End] are numerical
+  if (month_Start < 0 || month_End < 0) {
+    stop("Error: 'month_Start' and 'month_End' must be non-negative.")
+  }# Test whether [month_Start] and [month_End] are positive
+  if (month_Start > month_End) {
+    stop("Error: 'month_Start' cannot be greater or equal to 'month_End'.")
+  }# Test whether [month_Start] is less than [month_End]
+  
+  # Unit test
+  # dat = dat;cox=coxExample;month_End=12;numDigits=2;Graph=TRUE;month_Start=0;method="NNE-0/1";lambda=0.05;
+  
   # Initialize data set
-  #dat <- dat_valid %>% subset(select=c(Start, End, Default_Ind)) %>% as.data.table() # Only these columns are needed
-  dat[, Marker := round(predict(cox, newdata=dat, type="lp"),numDigits)] # Create a marker value based on the linear predictor
-  thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent thresholds
+  dat[, Marker := round(predict(cox, newdata=dat, type="lp"),numDigits)] # Create marker values based on linear predictors
+  thresholds <- dat$Marker %>% unique() %>% sort() # Let the unique marker values represent different thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
   
   # Sort data set according to time
   setorder(dat,End) # FOR AB -> make programmable (Stop time = ENd)
 
   # Initialize Nearest Neighbor Estimation variables
-  uEnd <- dat$End %>% unique() %>% sort() # Unique endpoints
+  uEnd <- dat$End %>% unique() %>% sort() # Unique time points in the [dat] data table
   #nTimes <- sum(uEnd <= month) # Number of months before and including the final month
   #uMarker <- dat$Marker %>%  unique() %>% sort() # Obtain unique markers
-  uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort() # HW: USe MainEvent 
-  DTimes <- uDTime[uDTime >= month_Start & uDTime <= month_End] # Unique defaulting times before given month
-  S_t <- numeric(nThresh) # Vector to contain survival estimates
+  uDTime <- dat$End[dat$Default_Ind == 1] %>% unique %>% sort() # Distinct time points in the [dat] data table where the target event takes place
+  DTimes <- uDTime[uDTime >= month_Start & uDTime <= month_End] # Distinct time points within range [mont_Start,month_End] in the [dat] data table where the target event takes place
+  S_t <- numeric(nThresh) # Initialize vector to contain survival estimates
   n <- NROW(dat) # Total number of markers
-  weights <- rep(NA, nrow = n);gc() # (n = number of observations in dat x nThresh = number of unique markers) weight matrix containing 1/0's
+  weights <- rep(NA, nrow = n);gc() # (n (# observations in [dat]) x nThresh (# unique markers)) weight matrix containing 1/0's indicating neighbourhoods 
+  survivalROC
+  # -  Create an indication matrix for subejects at risk at different times
+  # NOTE: Matrix dimensions are (n (# observations) x DTimes (unique default times within range))
+  start_before_time <- outer(dat$Start, DTimes, "<=")# Indication matrix for observations originating before each DTimes (columns) time point
+  end_after_time <- outer(dat$End, DTimes, ">=")# Indication matrix for observations resolving after each DTimes (columns) time point
+  at_risk <- (start_before_time & end_after_time) # Indication matrix for observations in each column originating before DTimes (columns) and resolving after column DTimes
   
-  # -  Determine populations at risk at each time point HW: Comments (What + why)
-  # NOTE: Matrix dimensions are (n = # observations) x (p = unique default times within range)
-  start_before_time <- outer(dat$Start, DTimes, "<=")# Determine whether [Start] are earlier than unique list of main default events. (How)
-  end_after_time <- outer(dat$Start, DTimes, ">=")# Ensure observation exists after time t
-  at_risk <- (start_before_time & end_after_time) # Matrix is Boolean
-  
-  end_at_time <- outer(dat$End, DTimes, "==")# Ensure observation exists at time t 
-  events <- (start_before_time & end_at_time & (dat$Default_Ind == 1)) # Number of defaults at each time point
+  end_at_time <- outer(dat$End, DTimes, "==")# Indication matrix for observations currently at each DTimes (columns) time point
+  events <- (start_before_time & end_at_time & (dat$Default_Ind == 1)) # Indication matrix for observations resolving at each DTimes (columns) time point
   
   if(method=="NNE-0/1"){
     # Loop through unique markers -> FOR AB: LOGIC FOR 0/1 neighborhood (TRY TO COLLAPSE)
     for (j in 1:nThresh) { # FOR AB: Make Parallel
-      # Calculate differences
-      Diff <- dat$Marker - thresholds[j] # Take the difference between unique markers and each other marker
-      sDiff <- Diff[order(Diff)]  # Sort Diff
+      # Create vector with entries indicating how close each marker entry is the looping unique marker value
+      Diff <- dat$Marker - thresholds[j] # Calculate the difference between unique markers and each other marker
+      sDiff <- Diff[order(Diff)]  # Sort the difference vector to ensure that the ordinal vector entries are in ascending order
       
-      # HW: topic plus comments
-      Neigh_Mid <- sum(sDiff <= 0)
-      Neigh_UpperB_ind <- min(Neigh_Mid + trunc(n * lambda * 0.5), n)
-      Neigh_LowerB_ind <- max(Neigh_Mid - trunc(n * lambda * 0.5), 1)
-      Neigh_UpperB <- sDiff[Neigh_UpperB_ind]
-      Neigh_LowerB <- sDiff[Neigh_LowerB_ind]
+      # Establish a symmetrical neighborhood  around each unique marker value
+      Neigh_Mid <- sum(sDiff <= 0) # Index for Marker value equal to looping unique marker value (last marker index for identical markers), since ordinal vector will contain initial differenced marker values, i.e. less than 0
+      Neigh_UpperB_ind <- min(Neigh_Mid + trunc(n * lambda * 0.5), n) # Index for upper bound of neighbourhood bounded by the index of largest marker
+      Neigh_LowerB_ind <- max(Neigh_Mid - trunc(n * lambda * 0.5), 1) # Index for lower bound of neighbourhood bounded by the index of smallest marker
+      Neigh_UpperB <- sDiff[Neigh_UpperB_ind] # Marker value for upper bound of neighbourhood
+      Neigh_LowerB <- sDiff[Neigh_LowerB_ind] # Marker value for lower bound of neighbourhood
       
-      # HW:
-      weights <- ifelse((Diff <= Neigh_UpperB) & (Diff >= Neigh_LowerB), 1,0) # Output of kernel function
+      # Weight vector containing 1 for when the marker is within the neigbourhood and 0 otherwise
+      weights <- ifelse((Diff <= Neigh_UpperB) & (Diff >= Neigh_LowerB), 1,0) # Determine whether markers are within a neighbourhood by ascertaining whether it falls within the bounds
       
-      # HW: Topic
+      # Initialize values for Kaplan-meier estimate of survival function
       n_values <- colSums(weights * at_risk) # number of observations at risk in each neighborhood per unique event time
-      d_values <- colSums(weights * events) # number of events at risk in each neighborhood per unique event time
+      d_values <- colSums(weights * events) # number of observations resolving to target event in each neighborhood per unique event time
       
-      # Calculate survival factors and handle division by zero cases
-      survival_factors <- 1 - (d_values / n_values) 
+      # Estimate survival function provided the marker is equal to the unique marker
+      survival_factors <- 1 - (d_values / n_values) # Kaplan-Meier estimate factor at each DTimes period
       survival_factors[is.na(survival_factors)] <- 1  # Set NaN cases to 1
-      S_t[j] <- prod(survival_factors)
+      S_t[j] <- prod(survival_factors) # Take the product of each survival factor to obtain the survival probability at time t given marker is equal to the unique marker
     }
-  } else if(method=="NNE-Exp"){
+  } else if(method=="NNE-Exp"){ # Method using exponential kernel function
     warning("Method untested")
     weights <- lapply(thresholds,function(thresh) exp(-(dat$Marker - thresh)^2 / lambda^2)) # Compute exponential weights for all thresholds values
     
@@ -263,28 +287,34 @@ tdROC <- function(dat_valid, cox, month_Start=0, month_End, Graph=TRUE, lambda=0
     stop("Unknown method.")
   }
 
-  dat[,Surv_prob := S_t[match(dat$Marker, thresholds)]] # Allocate survival probability to each Marker
+  # Allocate survival probability at time t give a specific marker value to their corresponding marker value
+  dat[,Surv_prob := S_t[match(dat$Marker, thresholds)]]
   
-  #HW: 
-  S_Overall <- mean(dat[,list(S_Marg = sum(Surv_prob,na.rm=T)/.N), by=list(id)]$S_Marg) #/n # Calculate marginal survival probability
+  # Survival probability at time t regardless of the marker value
+  S_Overall <- mean(dat[,list(S_Marg = sum(Surv_prob,na.rm=T)/.N), by=list(PerfSpell_Key)]$S_Marg) # Calculate the average [Surv_prob] for each "id" and averaging these "id" specific averages across the portfolio
   
   # Initialize ROC matrix
-  roc.matrix <- matrix(NA, nThresh, 4)
-  roc.matrix[nThresh, ] <- c(0, 1,0,0)
+  roc.matrix <- matrix(NA, nThresh,2)
+  roc.matrix[nThresh, ] <- c(0, 1) # Initialize matrix to start off with 0 sensitivity (TPR) and 1 Specificity (1-FPR)
   
-  
-  
+  # Populate matrix with sensitivity and Specificity values
   for (c in 1:(nThresh - 1)) {
-    #HW: Better names
-    cumulMark = mean(dat[,list(sum(Marker <= thresholds[c])/.N), by=list(id)]$V1)
+    # Empirical distribution of markers being less than the threshold
+    cumulMark = mean(dat[,list(sum(Marker <= thresholds[c])/.N), by=list(PerfSpell_Key)]$V1) # First average the markers being less than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
+    
     #cumulMark <- sum(dat$Marker <= thresholds[c])/n # Number of observations with a Marker value less < threshold divided by observations
     #S_lam <- sum(dat$Surv_prob[dat$Marker > thresholds[c]])/n # Sum of survival probabilities for Marker values greater than threshold
-    S_lam <- mean(dat[,list(sum(Surv_prob*(Marker > thresholds[c]),na.rm=T)/.N), by=list(id)]$V1,na.rm=T)
-    roc.matrix[c, 1] <- ((1-cumulMark) - S_lam)/(1 - S_Overall) # Sensitivity
-    roc.matrix[c, 2] <- 1 - S_lam/S_Overall # Specificity
-    roc.matrix[c,3] <- cumulMark
-    roc.matrix[c,4] <- S_lam
+    
+    # Survival probability at time t provided that the corresponding marker values are greater than the threshold
+    threshSurv <- mean(dat[,list(sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), by=list(PerfSpell_Key)]$V1,na.rm=T) # First average the Surv_prob values with markers greater than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
+    
+    # Populate roc matrix
+    roc.matrix[c, 1] <- ((1-cumulMark) - threshSurv)/(1 - S_Overall) # Sensitivity
+    roc.matrix[c, 2] <- 1 - threshSurv/S_Overall # Specificity
+    #roc.matrix[c,3] <- cumulMark
+    #roc.matrix[c,4] <- S_lam
   }
+  # Convert Sensitivity and Specificity to TPR and FPR respectively
   sensitivity = roc.matrix[, 1]
   specificity = roc.matrix[, 2]
   x <- 1 - c(0, specificity) # FPR = 1 - Specificity
@@ -299,6 +329,7 @@ tdROC <- function(dat_valid, cox, month_Start=0, month_End, Graph=TRUE, lambda=0
     # Create a data frame for plotting
     datGraph <- data.frame(x = x, y=y)
     datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
+    conc=percent(as.numeric(concordance(cox1)[1]))
     vCol <- brewer.pal(8,"Set1")[c(2)]
     dpi <- 200
     
@@ -308,11 +339,12 @@ tdROC <- function(dat_valid, cox, month_Start=0, month_End, Graph=TRUE, lambda=0
               legend.background = element_rect(fill="snow2", color="black",
                                                linetype="solid")) +
         labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
-               bquote("True Positive Rate "*italic(T^"+"))) + geom_path(color=vCol) +
+               bquote("True Positive Rate "*italic(T^"+"))) + geom_step(color=vCol) +
         geom_segment(data = datSegment,aes(x = x, y = y, xend = xend, yend = yend),
                      color = "grey", linetype = "dashed") +
-      annotate("label", x = 0.75, y = 0.25,label = paste("AUC: ", percent(area)),
-               fill="grey") + 
+      annotate("label", x = c(0.75,0.75), y = c(0.375,0.125),label = 
+                 c(paste0("AUC(",month_Start,",", month_End,"): ", percent(area)),
+                   conc), fill="grey") + 
       scale_y_continuous(label=percent) + scale_x_continuous(label=percent)
     
     # Save graph
@@ -329,6 +361,9 @@ if(Test){
   survivalROC(Stime=dat$Start,status=dat$Default_Ind, entry=dat$Start,
               marker=round(predict(coxExample, type="lp"),2),span=0.05, predict.time=12)
   tdROC(dat,coxExample,12)
+  # tdROC(datCredit_valid_TFD, coxDelinq, month_Start=0, month_End=3, Graph=TRUE, 
+  #       lambda=0.05, numDigits=0, method="NNE-0/1", Name="coxDelinq",
+  #       fld_id="PerfSpell_Key", fld_event="Default_Ind")
 }
 
 # ----------------- 2. Schoenfeld residuals ---
@@ -428,9 +463,9 @@ sfTest <- function(cox){
 }
 
 
-r <- residuals(cox,type="schoenfeld")
-plot(names(r), r)
-
-sr <- residuals(cox,type="scaledsch")
-plot(names(sr),sr)
-abline(0,0, col="red")
+# r <- residuals(cox,type="schoenfeld")
+# plot(names(r), r)
+# 
+# sr <- residuals(cox,type="scaledsch")
+# plot(names(sr),sr)
+# abline(0,0, col="red")

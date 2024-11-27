@@ -311,9 +311,9 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
   
   # --- Preliminaries 
   # -- Testing Conditions
-  # datGiven = copy(dat); cox=coxExample; month_End=334; numDigits=2; Graph=TRUE; month_Start=0; method="NNE-0/1";lambda=0.05;
-  # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End"; graphName="coxExample_cgd"; 
-  # eventVal=1; genFigPath=genFigPath
+  datGiven = copy(dat); cox=coxExample; month_End=334; numDigits=2; Graph=TRUE; month_Start=0; method="NNE-0/1";lambda=0.05;
+  fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End"; graphName="coxExample_cgd"; 
+  eventVal=1; genFigPath=genFigPath
   
   
   # -- Error handling
@@ -347,7 +347,6 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
   datGiven[, Marker := round(predict(cox, newdata=datGiven, type="lp"),numDigits)] # Create marker values based on linear predictors
   thresholds <- datGiven$Marker %>% unique() %>% sort() # Let the unique marker values represent different thresholds
   nThresh <- length(thresholds) # number of thresholds for the ROC curve
-  setorderv(datGiven, cols = fld_EndTime) #  Sort data set according to the given end time field
   
   
   # -- Reassign given field names to standardised naming conventions, if only within this function
@@ -369,6 +368,9 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
   }
   
   # - Obtain various quantities towards implementing the Nearest Neighbour Estimator (NNE) method
+  setorder(datGiven, cols = EndTime) #  Sort data set according to the given end time field
+  # Get the corresponding rank order of the raw end times when sorted ascendingly
+  vOrder <- order(datGiven$End)
   # Obtain unique end points (or ages) in the [datGiven] object, i.e., the "ordered failure times t_1 < t_2 < ... < t_m"
   uEnd <- datGiven$EndTime %>% unique %>% sort()
   # Obtain unique end points (or ages) at which the main event of interest occurred
@@ -411,13 +413,13 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
   
   # --- In calculating the ROC-graph, 3 fundamental quantities must be estimate:
   # 1) the classical survivor function S(t) irrespective of Marker values
-  # 2) 
+  # 2) he conditional survivor function S(t| M > c)
   
   
   # -- 1. Estimating the classical S(t) given each threshold
   # Implement the chosen estimator for S(t) and the choice of kernel (if Nearest Neighbour)
   
-  if(method=="NNE-0/1"){ # Nearest Neighbour Estimator, using the 0/1 Kernel function from Akritas1984
+  if(method=="NNE-0/1"){ # Nearest Neighbour Estimator, using the 0/1 Kernel function from Akritas1994
     
     # -- S(t) is estimated by iterating across unique markers as thresholds, whilst assuming each threshold
     # holds 'universally' across all subjects.
@@ -492,17 +494,21 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
     stop("Unknown estimation method. Exiting ..")
   }
   
-  
-  # 2) the conditional survivor function S(t| M > c), given the subset with marker M and cut-off C
-
-  # - Allocate survival probability at time t give a specific marker value to their corresponding marker value
+  # - Allocate the estimated S(t)-values across subjects over prediction times t (same as unique event times), given
+  # a specific marker value under which that particularly S(t) was estimated
   datGiven[,Surv_prob := S_t[match(datGiven$Marker, thresholds)]]
   
-  # - Calculate the overall survival probability at prediction time t, i.e., given an -\infty market value
-  # Calculate the average [Surv_prob] for each "id" and averaging these "id" specific averages across the portfolio
-  # NOTE: This estimator is the grand mean of the average [Surv_prob]-values per ID
-  if (noGroup_Ind==F) { # Use grouped estimator
-    S_Overall <- mean(datGiven[,list(S_Marg = sum(Surv_prob,na.rm=T)/.N), by=list(ID)]$S_Marg)  
+  
+  # - Estimation of the remaining two quantities depend on whether observations are supposedly independent from one another
+  # or whether they are clustered around a common ID-value
+  if (noGroup_Ind==F) { # Dependence amongst certain observations
+    
+    # -- 2. Estimate the conditional survivor function S(t| M > c), given the subset with marker M and cut-off C
+    
+    # - Calculate the overall survival probability at prediction time t, i.e., given an -\infty marker value
+    # Calculate the average [Surv_prob] for each "id" and averaging these "id" specific averages across the portfolio
+    # NOTE: This estimator is the grand mean of the average [Surv_prob]-values per ID
+    S_Overall <- mean(datGiven[,list(S_Marg = sum(Surv_prob,na.rm=T)/.N), by=list(ID)]$S_Marg) 
     
     # - Initialize an m x 2 results matrix in which true & false positive rates are stored across columns
     # per unique 
@@ -524,7 +530,13 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
       matRates[c, 1] <- ((1-cumulMark) - threshSurv)/(1 - S_Overall) # Sensitivity
       matRates[c, 2] <- 1 - threshSurv/S_Overall # Specificity
 
-    } else { # use classical estimator
+    } else { # Independence amongst observations
+      
+      # - Calculate the mean survival probability at prediction time t, i.e., given an -\infty marker value
+      S_Overall <- mean(datGiven$Surv_prob, na.rm=T)  
+      
+      
+      
       
     }
     
@@ -592,8 +604,8 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, metho
 if(Test){
   
   # - Calculate AUC at median survival time for correctly-fitted Cox model | survivalROC
-  survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start, 
-              method = "NNE", span=0.05, predict.time=334,
+  survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=, 
+              method = "NNE",  predict.time=334,
               marker=round(predict(coxExample, type="lp"),2))
   ### RESULTS: Survival estimate at median survival time = 62% .. (should be 50%)
   #            This already shows the bias of neglecting the ID-variable in clustering observations 

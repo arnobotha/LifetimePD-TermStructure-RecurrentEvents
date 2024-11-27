@@ -30,6 +30,13 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 
 ### HOMEWORK: Create [Removed], [slc_acct_roll_ever_24_imputed_med_f]
 datCredit_train_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
+datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+datCredit_train_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
+
+datCredit_valid_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
+datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
+
 datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
 
 # Define functions for the analysis
@@ -84,23 +91,26 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
 
 # Table concordance statistic of single variable cox ph models
 # Used to compare predictive performance of variables
-getConcs <- function(data, variables) {
-  # Use lapply to efficiently compute concordances all models
+concTable <- function(data, variables) {
+  # Use lapply to efficiently compute concordances for all univariate models
   results <- lapply(variables, function(var) {
     formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
     
     # Fit Cox model
-    model <- coxph(formula, data = data)
+    model <- coxph(formula,id=LoanID, data = data)
     
     # Extract concordance
     conc <- as.numeric(concordance(model)[1])
+    
+    # Extract concordance variability
+    sd <- sqrt(concordance(model)$var)
     
     # Extract LRT from the model's log-likelihood
     # `loglik` contains log-likelihoods for null (intercept-only) and full models
     lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)
     
     # Return results as a data.table
-    return(data.table(Variable = var, Concordance = conc, LR_Statistic = lr_stat))
+    return(data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
   })
   
   # Combine all results into a single data.table
@@ -114,51 +124,93 @@ getConcs <- function(data, variables) {
 
 # Table KS statistics of single variable cox ph models
 # Used to compare the goodness of fit of variables
-getKS <- function(data,variables){
-  # List to store results
-  results <- data.frame(Variable = character(),statKS = numeric(),stringsAsFactors = FALSE)
+csTable <- function(data,variables,seedVal=1,numIt=5){
+
+  # Simulate null distribution if seedVal is not NA
+  # Initialize results
+  results <- data.frame(Variable = variables, KS_Statistic = NA_real_)
   
-  # Simulate null distribution
-  null <- rexp(NROW(data))
-  
-  # Iterate through the variables to fit Cox models and apply the test
-  for (var in variables) {
-    # Fit Cox model
-    formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
-    model <- coxph(formula, data = data)
+  # Simulate null distribution if seedVal is not NA
+  if (!is.na(seedVal)) {
+    set.seed(seedVal, kind = "Mersenne-Twister")
+    #null_distribution <- rexp(nrow(data))
     
-    # Apply the test function and extract the statistic
-    test_stat <- GoF_CoxSnell_KS(model, data, GraphInd = F)$Stat
+    # Vectorized calculation for KS statistics
+    results$KS_Statistic <- sapply(variables, function(var) {
+      formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
+      tryCatch({
+        model <- coxph(formula, data = data)  # Fit a univariate Cox model
+        cs_ks_test(model, data, GraphInd = FALSE)$Stat  # Calculate KS statistic
+      }, warning = function(w) {
+        cat("Warning: ", w$message, " for variable: ", var, "\n")
+        NA
+      }, error = function(e) {
+        cat("Error: ", e$message, " for variable: ", var, "\n")
+        NA
+      })
+    })
     
-    # Append to results
-    results <- rbind(results, data.frame(Variable = var, KS = test_stat))
+    # Sort results by KS statistic in descending order
+    results <- results[order(-results$KS_Statistic, na.last = TRUE), ]
+    
+    # Return results and range of KS statistics
+    return(list(Table = results, Range = diff(range(results$KS_Statistic, na.rm = TRUE))))
+    
+  } else {
+    # Perform iterative KS calculation when seedVal is NA
+    matResults <- matrix(NA, nrow = length(variables), ncol = numIt,
+                         dimnames = list(variables,
+                                         paste0("Iteration_", 1:numIt))) %>%
+      as.data.table()
+    
+    for (it in seq_len(numIt)) {
+      #null_distribution <- rexp(nrow(data))
+      
+      # Vectorized iteration for KS statistics
+      matResults[, it] <- sapply(variables, function(var) {
+        formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
+        tryCatch({
+          model <- coxph(formula, data = data)
+          cs_ks_test(model, data, GraphInd = FALSE)$Stat
+        }, warning = function(w) {
+          cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
+          NA
+        }, error = function(e) {
+          cat("Error: ", e$message, " for variable: ", var, " in iteration: ", it, "\n")
+          NA
+        })
+      })
+    }
+      
+    # Compute additional statistics for the results matrix
+    colRanges <- matResults[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))]
+    matResults <- rbind(matResults, Range = colRanges, fill=T)
+    matResults[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]
+    
+    matResults <- cbind(Variables = c(variables,"Range"),matResults)
+    setorder(matResults,-Average)
+    
+    # Return matrix of KS statistics
+    return(matResults)
   }
-  
-  # Sort from highest to lowest
-  setorder(results,-KS)
-  
-  # Return the results as a data frame
-  return(list(Table = results, Range = diff(range(results$KS))))
 }
 
 # ------ 1. Delinquency measures
 varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num",
-                             "PerfSpell_g0_Delinq_SD","TimeInDelinqState",
-                             "g0_Delinq_Any_Aggr_Prop","g0_Delinq_Ave"),
-                      vartypes=c("acc", "cat", "acc", "acc", "acc", "dte", "dte"))
+                             "TimeInDelinqState","g0_Delinq_Any_Aggr_Prop","g0_Delinq_Ave",
+                             "slc_acct_arr_dir_3", "slc_acct_roll_ever_24_imputed_med"),
+                      vartypes=c("acc", "cat", "acc", "acc", "dte", "dte", "cat", "acc"))
 
-# Sanity Check
-colCheck(varlist[vartypes!="cat",vars],datCredit_train_TFD)
+#=========================================================================================
 
-# ------ 1.2 Mitigate future information in [PerfSpell_g0_Delinq_SD]
 
-### INVESTIGATE:  [PerfSpell_g0_Delinq_SD] since it contains future information. Mitigate
-###               perhaps with a rolling SD rate.
+
+# ------ 1.1 Which time window length is the best in calculating Delinquency volatility?
 
 # Initialize variables to be tested
 vars <- c("g0_Delinq_SD_4", "g0_Delinq_SD_5", "g0_Delinq_SD_6", "g0_Delinq_SD_9", "g0_Delinq_SD_12")
 
-getKS(datCredit_train_TFD,vars)
+csTable(datCredit_train_TFD,vars)
 #         Variable     KS
 # 1  g0_Delinq_SD_4 0.6188
 # 2  g0_Delinq_SD_5 0.6124
@@ -168,29 +220,25 @@ getKS(datCredit_train_TFD,vars)
 
 ### RESULTS:  [g0_Delinq_SD_4] fits the data the best, slightly better than [g0_Delinq_SD_5]
 
-getConcs(datCredit_valid_TFD,vars)
-#           Variable Concordance LR_Statistic
-# 1:  g0_Delinq_SD_4   0.9803661        48597
-# 2:  g0_Delinq_SD_5   0.9732740        53030
-# 3:  g0_Delinq_SD_6   0.9537569        52873
-# 4:  g0_Delinq_SD_9   0.9213853        50256
-# 5: g0_Delinq_SD_12   0.8885501        42174
+concTable(datCredit_valid_TFD,vars)
+#             Variable Concordance        SD LR_Statistic
+# 1:  g0_Delinq_SD_4   0.9803661 0.001401872        48597
+# 2:  g0_Delinq_SD_5   0.9732740 0.001754351        53030
+# 3:  g0_Delinq_SD_6   0.9537569 0.002316001        52873
+# 4:  g0_Delinq_SD_9   0.9213853 0.002923814        50256
+# 5: g0_Delinq_SD_12   0.8885501 0.003291758        42174
 
 ### RESULTS: As the SD period increase, there is a slight decrease in concordance.
+### NOTE: Concordance is extremely high with low variability
 
 ### Conclusion: Larger window are less influenced by large changes therefore significant changes
-###             are less pronounced. Replace [PerfSpell_g0_Delinq_SD] with [g0_Delinq_SD_4].
+###             are less pronounced. Include [g0_Delinq_SD_4] in the varlist.
 
 varlist <- vecChange(varlist,Remove="PerfSpell_g0_Delinq_SD",Add=data.table(vars=c("g0_Delinq_SD_4"), vartypes=c("acc")))
 
-# ------ 1.3 Check correlations of variables to ascertain variables that are similar.
 
-# - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
+# ------ 1.2 Should we add a lag version of [g0_Delinq_Any_Aggr_Prop]?
 
-### RESULTS: 1) [g0_Delinq_Any_Aggr_Prop] and [g0_Delinq_Ave] with a correlation of 1
-
-### INVESTIGATE: Look at lagging [g0_Delinq_Any_Aggr_Prop]
 vars <- c("g0_Delinq_Any_Aggr_Prop","g0_Delinq_Any_Aggr_Prop_Lag_1",
           "g0_Delinq_Any_Aggr_Prop_Lag_2","g0_Delinq_Any_Aggr_Prop_Lag_3",
           "g0_Delinq_Any_Aggr_Prop_Lag_4","g0_Delinq_Any_Aggr_Prop_Lag_5",
@@ -198,143 +246,315 @@ vars <- c("g0_Delinq_Any_Aggr_Prop","g0_Delinq_Any_Aggr_Prop_Lag_1",
           "g0_Delinq_Any_Aggr_Prop_Lag_12")
 
 # Compare goodness of fit of different variables
-getKS(datCredit_train_TFD,vars)
-#                       Variable     KS
-# 3  g0_Delinq_Any_Aggr_Prop_Lag_2 0.6492
-# 2  g0_Delinq_Any_Aggr_Prop_Lag_1 0.6482
-# 7  g0_Delinq_Any_Aggr_Prop_Lag_6 0.6471
-# 9 g0_Delinq_Any_Aggr_Prop_Lag_12 0.6471
-# 6  g0_Delinq_Any_Aggr_Prop_Lag_5 0.6463
-# 1        g0_Delinq_Any_Aggr_Prop 0.6462
-# 8  g0_Delinq_Any_Aggr_Prop_Lag_9 0.6459
-# 4  g0_Delinq_Any_Aggr_Prop_Lag_3 0.6449
-# 5  g0_Delinq_Any_Aggr_Prop_Lag_4 0.6426
+csTable(datCredit_train_TFD,vars,seedVal = NA)
+#                           Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:  g0_Delinq_Any_Aggr_Prop_Lag_9      0.6511      0.6504      0.6519      0.6452      0.6459 0.64890
+# 2:  g0_Delinq_Any_Aggr_Prop_Lag_5      0.6497      0.6461      0.6471      0.6517      0.6494 0.64880
+# 3:  g0_Delinq_Any_Aggr_Prop_Lag_2      0.6459      0.6507      0.6491      0.6484      0.6481 0.64844
+# 4:        g0_Delinq_Any_Aggr_Prop      0.6491      0.6492      0.6472      0.6463      0.6493 0.64822
+# 5:  g0_Delinq_Any_Aggr_Prop_Lag_4      0.6482      0.6495      0.6447      0.6491      0.6462 0.64754
+# 6:  g0_Delinq_Any_Aggr_Prop_Lag_6      0.6480      0.6448      0.6475      0.6461      0.6480 0.64688
+# 7: g0_Delinq_Any_Aggr_Prop_Lag_12      0.6490      0.6450      0.6489      0.6430      0.6470 0.64658
+# 8:  g0_Delinq_Any_Aggr_Prop_Lag_3      0.6475      0.6466      0.6449      0.6447      0.6490 0.64654
+# 9:  g0_Delinq_Any_Aggr_Prop_Lag_1      0.6478      0.6448      0.6459      0.6462      0.6475 0.64644
+# 10:                          Range      0.0052      0.0059      0.0072      0.0087      0.0035 0.00610
 
-### RESULTS:  The KS values vary widely for each simulation of Exp(1), therefore
-###           no conclusion can be made from the results.
+### RESULTS:  After 5 iterations, [g0_Delinq_Any_Aggr_Prop_Lag_9] seems to have the best fit, albeit with 
+###           a small range diminishing the validity of results (sampling variability may be present)
 
 # Compare concordance of different variables
-getConcs(datCredit_valid_TFD,vars)
-#                           Variable Concordance LR_Statistic
-# 1:  g0_Delinq_Any_Aggr_Prop_Lag_3   0.5420038          103
-# 2:  g0_Delinq_Any_Aggr_Prop_Lag_2   0.5414531          101
-# 3:  g0_Delinq_Any_Aggr_Prop_Lag_5   0.5406850           99
-# 4:  g0_Delinq_Any_Aggr_Prop_Lag_1   0.5406070           93
-# 5: g0_Delinq_Any_Aggr_Prop_Lag_12   0.5397417          100
-# 6:  g0_Delinq_Any_Aggr_Prop_Lag_6   0.5392982           99
-# 7:  g0_Delinq_Any_Aggr_Prop_Lag_9   0.5388705          101
-# 8:  g0_Delinq_Any_Aggr_Prop_Lag_4   0.5384452           96
-# 9:        g0_Delinq_Any_Aggr_Prop   0.5379244           81
+concTable(datCredit_valid_TFD,vars)
+#                           Variable Concordance        SD  LR_Statistic
+# 1:  g0_Delinq_Any_Aggr_Prop_Lag_3   0.5420038 0.004106057          103
+# 2:  g0_Delinq_Any_Aggr_Prop_Lag_2   0.5414531 0.004076323          101
+# 3:  g0_Delinq_Any_Aggr_Prop_Lag_5   0.5406850 0.004160495           99
+# 4:  g0_Delinq_Any_Aggr_Prop_Lag_1   0.5406070 0.004049427           93
+# 5: g0_Delinq_Any_Aggr_Prop_Lag_12   0.5397417 0.004163617          100
+# 6:  g0_Delinq_Any_Aggr_Prop_Lag_6   0.5392982 0.004160057           99
+# 7:  g0_Delinq_Any_Aggr_Prop_Lag_9   0.5388705 0.004186601          101
+# 8:  g0_Delinq_Any_Aggr_Prop_Lag_4   0.5384452 0.004112573           96
+# 9:        g0_Delinq_Any_Aggr_Prop   0.5379244 0.004031059           81
 
 ### RESULTS: [g0_Delinq_Any_Aggr_Prop] has the lowest concordance.
 ###           Although all concordances are quite close to one another with 
-###           a range of 0.004.
-### CONCLUSION perhaps compare correlation of [g0_Delinq_Any_Aggr_Prop_Lag_12] with [g0_Delinq_Ave]
+###           a range of 0.004 and low SD's.
 
-corrAnalysis(datCredit_train_TFD,c("g0_Delinq_Ave","g0_Delinq_Any_Aggr_Prop_Lag_1",
-                                   "g0_Delinq_Any_Aggr_Prop_Lag_2","g0_Delinq_Any_Aggr_Prop_Lag_3",
-                                   "g0_Delinq_Any_Aggr_Prop_Lag_4","g0_Delinq_Any_Aggr_Prop_Lag_5",
-                                   "g0_Delinq_Any_Aggr_Prop_Lag_6","g0_Delinq_Any_Aggr_Prop_Lag_9",
-                                   "g0_Delinq_Any_Aggr_Prop_Lag_12"))
-### RESULTS:  All variables are significantly correlated, with the lowest being 76%  found for
-###           [g0_Delinq_Ave]  and  [g0_Delinq_Any_Aggr_Prop_Lag_6]
-### CONCLUSION: Compare [g0_Delinq_Any_Aggr_Prop_Lag_6] against [g0_Delinq_Ave] for the sake of interest
-###             despite high correlation.
+### CONCLUSION: Include [g0_Delinq_Any_Aggr_Prop_Lag_3] in the model, since it has
+###             the best concordance (disregard csTable due to high variability)
 
-### INVESTIGATE: Compare [g0_Delinq_Any_Aggr_Prop_Lag_6] vs [g0_Delinq_Ave]
+varlist <- vecChange(varlist,Add=data.table(vars=c("g0_Delinq_Any_Aggr_Prop_Lag_3"), vartypes=c("acc")))
 
-# Initialize variables to be tested
-vars <- c("g0_Delinq_Any_Aggr_Prop_Lag_6", "g0_Delinq_Ave")
 
-# Compare goodness of fit of different variables
-getKS(datCredit_train_TFD,vars)
-#                       Variable     KS
-# 2                 g0_Delinq_Ave 0.6474
-# 1 g0_Delinq_Any_Aggr_Prop_Lag_6 0.6472
 
-### RESULTS:  The values are quite close to one another with a varying range, therefore
-###           no decisions can be made from the results.
+# ------ 1.2 Which variables are highly correlated?
 
-# Compare concordance of different variables
-getConcs(datCredit_valid_TFD,vars)
-#                           Variable Concordance LR_Statistic
-# 1:                 g0_Delinq_Ave   0.5397435           90
-# 2: g0_Delinq_Any_Aggr_Prop_Lag_6   0.5392982           99
+# Correlation analysis
+corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
-### RESULTS: [g0_Delinq_Ave] has a slightly higher concordance than that of [g0_Delinq_Any_Aggr_Prop_Lag_6]
-### CONCLUSION: Remove [g0_Delinq_Any_Aggr_Prop]
+### RESULTS:  1) [g0_Delinq_Any_Aggr_Prop] and [g0_Delinq_Ave] with a correlation of 1
+###           2) [PerfSpell_g0_Delinq_Num] and [slc_acct_roll_ever_24_imputed_med]
+### NOTE: Group 1) are also highly correlated with [g0_Delinq_Any_Aggr_Prop_Lag_3],
+###       which is to be expected.
 
-varlist <- vecChange(varlist,Remove="g0_Delinq_Any_Aggr_Prop")
+### CONCLUSION: A single variable from each group must be retained while the rest are removed.
 
-# ------ 1.4 Explore how [g0_Delinq] can be added to the model.
 
-### INVESTIGATE [g0_Delinq]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq, datCredit_train_TFD)
-### RESULTS: Beta tends to Inf
 
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_fac, datCredit_train_TFD)
-### RESULTS: Beta tends to Inf
+# ------ 1.2.1 Which variable should be kept from group 1) [g0_Delinq_Any_Aggr_Prop] and [g0_Delinq_Ave]
 
-### INVESTIGATE: WHETHER QUASI-COMPLETE SEPERATION IS PRESENT
+vars <- c("g0_Delinq_Any_Aggr_Prop", "g0_Delinq_Ave")
+
+# Goodness of fit
+csTable(datCredit_train_TFD,vars,seedVal = NA)
+#                   Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:           g0_Delinq_Ave      0.6482      0.6434      0.6482      0.6493       0.646 0.64702
+# 2: g0_Delinq_Any_Aggr_Prop      0.6436      0.6504      0.6475      0.6476       0.644 0.64662
+# 3:                   Range      0.0046      0.0070      0.0007      0.0017       0.002 0.00320
+
+
+### RESULTS: [g0-Delinq_Ave] seems to have the better goodness of fit over 5 iterations.
+
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#                     Variable Concordance          SD LR_Statistic
+# 1:           g0_Delinq_Ave   0.5397435 0.004030550           90
+# 2: g0_Delinq_Any_Aggr_Prop   0.5379244 0.004031059           81
+
+### RESULTS: [g0-Delinq_Ave] seems to have a slightly better concordance with the concordances have low SD.
+
+### CONCLUSION: [g0-Delinq_Ave] seems to outperform [g0_Delinq_Any_Aggr_Prop] and therefore is kept in the model
+###             and [g0_Delinq_Any_Aggr_Prop_Lag_3] is removed along with [g0_Delinq_Any_Aggr_Prop] due to the high correlation
+###             I expect similar results.
+
+varlist <- vecChange(varlist,Remove=c("g0_Delinq_Any_Aggr_Prop", "g0_Delinq_Any_Aggr_Prop_Lag_3"))
+
+
+
+# ------ 1.2.2 Which variable should be kept from group 2) [PerfSpell_g0_Delinq_Num] and [slc_acct_roll_ever_24_imputed_med]
+
+vars <- c("PerfSpell_g0_Delinq_Num", "slc_acct_roll_ever_24_imputed_med")
+
+# Goodness of fit
+csTable(datCredit_train_TFD,vars,seedVal = NA)
+#                             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:           PerfSpell_g0_Delinq_Num      0.6458      0.6463      0.6457      0.6426      0.6443 0.64494
+# 2: slc_acct_roll_ever_24_imputed_med      0.6287      0.6307      0.6280      0.6300      0.6304 0.62956
+# 3:                             Range      0.0171      0.0156      0.0177      0.0126      0.0139 0.01538
+
+### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have the better goodness of fit over 5 iterations.
+
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#                               Variable Concordance        SD LR_Statistic
+# 1:           PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         4596
+# 2: slc_acct_roll_ever_24_imputed_med   0.8588785 0.0031795664        18196
+
+### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have a significant better concordance with the concordances having low SD's.
+
+### CONCLUSION: Keep [PerfSpell_g0_Delinq_Num] in the model and remove [slc_acct_roll_ever_24_imputed_med]
+
+varlist <- vecChange(varlist,Remove="slc_acct_roll_ever_24_imputed_med")
+
+
+
+# ------ 1.3 Which version of [g0_Delinq] should be kept in the model?
+
+# [g0_Delinq]
+cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq, id=LoanID, datCredit_train_TFD)
+summary(cox);rm(cox)
+### RESULTS: Beta is unstable with high variability.
+
+# [g0_Delinq_fac]
+cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_fac, id=LoanID, datCredit_train_TFD)
+summary(cox);rm(cox)
+### RESULTS: coef is unstable with high variability.
+
+### INVESTIGATE: Is quasi-complete seperation present?
 datCredit_train_TFD[g0_Delinq==3 & Default_Ind==0, .N]
 ### RESULTS: 0
 datCredit_train_TFD[g0_Delinq!=3 & Default_Ind==1, .N]
 ### RESULTS: 0
+
 ### CONCLUSION: Quasi-complete separation is present for [g0_Delinq]=3
 
 varlist <- vecChange(varlist,Remove=c("g0_Delinq","g0_Delinq_fac"))
 
-### CREATE: An indicator for when the value is greater than 0
+### INVESTIGATE: Should an indicator version of [g0_Delinq] be included in the model.
+
+# An indicator for when the value is greater than 0
 datCredit_train_TFD[,g0_Delinq_Ind := ifelse(g0_Delinq > 0, 1, 0)]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Ind, datCredit_train_TFD)
-### RESULTS: Beta tends to Inf
+cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Ind, id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS: coef is unstable with high variability.
 datCredit_train_TFD[,g0_Delinq_Ind := NULL]
 
-### CREATE: Create a lag version for [g0_Delinq]
+### INVESTIGATE: Should an lagged version of [g0_Delinq] be included in the model.
+
+# A lag version for [g0_Delinq]
 datCredit_train_TFD[,g0_Delinq_Lag_1 := shift(g0_Delinq,fill=0),by=LoanID]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Lag_1, datCredit_train_TFD)
-### RESULTS: Beta tends to Inf
+cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Lag_1, id=LoanID, datCredit_train_TFD)
+### RESULTS: exp(coef) tends to Inf
 datCredit_train_TFD[,g0_Delinq_Lag_1 := NULL]
 
-# ------ 1.5 Test for proportionality in hazard models
+### CONCLUSION: Unable to add [Delinq_0] to the model, since the various forms'
+###             coef is unstable.
 
-# [PerfSpell_g0_Delinq_Num]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ PerfSpell_g0_Delinq_Num, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"PerfSpell_g0_Delinq_Num")
-### RESULTS: Clear trend away from 0, therefore reject proportionality.
 
-# [TimeInDelinqState]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ TimeInDelinqState, datCredit_train_TFD)
-### RESULTS: Coefficients did not converge.
 
-### INVESTIGATE: Deduce whether a specific value causes quasi-complete seperation.
+# ------ 1.4 What is the performance of current thematic variables in univariate models?
+
+# Build thematic model based on remaining delinquency variables.
+vars <- c("PerfSpell_g0_Delinq_Num","TimeInDelinqState","g0_Delinq_Ave",
+          "slc_acct_arr_dir_3","g0_Delinq_SD_4")  
+
+# Test Goodness of fit
+csTable(datCredit_train_TFD,vars)
+#                     Variable KS_Statistic
+# 3           g0_Delinq_Ave       0.6477
+# 1 PerfSpell_g0_Delinq_Num       0.6458
+# 5          g0_Delinq_SD_4       0.6151
+# 2       TimeInDelinqState           NA
+# 4      slc_acct_arr_dir_3           NA
+
+### RESULTS: Fits are close to on another.
+### NOTE: [TimeInDelinqState] ran out of iterations and did not converge
+### NOTE: [slc_acct_arr_dir_3] exp overflow due to covariates
+
+# ------ 1.4.1 Why does [TimeInDelinqState] not converge?
+
 cox <- coxph(Surv(Start,End,Default_Ind) ~ TimeInDelinqState, datCredit_train_TFD)
 ### RESULTS:  Beta tends to Inf. After some inspection on the data it relates to all
 ###           Defaulting events starting in a new delinquency state,
-###           i.e. [TimeInDelinqState] = 1. Therefore we have quasi-complete separation.
+###           i.e. [TimeInDelinqState] = 1. Therefore quasi-complete separation
+###           seems to be present.
 
-### INVESTIGATE: Whether quasi-compete seperation is present.
-datCredit_train_TFD[TimeInDelinqState==1 & Default_Ind==0, .N]
-### RESULTS: 167718
+### INVESTIGATE: WHETHER QUASI-COMPLETE SEPERATION IS PRESENT
 datCredit_train_TFD[TimeInDelinqState!=1 & Default_Ind==1, .N]
 ### RESULTS: 0
-### CONCLUSION: Quasi-complete separation is present, i.e.
-###             given a default occurs => [TimeInDelinqState] is 1 (not converse)
+datCredit_train_TFD[TimeInDelinqState==1 & Default_Ind==0, .N]
+### RESULTS: 167718
 
-# [g0_Delinq_Ave]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ g0_Delinq_Ave, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"g0_Delinq_Ave", c(50,0.05))
-### RESULTS: Do not reject proportionality, since the residuals tend to zero and 
-###           a p-value of 7%.
+### CONCLUSION: Quasi-complete separation seems to be present for [g0_Delinq]=3
+###             and should therefore be removed.
 
-# [g0_Delinq_SD_4]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ g0_Delinq_SD_4, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"g0_Delinq_SD_4", c(50,0.5))
-### RESULTS: Discrepancy between graph that has no pattern and test that states a rejection
-###           of proportionality. With a residual sum of -1335.097 we will reject g0_Delinq_SD_4.
+# Test a lagged version of TimeInDelinqState
+datCredit_train_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),
+                    by=LoanID] # REMOVE
+cox <- coxph(Surv(Start,End,Default_Ind) ~ TimeInDelinqState_Lag_1, id=LoanID,
+             datCredit_train_TFD)
+summary(cox)
+# Concordance= 0.942  (se = 0.002 )
+datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),
+                    by=LoanID] # REMOVE
 
-### Conclusion: Keep g0_Delinq_Ave in the model
-modelVar <- "g0_Delinq_Ave"
+### CONCLUSION: Replace old variable with new variable
+
+varlist <- vecChange(varlist,Remove=c("TimeInDelinqState") ,
+                     Add=data.table(vars=c("TimeInDelinqState_Lag_1"),
+                                    vartypes=c("acc")))
+
+
+# ------ 1.4.2 Why does [slc_acct_arr_dir_3] exp overflow?
+
+describe(datCredit_train_TFD[,slc_acct_arr_dir_3])
+# Value            CURING MISSING_DATA      ROLLING         SAME
+# Proportion        0.015        0.126        0.022        0.837
+
+describe(datCredit_train_TFD[Default_Ind==1,slc_acct_arr_dir_3])
+# Value            CURING MISSING_DATA      ROLLING         SAME
+# Proportion        0.007        0.160        0.783        0.049
+
+### RESULTS:  Although the ROLLING level is not prevalent in datCredit_train_TFD,
+###           we can clearly see that it is highly predictive of a default event
+###           occurring.
+
+# Create an indicator function
+datCredit_train_TFD[, slc_acct_arr_dir_3_ROLLING_Ind := 
+                      ifelse(slc_acct_arr_dir_3 == "ROLLING", 1,0)]
+cox <- coxph(Surv(Start,End,Default_Ind) ~ slc_acct_arr_dir_3_ROLLING_Ind,
+             datCredit_train_TFD)
+### RESULTS: exp overflows
+
+# Make the indicator categorical
+cox <- coxph(Surv(Start,End,Default_Ind) ~ factor(slc_acct_arr_dir_3_ROLLING_Ind),
+             datCredit_train_TFD)
+### RESULTS: exp overflows
+datCredit_train_TFD[,slc_acct_arr_dir_3_ROLLING_Ind := NULL]
+
+# Create an indicator variable for a change in account
+datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := 
+                      ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)] # REMOVE
+cox <- coxph(Surv(Start,End,Default_Ind) ~ slc_acct_arr_dir_3_Change_Ind,
+             datCredit_valid_TFD)
+summary(cox)
+# Concordance= 0.843
+datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind :=
+                      ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)] # REMOVE
+
+### CONCLUSION: Replace old variable with new variable
+
+varlist <- vecChange(varlist,Remove=c("slc_acct_arr_dir_3") ,
+                     Add=data.table(vars=c("slc_acct_arr_dir_3_Change_Ind"),
+                                    vartypes=c("bin")))
+
+
+
+# ------ 1.4.3 What is the performance of current thematic variables in univariate models?
+
+vars <- c("PerfSpell_g0_Delinq_Num","g0_Delinq_Ave","g0_Delinq_SD_4",
+          "TimeInDelinqState_Lag_1","slc_acct_arr_dir_3_Change_Ind")
+
+# Goodness of fit
+csTable(datCredit_train_TFD,vars)
+#                         Variable KS_Statistic
+# 2                 g0_Delinq_Ave       0.6477
+# 1       PerfSpell_g0_Delinq_Num       0.6458
+# 5 slc_acct_arr_dir_3_Change_Ind       0.6446
+# 4       TimeInDelinqState_Lag_1       0.6331
+# 3                g0_Delinq_SD_4       0.6151
+
+### RESULTS: [g0_Delinq_SD_4] seems to have a notacible worse fit than the other variabeles.
+
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#                         Variable Concordance           SD LR_Statistic
+# 1:                g0_Delinq_SD_4   0.9803661 0.0014018721        48597
+# 2:       PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         4596
+# 3: slc_acct_arr_dir_3_Change_Ind   0.8433911 0.0019345216        18802
+# 4:       TimeInDelinqState_Lag_1   0.7507071 0.0056323114        12757
+# 5:                 g0_Delinq_Ave   0.5397435 0.0040305498           90
+
+### RESULTS: [g0_Delinq_Ave] has significant less concordance than the other variables
+
+### CONCLUSION: Leave all variables in the model (including [g0_Delinq_Ave], since it has the best fit for the data).
+
+# ------ 1.5 What is the performance of current thematic cox ph model?
+
+# Goodness of fit of coxDelinq model
+
+# Build cox model based on all thematic variables
+coxDelinq_train <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4 + g0_Delinq_Ave +
+                     PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
+                       TimeInDelinqState_Lag_1, id=LoanID,
+                   data=datCredit_train_TFD)
+
+# Kolmogorov-Smirnof of coxDelinq
+cs_ks_test(coxDelinq_train,datCredit_train_TFD,GraphInd = FALSE) # 0.617
+
+# Accuracy
+coxDelinq_valid<- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4 + g0_Delinq_Ave +
+                           PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
+                          TimeInDelinqState_Lag_1, id=LoanID,
+                         data=datCredit_valid_TFD)
+
+# (0,3) (4,12) (13,24) (0,12) (0,36)
+timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
+        fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
+        fld_EndTime="End", numDigits=0, Graph=FALSE)
+# AUC: 0.9760028
+#HW: combine ggplot objects into graph facets
+
+### RESULTS: Graph is extremely accurate with a AUC of 97.6%
 
 # # ------ 1.6 Compare results with that of an algorithm
 # 
@@ -358,14 +578,15 @@ modelVar <- "g0_Delinq_Ave"
 # # - PerfSpell_g0_Delinq_Num        1  98601
 # # - g0_Delinq_SD_5                 1 105649
 
+
+
+
+
 # ------ 2. Engineered measures
-varlist <- data.table(vars=c("slc_acct_arr_dir_3","slc_acct_pre_lim_perc_imputed_med",
+varlist <- data.table(vars=c("slc_acct_pre_lim_perc_imputed_med",
                              "slc_acct_prepaid_perc_dir_12_imputed_med",
-                             "slc_acct_roll_ever_24_imputed_med","slc_past_due_amt_imputed_med",
-                             "slc_pmnt_method","value_ind_slc_acct_pre_lim_perc",
-                             "value_ind_slc_acct_prepaid_perc_dir_12","value_ind_slc_acct_roll_ever_24",
-                             "value_ind_slc_past_due_amt"),
-                      vartypes=c("cat", "dec", "dec", "dec", "fin", "cat","bin", "bin", "bin", "bin"))
+                             "slc_pmnt_method"),
+                      vartypes=c("cat", "dec", "dec", "dec", "fin", "cat"))
 
 # Sanity Check
 colCheck(varlist[,vars],datCredit_train_TFD)

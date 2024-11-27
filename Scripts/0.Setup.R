@@ -34,7 +34,6 @@ require(readr)
 require(bit64) # for very big numeric values
 require(stringr) # common string operations, e.g, str_pad
 require(purrr) # mapping functions from tidyverse in working with matrices, lists
-require(broom) ### AB: ??? why necessary?
 
 # for advanced looping functionality in simulation tasks
 require(doBy)
@@ -71,8 +70,6 @@ require(survminer)
 require(gridExtra)
 require(corrplot)
 require(Metrics)
-require(treem) ### AB: ??? why necessary?
-require(treemapify) ### AB: ??? why necessary?
 
 
 

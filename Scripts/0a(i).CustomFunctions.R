@@ -40,6 +40,14 @@ getMemUsage <- function(limit=1000){
   return(  memSize[order(memSize$KB), c(1,3)])
 }
 
+# - Halting/exiting function to be called within functions
+exit <- function() { invokeRestart("abort") }    
+
+# - Unit Testing: exit()
+# someFunction <- function() {
+# print("this is the last message")
+# exit(); print("you should not see this")  }; someFunction()
+
 
 # -------- Interleaving functions
 

@@ -110,10 +110,18 @@ if (Test){
   
   
   
-  # --- Fit Cox Regression Model, where observations are clustered around a given ID
-  coxExample <- coxph(Surv(Start,End,Event_Ind) ~ sex + age + height + weight + inherit + enum + steroids + treat,
+  # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
+  coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
                       data=dat, id=ID)
   summary(coxExample)
+  
+  # --- Fit a Cox regression model incorrectly by ignoring the clustering and heterogeneous variance, assuming that
+  # all observations are subject-level (one row per subject) and therefore independent from one another (wrong)
+  coxExample_wrong <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
+                      data=dat)
+  summary(coxExample_wrong)
+  ### RESULTS: standard errors (as measured using the robust-variant of the log-rank test) are inflated
+  #   in this wrongly-fit model, as a result of assuming independence amongst observations within a cluster/spell per subject
 }
 
 
@@ -297,10 +305,9 @@ GoF_CoxSnell_graph <- function(cox){
 #         []:
 # Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
 #         [ROC_graph]: The associated ROC-graph as a ggplot-object
-timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1,
-                     fld_StartTime="Start", fld_EndTime="Stop",
-                     numDigits=2, Graph=TRUE, lambda=0.05,  method="NNE-0/1", 
-                     graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/")){
+timedROC <- function(datGiven, cox, month_Start=0, month_End, lambda=0.05, method="NNE-0/1", numDigits=2, 
+                     fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
+                     Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/")){
   
   # --- Preliminaries 
   # -- Testing Conditions
@@ -372,11 +379,11 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
   # - Initialize empty data structures for implementing the NNE-method
   S_t <- numeric(nThresh) # Initialize vector to contain survival estimates
   n <- NROW(datGiven) # Total number of markers (not necessarily subjects)
-  weights <- rep(NA, nrow = n) # kernel vector applied as "weights" onto survival estimates
+  weights <- rep(NA, nrow = n) # kernel vector applied as "weights" onto eventual survival estimates
   
   
   
-  # --- Create various indicator matrices
+  # --- Create various indicator matrices towards estimating the survivor functions
   
   # --  Create an indicator matrix for subjects at risk across the spectrum of event times
   # NOTE: Matrix dimensions are all (n (# observed event times) x m (unique event times within range))
@@ -387,37 +394,46 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
   # observed end points are later/equal than/to unique event times
   matEndAfter <- outer(datGiven$EndTime, DTimes, ">=") 
   # - Multiply matrices such that when a cell is true, then the observed raw end point t'=1,\dots,n is still at risk at 
-  # the unique event time t=1,\dots,m; i.e., If TRUE, then the rawtime-uniqueTime (t',t)-tuple has an at-risk 
+  # the unique event time t=1,\dots,m; i.e., If TRUE, then the rawTime-uniqueTime (t',t)-tuple has an at-risk 
   # lifetime as at t, though during which lifetime it experienced the event at some future time t' > t
-  matAtRisk_Ind <- (matStartBefore & matEndAfter) 
+  matAtRisk_Ind <- (matStartBefore & matEndAfter)
+  rownames(matAtRisk_Ind)<- paste0(1:n, ": ", datGiven$EndTime) # relabel rows intuitively
   
   # -- Create an indicator matrix for subjects that experienced the event across the spectrum of event times
   # - Using outer product of two arrays, create an n x m Boolean-valued matrix that indicates whether 
   # observed end points are currently equal to unique event times
   matEndAt <- outer(datGiven$EndTime, DTimes, "==")
   # - Multiply matrices such that when a cell is true, then the observed raw end point t'=1,\dots,n equals
-  # the particular unique event time t=1,\dots,m; i.e.,If TRUE, then the rawTim-uniqueTime (t',t)-tuple of the 
+  # the particular unique event time t=1,\dots,m; i.e.,If TRUE, then the rawTime-uniqueTime (t',t)-tuple of the 
   # corresponding subject has experienced the event at exactly t.
   matEventsAt <- (matStartBefore & matEndAt & (datGiven$Event_Ind == eventVal))
+  rownames(matEventsAt)<- paste0(1:n, ": ", datGiven$EndTime) # relabel rows intuitively
+  
+  # --- In calculating the ROC-graph, 3 fundamental quantities must be estimate:
+  # 1) the classical survivor function S(t) irrespective of Marker values
+  # 2) 
   
   
-  # -- Conditional execution depending on chosen method and choice of kernel
+  # -- 1. Estimating the classical S(t) given each threshold
+  # Implement the chosen estimator for S(t) and the choice of kernel (if Nearest Neighbour)
+  
   if(method=="NNE-0/1"){ # Nearest Neighbour Estimator, using the 0/1 Kernel function from Akritas1984
     
-    # - Loop through unique markers as thresholds
-    for (j in 1:nThresh) {
+    # -- S(t) is estimated by iterating across unique markers as thresholds, whilst assuming each threshold
+    # holds 'universally' across all subjects.
+    for (j in 1:69) { # nThresh
       
       # - Create a marker vector where its entries denoting the distance between each marker and the current threshold
       Diff <- datGiven$Marker - thresholds[j] # distance
       sDiff <- Diff[order(Diff)]  # Sort in ascending order
       
       # - Establish a symmetrical neighbourhood around each unique marker value
-      # Find index in the ordered difference vector [sDiff] beyond which point all markers are positively 
+      # Find an index in the ordered difference vector [sDiff] beyond which point all markers are positively 
       # differenced wrt the current threshold
       Neigh_Mid <- sum(sDiff <= 0) 
-      # Find index for upper bound of neighbourhood bounded by the index of largest marker
+      # Find an index for upper bound of neighbourhood bounded by the index of largest marker
       Neigh_UpperB_ind <- min(Neigh_Mid + trunc(n * lambda * 0.5), n)
-      # Find index for lower bound of neighbourhood bounded by the index of smallest marker
+      # Find an index for lower bound of neighbourhood bounded by the index of smallest marker
       Neigh_LowerB_ind <- max(Neigh_Mid - trunc(n * lambda * 0.5), 1)
       Neigh_UpperB <- sDiff[Neigh_UpperB_ind] # Marker value for upper bound of neighbourhood
       Neigh_LowerB <- sDiff[Neigh_LowerB_ind] # Marker value for lower bound of neighbourhood
@@ -425,21 +441,26 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
       ## - Apply chosen kernel function: 1 if the Marker is within the neighbourhood, 0 otherwise
       weights <- ifelse((Diff <= Neigh_UpperB) & (Diff >= Neigh_LowerB), 1,0)
       
-      # - Initialize values for Kaplan-meier estimate of survival function
-      # Calculate the number of at-risk raw end points within each neighborhood per unique event time
+      # - Initialize constituent quantities for the eventual Kaplan-Meier estimator of the survivor function S(t)
+      # At each unique event time, calculate the number of at-risk raw end points within each neighborhood
       n_values <- colSums(weights * matAtRisk_Ind) 
-      # Calculate the number of raw end points within each neighborhood that experienced the event exactly at 
-      # each unique event time
+      # At each unique event time, calculate the number of raw end points within each neighborhood that just experienced 
+      # the event
       d_values <- colSums(weights * matEventsAt) 
       
-      # - Estimate the survival function as the product-limit provided the marker is equal to the unique marker
-      survival_factors <- 1 - (d_values / n_values) # Kaplan-Meier estimate factor at each DTimes period
+      # - Estimate the survival function S(t) as the nonparametric product-limit (Kaplan-Meier) over unique event times
+      # NOTE: These quantities are already filtered such that the TRUE-marked raw end points in 
+      # [d_values] equal the current threshold, having used the NNE-method
+      # Calculate the KM-based survival estimate at each unique event time, producing a vector
+      survival_factors <- 1 - (d_values / n_values)
       survival_factors[is.na(survival_factors)] <- 1  # Set NaN cases to 1
-      S_t[j] <- prod(survival_factors) # Take the product of each survival factor to obtain the survival probability at time t given marker is equal to the unique marker
+      # Assemble the previous vector into S(t) by taking the product thereof across all survival factors (of raw event times)
+      # Implicitly, we assume that the "true" marker is equal to the current threshold at t
+      S_t[j] <- prod(survival_factors)
     }
     
   } else if(method=="NNE-Exp"){ # Method using exponential kernel function
-    warning("This estimation method [NNE-Exp] is still untested, caution advised.\n")
+    warning("This estimation method [NNE-Exp] is still untested; caution advised.\n")
     weights <- lapply(thresholds,function(thresh) exp(-(datGiven$Marker - thresh)^2 / lambda^2)) # Compute exponential weights for all thresholds values
     
     # Calculate weighted populations and events
@@ -457,10 +478,22 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
       
       return(S_t) # Return the survival factor for this column
     })
-  } else{
+  } else{ # Fail the execution
+    
+    # - Revert name changes 
+    if (noGroup_Ind==F){
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event)),
+               old=c("StartTime", "EndTime", "ID", "Event_Ind"))
+    } else {
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_Event)),
+               old=c("StartTime", "EndTime", "Event_Ind"))
+    }
+    
     stop("Unknown estimation method. Exiting ..")
-    cat("you should not be able to see this message. This is only a test.")
   }
+  
+  
+  # 2) the conditional survivor function S(t| M > c), given the subset with marker M and cut-off C
 
   # - Allocate survival probability at time t give a specific marker value to their corresponding marker value
   datGiven[,Surv_prob := S_t[match(datGiven$Marker, thresholds)]]
@@ -468,35 +501,39 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
   # - Calculate the overall survival probability at prediction time t, i.e., given an -\infty market value
   # Calculate the average [Surv_prob] for each "id" and averaging these "id" specific averages across the portfolio
   # NOTE: This estimator is the grand mean of the average [Surv_prob]-values per ID
-  if (noGroup_Ind==F) {
+  if (noGroup_Ind==F) { # Use grouped estimator
     S_Overall <- mean(datGiven[,list(S_Marg = sum(Surv_prob,na.rm=T)/.N), by=list(ID)]$S_Marg)  
+    
+    # - Initialize an m x 2 results matrix in which true & false positive rates are stored across columns
+    # per unique 
+    matRates <- matrix(NA, nThresh,2)
+    matRates[nThresh, ] <- c(0, 1) # Initialize matrix to start off with 0 sensitivity (TPR) and 1 Specificity (1-FPR)
+    
+    # Populate matrix with sensitivity and Specificity values
+    for (c in 1:(nThresh - 1)) {
+      # Empirical distribution of markers being less than the threshold
+      cumulMark = mean(datGiven[,list(sum(Marker <= thresholds[c])/.N), by=list(ID)]$V1) # First average the markers being less than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
+      
+      #cumulMark <- sum(datGiven$Marker <= thresholds[c])/n # Number of observations with a Marker value less < threshold divided by observations
+      #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/n # Sum of survival probabilities for Marker values greater than threshold
+      
+      # Survival probability at time t provided that the corresponding marker values are greater than the threshold
+      S_t <- mean(datGiven[,list(sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), by=list(ID)]$V1,na.rm=T) # First average the Surv_prob values with markers greater than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
+      
+      # - Populate results-matrix
+      matRates[c, 1] <- ((1-cumulMark) - threshSurv)/(1 - S_Overall) # Sensitivity
+      matRates[c, 2] <- 1 - threshSurv/S_Overall # Specificity
+
+    } else { # use classical estimator
+      
+    }
+    
   } else {stop("Implementation halted for ungrouped survival data.\n")}
   
   
-  # - Initialize ROC-matrix
-  roc.matrix <- matrix(NA, nThresh,2)
-  roc.matrix[nThresh, ] <- c(0, 1) # Initialize matrix to start off with 0 sensitivity (TPR) and 1 Specificity (1-FPR)
-  
-  # Populate matrix with sensitivity and Specificity values
-  for (c in 1:(nThresh - 1)) {
-    # Empirical distribution of markers being less than the threshold
-    cumulMark = mean(datGiven[,list(sum(Marker <= thresholds[c])/.N), by=list(ID)]$V1) # First average the markers being less than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
-    
-    #cumulMark <- sum(datGiven$Marker <= thresholds[c])/n # Number of observations with a Marker value less < threshold divided by observations
-    #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/n # Sum of survival probabilities for Marker values greater than threshold
-    
-    # Survival probability at time t provided that the corresponding marker values are greater than the threshold
-    threshSurv <- mean(datGiven[,list(sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), by=list(ID)]$V1,na.rm=T) # First average the Surv_prob values with markers greater than the threshold for each "id" before averaging the id-averages, i.e. aggregate to the entire dataset
-    
-    # Populate roc matrix
-    roc.matrix[c, 1] <- ((1-cumulMark) - threshSurv)/(1 - S_Overall) # Sensitivity
-    roc.matrix[c, 2] <- 1 - threshSurv/S_Overall # Specificity
-    #roc.matrix[c,3] <- cumulMark
-    #roc.matrix[c,4] <- S_lam
-  }
   # Convert Sensitivity and Specificity to TPR and FPR respectively
-  sensitivity = roc.matrix[, 1]
-  specificity = roc.matrix[, 2]
+  sensitivity = matRates[, 1]
+  specificity = matRates[, 2]
   x <- 1 - c(0, specificity) # FPR = 1 - Specificity
   y <- c(1, sensitivity) # TPR = Sensitivity
   
@@ -553,21 +590,34 @@ timedROC <- function(datGiven, cox, month_Start=0, month_End, fld_ID=NA, fld_Eve
 # GoF_CoxSnell_graph(coxExample)
 
 if(Test){
-  survivalROC(Stime=dat$Start,status=dat$Default_Ind, entry=dat$Start,
-              marker=round(predict(coxExample, type="lp"),2),span=0.05, predict.time=334)
   
-  timedROC(datGiven=dat, cox=coxExample, month_End=334,
-           fld_id="ID", fld_event="MainEvent_Ind", eventVal=1,
-           fld_StartTime="Start", fld_EndTime="Stop", numDigits=2, 
+  # - Calculate AUC at median survival time for correctly-fitted Cox model | survivalROC
+  survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start, 
+              method = "NNE", span=0.05, predict.time=334,
+              marker=round(predict(coxExample, type="lp"),2))
+  ### RESULTS: Survival estimate at median survival time = 62% .. (should be 50%)
+  #            This already shows the bias of neglecting the ID-variable in clustering observations 
+  #            around each relevant subject. AUC: 67.06%
+  
+  # - Calculate AUC at median survival time for wrongly-fitted Cox model | survivalROC
+  survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start, 
+              method = "NNE", span=0.05, predict.time=334,
+              marker=round(predict(coxExample_wrong, type="lp"),2))
+  ### RESULTS: Survival estimate at median survival time remains 62% .. (should be 50%); AUC: 67.06%
+  #           Therefore, prediction accuracy seems unaffected by model fitting mechanism
+  
+  # - Calculate AUC at median survival time for correctly-fitted Cox model | survivalROC
+  
+  
+  timedROC(datGiven=dat, cox=coxExample, month_End=334, method="NNE-0/11", numDigits=2, 
+           fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
            graphName="coxExample_cgd", genFigPath=genFigPath)
   
   
   ### AB: Need to rewire the fields here, though I need an actual dataset to do that.
-  timedROC(datGiven=datCredit_valid_TFD, cox=coxDelinq, month_Start=0, month_End=12, 
-        fld_id="PerfSpell_Key", fld_event="Default_Ind", eventVal=1, 
-        fld_StartTime="Start", fld_EndTime="Stop",numDigits=2, 
-        graphName="DefaultSurvModel-Cox", genFigPath=paste0(genFigPath, "TFD/tdROC/")
-      )
+  timedROC(datGiven=datCredit_valid_TFD, cox=coxDelinq, month_End=12, lambda=0.05, method="NNE-0/1", numDigits=2, 
+           fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
+           graphName="DefaultSurvModel-Cox", genFigPath=paste0(genFigPath, "TFD/tdROC/"))
 
 }
 

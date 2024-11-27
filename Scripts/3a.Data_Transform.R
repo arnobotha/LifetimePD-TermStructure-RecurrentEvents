@@ -26,9 +26,8 @@
 # -- Confirm prepared database is loaded into memory
 if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4"), tempPath)
 
-Defcol <- c("DefSpell_Key","DefaultStatus1_lead_12","DefaultStatus1_lead_12_max","DefaultStatus2",
-            "DefSpell_Num","DefSpell_Counter","TimeInDefSpell","DefSpell_LeftTrunc","DefSpell_Censored", "DefSpell_Age",
-            "DefSpellResol_Type_Hist","HasLeftTruncDefSpell","DefSpell_LastStart","DefSpellResol_TimeEnd", "ReceiptPV") # Default variables to remove
+Defcol <- c("DefaultStatus1_lead_12_max","DefaultStatus2",
+            "DefSpell_Num","TimeInDefSpell") # Default variables to remove
 ncol <- ncol(datCredit_real)
 datCredit_real[, (Defcol) := NULL]
 

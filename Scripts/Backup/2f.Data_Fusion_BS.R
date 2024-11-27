@@ -196,7 +196,7 @@ cat( ( datCredit_real[is.na(PerfSpell_g0_Delinq_SD),.N]==datCredit_real[is.na(Pe
 
 # 4. ------ Saving the final dataset and doing some housekeeping
 
-# - remove intermediary fields, as a memory enhancement
+# - Remove intermediary fields, as a memory enhancement
 datCredit_real[, g0_Delinq_Shift := NULL]
 
 # --- Save snapshot to disk (zip) for quick disk-based retrieval later

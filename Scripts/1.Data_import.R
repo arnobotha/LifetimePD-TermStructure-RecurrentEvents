@@ -47,7 +47,13 @@ macro_data_q <- as.data.table(read_sas(paste0(genRawPath,"macro_data_quarterly.s
 # --- 3. Mortgage credit dataset
 ptm <- proc.time() # for runtime calculations (ignore)
 # Import, then recast data into a more pliable data.table object for greater memory efficiency
-dat.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_final_sub.sas7bdat")), stringsAsFactors=T) 
+
+# - User-dependent dataset extraction (subsampled vs full)
+if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-machine
+  dat.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_final.sas7bdat")), stringsAsFactors=T) 
+} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard Scheepers
+  dat.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_final_sub.sas7bdat")), stringsAsFactors=T) 
+}
 proc.time() - ptm # IGNORE: elapsed runtime
 
 # - Save to disk(zip) for quick disk-based retrieval later
@@ -57,8 +63,13 @@ pack.ffdf(paste0(genPath, "creditdata_final1"), dat.raw); gc()
 # --- 4. Input fields associated with mortgage credit dataset
 
 ptm <- proc.time()# for runtime calculations (ignore)
-# Import, then recast data into a more pliable data.table object for greater memory efficiency
-datInput.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_input_sub.sas7bdat")), stringsAsFactors=T) 
+# - User-dependent dataset extraction (subsampled vs full)
+# NOTE: Import the dataset, but then recast it into a more pliable data.table object for greater memory efficiency
+if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-machine
+  datInput.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_input.sas7bdat")), stringsAsFactors=T) 
+} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard Scheepers
+  datInput.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_input_sub.sas7bdat")), stringsAsFactors=T) 
+}
 proc.time() - ptm # IGNORE: elapsed runtime
 
 # - Save to disk (zip) for quick disk-based retrieval later

@@ -54,7 +54,8 @@ describe(marker); hist(marker, breaks="FD")
   ncuts <- length(cut.values)
   # AB: Obtain the rank order of raw end points, should they be sorted ascendantly
   ooo <- order(times)
-  # AB: Now re-sort the raw end poitns accordingly to these indices, and the status vector as well, and the Markers as well
+  # AB: Now re-sort the raw end points according to these particular  rank-order indices, whereafter
+  # the same is performed to the vectors of event indicators and marker-values
   times <- times[ooo]
   status <- status[ooo]
   x <- x[ooo]

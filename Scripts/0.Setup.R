@@ -52,7 +52,7 @@ require(car)
 require(survivalROC) # for time-dependent ROC-analysis from Heagerty et al.
 #require(survAUC) # for time-dependent ROC-analysis (alternative from Potapov et al.)
 #require(tdROC) # for time-dependent ROC-analysis ([outdated?] alternative from Li et al.)
-#require(timeROC) # for time-dependent ROC-analysis ([outdated?] alternative from Blanche)
+require(timeROC) # for time-dependent ROC-analysis from Blanche2013([outdated?] alternative from Blanche)
 require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method from Heagerty, P.J., Zheng Y. (2005))
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
 require(discSurv)
@@ -116,18 +116,21 @@ if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-mac
 
 # ------ Custom function definitions
 # - Load all custom functions defined in a separate R-script
-source(paste0(path_cust,"0a(i).CustomFunctions.R"))
+source(paste0(path_cust,"0a.CustomFunctions.R"))
 
 # - True End procedure functions defined in a separate R-script
-source(paste0(path_cust,"0a(ii).TruEnd.R"))
+source(paste0(path_cust,"TruEnd.R"))
 
 # - Compile Delinquency Calculation Functions (CD, MD/DoD)
-source(paste0(path_cust,'0a(iii).DelinqM.R'))
+source(paste0(path_cust,'DelinqM.R'))
 
-# - Survival functions
-source(paste0(path_cust,'0a(iv).SurvFunc.R'))
+# - Custom survival-related functions - generic; 
+### AB: Needs to be disected a bit and collapsed into other scripts, but only after closeout!
+# I'm not longer sure of its utility if its primary function (Schoenfeld) is implemented in the next/your script
+source(paste0(path_cust,'0b(i).FunkySurv.R'))
 
-# - Survival functions - Recurrent events
-source(paste0(path_cust,'0a(v).SurvFunc_RecurrentEvents.R'))
+# - Custom survival-related functions - Residuals (Cox-Snell, Schoenfeld)
+source(paste0(path_cust,'0b(ii).FunkySurv_Residuals.R'))
 
-
+# - Custom survival-related functions - time-dependent ROC-analyses and unit tests
+source(paste0(path_cust,'0b(iii).FunkySurv_timedROC.R'))

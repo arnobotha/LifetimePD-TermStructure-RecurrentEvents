@@ -76,17 +76,18 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
   # Find correlations exceeding the threshold
   corrCoordinates <- which(abs(corrMat) > corrThresh & abs(corrMat) < 1 & upper.tri(corrMat), arr.ind = TRUE)
   
-  # Create a data table with correlation pairs
-  corrProbs <- data.table(x = rownames(corrMat)[corrCoordinates[, 1]], y = colnames(corrMat)[corrCoordinates[, 2]])
-  
-  # Print the identified correlations
-  for (i in 1:nrow(corrProbs)) {
-    cat("Absolute correlations of ",percent(corrMat[corrProbs[i, x], corrProbs[i, y]]),
-      " found for ", corrProbs[i, x], " and ", corrProbs[i, y],"\n")
+  if(nrow(corrCoordinates) != 0){
+    # Create a data table with correlation pairs
+    corrProbs <- data.table(x = rownames(corrMat)[corrCoordinates[, 1]], y = colnames(corrMat)[corrCoordinates[, 2]])
+    
+    # Print the identified correlations
+    for (i in 1:nrow(corrProbs)) {
+      cat("Absolute correlations of ",percent(corrMat[corrProbs[i, x], corrProbs[i, y]]),
+          " found for ", corrProbs[i, x], " and ", corrProbs[i, y],"\n")
+    }
+  }else{
+    cat("No significant correlations were detected")
   }
-  
-  # Return the correlation table
-  return(corrProbs)
 }
 
 # Table concordance statistic of single variable cox ph models
@@ -95,22 +96,20 @@ concTable <- function(data, variables) {
   # Use lapply to efficiently compute concordances for all univariate models
   results <- lapply(variables, function(var) {
     formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
-    
-    # Fit Cox model
-    model <- coxph(formula,id=LoanID, data = data)
-    
-    # Extract concordance
-    conc <- as.numeric(concordance(model)[1])
-    
-    # Extract concordance variability
-    sd <- sqrt(concordance(model)$var)
-    
-    # Extract LRT from the model's log-likelihood
-    # `loglik` contains log-likelihoods for null (intercept-only) and full models
-    lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)
-    
-    # Return results as a data.table
-    return(data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
+    tryCatch({
+      model <- coxph(formula,id=LoanID, data = data)# Fit Cox model
+      conc <- as.numeric(concordance(model)[1])# Extract concordance
+      sd <- sqrt(concordance(model)$var)# Extract concordance variability
+      lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
+      # Return results as a data.table
+      data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat)
+    }, warning = function(w) {
+      cat("Warning: ", w$message, " for variable: ", var, "\n")
+      stop()
+    }, error = function(e) {
+      cat("Error: ", e$message, " for variable: ", var, "\n")
+      stop()
+    })
   })
   
   # Combine all results into a single data.table
@@ -125,7 +124,7 @@ concTable <- function(data, variables) {
 # Table KS statistics of single variable cox ph models
 # Used to compare the goodness of fit of variables
 csTable <- function(data,variables,seedVal=1,numIt=5){
-
+  
   # Simulate null distribution if seedVal is not NA
   # Initialize results
   results <- data.frame(Variable = variables, KS_Statistic = NA_real_)
@@ -139,8 +138,8 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
     results$KS_Statistic <- sapply(variables, function(var) {
       formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
       tryCatch({
-        model <- coxph(formula, data = data)  # Fit a univariate Cox model
-        cs_ks_test(model, data, GraphInd = FALSE)$Stat  # Calculate KS statistic
+        model <- coxph(formula, data = data, id=LoanID)  # Fit a univariate Cox model
+        GoF_CoxSnell_KS(model, data, GraphInd=F)$Stat  # Calculate KS statistic
       }, warning = function(w) {
         cat("Warning: ", w$message, " for variable: ", var, "\n")
         NA
@@ -171,7 +170,7 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
         formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
         tryCatch({
           model <- coxph(formula, data = data)
-          cs_ks_test(model, data, GraphInd = FALSE)$Stat
+          GoF_CoxSnell_KS(model, data, GraphInd = FALSE)$Stat
         }, warning = function(w) {
           cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
           NA
@@ -181,7 +180,7 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
         })
       })
     }
-      
+    
     # Compute additional statistics for the results matrix
     colRanges <- matResults[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))]
     matResults <- rbind(matResults, Range = colRanges, fill=T)
@@ -194,12 +193,12 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
     return(matResults)
   }
 }
-
+#============================================================================================
 # ------ 1. Delinquency measures
-varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num",
+varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num", "Arrears" ,
                              "TimeInDelinqState","g0_Delinq_Any_Aggr_Prop","g0_Delinq_Ave",
                              "slc_acct_arr_dir_3", "slc_acct_roll_ever_24_imputed_med"),
-                      vartypes=c("acc", "cat", "acc", "acc", "dte", "dte", "cat", "acc"))
+                      vartypes=c("acc", "cat", "acc", "acc", "acc", "dte", "dte", "cat", "acc"))
 
 #=========================================================================================
 
@@ -295,6 +294,7 @@ corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.
 ###           2) [PerfSpell_g0_Delinq_Num] and [slc_acct_roll_ever_24_imputed_med]
 ### NOTE: Group 1) are also highly correlated with [g0_Delinq_Any_Aggr_Prop_Lag_3],
 ###       which is to be expected.
+###           3) [g0_Delinq] and [Arrears]
 
 ### CONCLUSION: A single variable from each group must be retained while the rest are removed.
 
@@ -396,8 +396,14 @@ cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Lag_1, id=LoanID, datCredit
 ### RESULTS: exp(coef) tends to Inf
 datCredit_train_TFD[,g0_Delinq_Lag_1 := NULL]
 
+# Arrears
+cox <- coxph(Surv(Start,End,Default_Ind) ~ Arrears, id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS: Obtain a stable model
+
 ### CONCLUSION: Unable to add [Delinq_0] to the model, since the various forms'
-###             coef is unstable.
+###             coef is unstable, however, [Arrears] compiles a seemingly stable
+###             model, therefore it can serve as a proxy for g0_Delinq.
 
 
 
@@ -502,31 +508,35 @@ varlist <- vecChange(varlist,Remove=c("slc_acct_arr_dir_3") ,
 # ------ 1.4.3 What is the performance of current thematic variables in univariate models?
 
 vars <- c("PerfSpell_g0_Delinq_Num","g0_Delinq_Ave","g0_Delinq_SD_4",
-          "TimeInDelinqState_Lag_1","slc_acct_arr_dir_3_Change_Ind")
+          "TimeInDelinqState_Lag_1","slc_acct_arr_dir_3_Change_Ind", "Arrears")
 
 # Goodness of fit
 csTable(datCredit_train_TFD,vars)
 #                         Variable KS_Statistic
 # 2                 g0_Delinq_Ave       0.6477
+# 6                       Arrears       0.6476
 # 1       PerfSpell_g0_Delinq_Num       0.6458
 # 5 slc_acct_arr_dir_3_Change_Ind       0.6446
 # 4       TimeInDelinqState_Lag_1       0.6331
 # 3                g0_Delinq_SD_4       0.6151
 
-### RESULTS: [g0_Delinq_SD_4] seems to have a notacible worse fit than the other variabeles.
+### RESULTS: [g0_Delinq_SD_4] seems to have a notable worse fit than the other variables.
 
 # Accuracy
 concTable(datCredit_valid_TFD,vars)
 #                         Variable Concordance           SD LR_Statistic
 # 1:                g0_Delinq_SD_4   0.9803661 0.0014018721        48597
-# 2:       PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         4596
-# 3: slc_acct_arr_dir_3_Change_Ind   0.8433911 0.0019345216        18802
-# 4:       TimeInDelinqState_Lag_1   0.7507071 0.0056323114        12757
-# 5:                 g0_Delinq_Ave   0.5397435 0.0040305498           90
+# 2:                       Arrears   0.9573776 0.0016578273         2438
+# 3:       PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         4596
+# 4: slc_acct_arr_dir_3_Change_Ind   0.8433911 0.0019345216        18802
+# 5:       TimeInDelinqState_Lag_1   0.7507071 0.0056323114        12757
+# 6:                 g0_Delinq_Ave   0.5397435 0.0040305498           90
 
 ### RESULTS: [g0_Delinq_Ave] has significant less concordance than the other variables
 
 ### CONCLUSION: Leave all variables in the model (including [g0_Delinq_Ave], since it has the best fit for the data).
+
+
 
 # ------ 1.5 What is the performance of current thematic cox ph model?
 
@@ -534,23 +544,23 @@ concTable(datCredit_valid_TFD,vars)
 
 # Build cox model based on all thematic variables
 coxDelinq_train <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4 + g0_Delinq_Ave +
-                     PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
-                       TimeInDelinqState_Lag_1, id=LoanID,
-                   data=datCredit_train_TFD)
+                           PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
+                           TimeInDelinqState_Lag_1 + Arrears, id=LoanID,
+                         data=datCredit_train_TFD)
 
 # Kolmogorov-Smirnof of coxDelinq
-cs_ks_test(coxDelinq_train,datCredit_train_TFD,GraphInd = FALSE) # 0.617
+cs_ks_test(coxDelinq_train,datCredit_train_TFD,GraphInd = FALSE) # 0.6171
 
 # Accuracy
 coxDelinq_valid<- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4 + g0_Delinq_Ave +
-                           PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
+                          PerfSpell_g0_Delinq_Num + slc_acct_arr_dir_3_Change_Ind +
                           TimeInDelinqState_Lag_1, id=LoanID,
-                         data=datCredit_valid_TFD)
+                        data=datCredit_valid_TFD)
 
 # (0,3) (4,12) (13,24) (0,12) (0,36)
-timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
-        fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
-        fld_EndTime="End", numDigits=0, Graph=FALSE)
+#timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
+         # fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
+         # fld_EndTime="End", numDigits=0, Graph=FALSE)
 # AUC: 0.9760028
 #HW: combine ggplot objects into graph facets
 
@@ -577,149 +587,186 @@ timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
 # # - g0_Delinq_SD_4                 1  98235
 # # - PerfSpell_g0_Delinq_Num        1  98601
 # # - g0_Delinq_SD_5                 1 105649
+#============================================================================================
 
+ModelVar <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "g0_Delinq_SD_4",
+              "TimeInDelinqState_Lag_1", "slc_acct_arr_dir_3_Change_Ind")
 
-
-
-
+#============================================================================================
 # ------ 2. Engineered measures
 varlist <- data.table(vars=c("slc_acct_pre_lim_perc_imputed_med",
                              "slc_acct_prepaid_perc_dir_12_imputed_med",
                              "slc_pmnt_method"),
-                      vartypes=c("cat", "dec", "dec", "dec", "fin", "cat"))
+                      vartypes=c("prc", "dec", "cat"))
 
-# Sanity Check
-colCheck(varlist[,vars],datCredit_train_TFD)
+#=========================================================================================
 
-# ------ 2.1 Check correlations of variables to ascertain variables that are similar.
+# ------ 2.1 Which variables should be removed due to high correlation?
 
 # - Correlation analysis
 corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
 ### RESULTS:  1) [slc_acct_pre_lim_perc_imputed_med] and [slc_acct_prepaid_perc_dir_12_imputed_med] with a correlation of 0.82
-#             2) All [value_...] indicators of missing values.
-
-### INVESTIGATE: Compare [slc_acct_pre_lim_perc_imputed_med] vs [slc_acct_prepaid_perc_dir_12_imputed_med]
 
 # Initialize variables to be tested
 vars <- c("slc_acct_pre_lim_perc_imputed_med", "slc_acct_prepaid_perc_dir_12_imputed_med")
 
 # Compare goodness of fit of different variables
-getKS(datCredit_train_TFD,vars)
+csTable(datCredit_train_TFD,vars)
 #                                 Variable     KS
 # 1        slc_acct_pre_lim_perc_imputed_med 0.6485
 # 2 slc_acct_prepaid_perc_dir_12_imputed_med 0.6444
 
-### RESULTS:  The values are quite close to one another with a varying range, therefore
-###           no decisions can be made from the results.
+### RESULTS:  [slc_acct_prepaid_perc_dir_12_imputed_med] ran out of iterations and did not converge
 
-# Compare concordance of different variables
-getConcs(datCredit_valid_TFD,vars)
-#                                     Variable Concordance LR_Statistic
-# 1:        slc_acct_pre_lim_perc_imputed_med   0.6360895         2865
-# 2: slc_acct_prepaid_perc_dir_12_imputed_med   0.5857421          120
+### INVESTIGATE: Why did slc_acct_prepaid_perc_dir_12_imputed_med] ran out of iterations and not converge?
 
-### RESULTS: [slc_acct_pre_lim_perc_imputed_med] has a higher concordance than that of [slc_acct_prepaid_perc_dir_12_imputed_med]
-### CONCLUSION: Remove [slc_acct_prepaid_perc_dir_12_imputed_med]
+hist(datCredit_train_TFD[,slc_acct_prepaid_perc_dir_12_imputed_med])
+### RESULTS: A significant portion of the values are 0 with possible extreme values.
+
+# Proportion of values being 0
+datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0,.N]/datCredit_train_TFD[,.N]
+# 0.734379
+
+hist(datCredit_train_TFD[Default_Ind==1, slc_acct_prepaid_perc_dir_12_imputed_med])
+### Similar distribution with most of the values being 0, but all values are below 3.5
+
+# Proportion of values being 0 | Default_Ind == 1
+datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0 & Default_Ind == 1,.N]/datCredit_train_TFD[Default_Ind == 1,.N]
+# 0.9980394
+
+# Proportion of values defaulted | slc_acct_prepaid_perc_dir_12_imputed_med == 0
+datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0 & Default_Ind == 1,.N]/datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0,.N]
+# 0.002991395
+
+# RESULTS: (Default_Ind == 1) => (slc_acct_prepaid_perc_dir_12_imputed_med == 0)
+
+### CONCLUSION: Quasi-complete separation seems to be present for [slc_acct_prepaid_perc_dir_12_imputed_med],
+###             therefore remove it from the varlist
 
 varlist <- vecChange(varlist,Remove="slc_acct_prepaid_perc_dir_12_imputed_med")
 
-### RESULTS:  [value...] functions are all identical. Therefore a value must be chosen to
-###           represent the rest, e.g. [value_ind_slc_past_due_amt]
 
-varlist <- vecChange(varlist,Remove=c("value_ind_slc_acct_pre_lim_perc",
-                                      "value_ind_slc_acct_prepaid_perc_dir_12",
-                                      "value_ind_slc_acct_roll_ever_24",
-                                      "value_ind_slc_past_due_amt"))
 
-# ------ 2.2 Test for proportionality in hazard models
+# ------ 2.2 What is the predictive power of the variables left in varlist?
 
-# [slc_acct_arr_dir_3]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_arr_dir_3, datCredit_train_TFD)
-### RESULTS: Coefficients does not converge
+concTable(datCredit_valid_TFD,vars)
+### RESULTS: [slc_pmnt_method] Loglik converged before variable  1,2,3,4,5,6 ; beta may be infinite.
 
-### INVESTIGATE [slc_acct_arr_dir_3]
-describe(datCredit_train_TFD[Default_Ind==1,]$slc_acct_arr_dir_3)
-# Value            CURING MISSING_DATA      ROLLING         SAME
-# Frequency            68         1470         7189          454
-# Proportion        0.007        0.160        0.783        0.049
+### INVESTIGATE: Why does [slc_pmnt_method] have an infinite beta.
 
-### RESULTS: Merge small categories.
+describe(datCredit_valid_TFD$slc_pmnt_method)
+# Value       "Debit Order" "Debit Order FNB account"  "Debit Order other bank"  "MISSING_DATA" "Salary" "Statement" "Suspense"
+# Proportion  0.000                   0.492                   0.191                   0.129       0.060    0.124        0.002
 
-datCredit_train_TFD[, slc_acct_arr_dir_3_grp :=
-                      ifelse(slc_acct_arr_dir_3 == "CURING" |
-                               slc_acct_arr_dir_3 == "SAME", "OTHER",
-                            slc_acct_arr_dir_3)]
+### "Debit Order" has extremely few values which might be a problem
 
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_arr_dir_3, datCredit_train_TFD)
-### RESULTS: Coefficients does not converge
+describe(datCredit_valid_TFD[Default_Ind==1,slc_pmnt_method])
+# Value       "Debit Order FNB account"  "Debit Order other bank"  "MISSING_DATA" "Salary" "Statement" "Suspense"
+# Proportion          0.160                       0.094                  0.144      0.044      0.438    0.120
 
-datCredit_train_TFD[, slc_acct_arr_dir_3_grp :=
-                      ifelse(slc_acct_arr_dir_3 == "ROLLING" ,1,0)]
+### RESULTS: Statement makes up a significant proportion of defaulted cases compared to the population and "Debit Order" does not exists.
 
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_arr_dir_3_grp, datCredit_train_TFD)
-### RESULTS: Coefficients does not converge
+# ------ 2.2.1 Can [slc_pmnt_method] be replaced with [pmnt_method_grp]?
 
-### CONCLUSION: Remove slc_acct_arr_dir_3
+# Distribution of [slc_pmnt_method]
+describe(datCredit_train_TFD[,slc_pmnt_method])
+# Value       "Debit Order" "Debit Order FNB account"  "Debit Order other bank"  "MISSING_DATA" "Salary" "Statement" "Suspense"
+# Proportion  0.000                   0.510                   0.191                   0.135      0.063    0.100        0.001
 
-varlist <- vecChange(varlist,Remove="slc_acct_arr_dir_3")
-datCredit_train_TFD[, slc_acct_arr_dir_3_grp := NULL]
+# Distribution of [pmnt_method_grp]
+describe(datCredit_train_TFD[,pmnt_method_grp])
+# Value       "Debit Order"    "MISSING_DATA" "Salary/Suspense" "Statement"
+# Proportion      0.701           0.135           0.064           0.100
 
-# [slc_acct_pre_lim_perc_imputed_med]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_pre_lim_perc_imputed_med, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"slc_acct_pre_lim_perc_imputed_med", c(100,0.2))
-### RESULTS: Residuals tend to zero
-### CONCLUSION: [slc_acct_pre_lim_perc_imputed_med] should be kept in the model
+### CONCLUSION: [pmnt_method_grp] is a refined grouping of [slc_pmnt_method]
 
-# [slc_acct_roll_ever_24_imputed_med]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_roll_ever_24_imputed_med, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"slc_acct_roll_ever_24_imputed_med", c(100,0.2))
-### RESULTS: Residuals does not tend to zero, however the graphs almost act like categorical values.
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_acct_roll_ever_24_imputed_med_f, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"slc_acct_roll_ever_24_imputed_med_f")
-### RESULTS: Improved Concordance and loess curves around 0
-### Conclusion: Keep slc_acct_roll_ever_24_imputed_med_f
+varlist <- vecChange(varlist,Remove="slc_pmnt_method",Add=data.table(vars=c("pmnt_method_grp"), vartypes=c("cat")))
 
-# [slc_past_due_amt_imputed_med]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_past_due_amt_imputed_med, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"slc_past_due_amt_imputed_med", c(100,100000))
-### RESULTS: Residuals does not tend to zero.
-### Conclusion: Reject proportionality for [slc_past_due_amt_imputed_med]
+# ------ 2.2.3 What is the predictive power of the variables left in varlist?
 
-varlist <- vecChange(varlist,Remove="slc_past_due_amt_imputed_med")
+# Initialize variables to be tested
+vars <- c("pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med")
 
-# [slc_pmnt_method]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ slc_pmnt_method, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"slc_pmnt_method", c(100,0.2))
-### RESULTS: Residuals does not tend to zero.
-### Conclusion: Reject proportionality for [slc_pmnt_method]
+csTable(datCredit_train_TFD,vars)
+#                               Variable KS_Statistic
+# 2 slc_acct_pre_lim_perc_imputed_med       0.6477
+# 1                   pmnt_method_grp       0.6453
 
-varlist <- vecChange(varlist,Remove="slc_pmnt_method")
+### RESULTS:  [slc_acct_pre_lim_perc_imputed_med] fits the better and there is an improvement for [pmnt_method_grp]
 
-modelVar <- c(modelVar,varlist$vars)
+concTable(datCredit_valid_TFD,vars)
+#                             Variable Concordance           SD LR_Statistic
+# 1:                   pmnt_method_grp   0.7363669 0.0036080644         5777
+# 2: slc_acct_pre_lim_perc_imputed_med   0.6360895 0.0008227257         2865
 
+### RESULTS: [pmnt_method_grp]  has a much better concordance than [slc_acct_pre_lim_perc_imputed_med]
+
+### Conclusion: All values should be kept in the model ([slc_pmnt_method] should be replaced with [pmnt_method_grp])
+
+varlist <- vecChange(varlist,Remove="slc_pmnt_method",Add=data.table(vars=c("pmnt_method_grp"), vartypes=c("cat")))
+
+# ------ 2.3 How predictive is a single model based on the thematic variables?
+
+vars <- c("pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med")
+
+# Build Cox model based on each variable
+coxEngineered_train <- coxph(Surv(Start, End, Default_Ind) ~ pmnt_method_grp +
+                               slc_acct_pre_lim_perc_imputed_med, id=LoanID,
+                             data=datCredit_train_TFD)
+summary(coxEngineered_train)
+
+### RESULTS: [slc_acct_pre_lim_perc_imputed_med]  has an insignificant coef of -154
+
+# Goodness of fit
+GoF_CoxSnell_KS(coxEngineered_train,datCredit_train_TFD) # 0.6407
+
+coxEngineered_valid <- coxph(Surv(Start, End, Default_Ind) ~ pmnt_method_grp +
+                               slc_acct_pre_lim_perc_imputed_med, id=LoanID,
+                             data=datCredit_valid_TFD)
+
+summary(coxEngineered_valid)
+# Concordance= 0.784  (se = 0.003 ) which improved from univariate [pmnt_method_grp] model.
+
+# Time dependent AUC
+timedROC(datCredit_valid_TFD, coxEngineered_valid, month_Start=0, month_End=36,
+         fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
+         fld_EndTime="End", numDigits=0, Graph=FALSE) # 0.7040435
+
+# House keeping
+rm(coxEngineered_valid, coxEngineered_valid); gc()
+
+#============================================================================================
+# Save variables to the model
+ModelVar <- vecChange(ModelVar,Add=data.table(vars=c("slc_acct_pre_lim_perc_imputed_med",
+                                                     "pmnt_method_grp"),
+                                              vartypes=c("prc","cat")))
+
+#============================================================================================
 # ------ 3. Interest Rate
 varlist <- data.table(vars=c("InterestRate_Nom", "InterestRate_Margin"),
                       vartypes=c("prc","prc"))
 
-# ------ 3.1 Check correlations of variables to ascertain variables that are similar.
+#=========================================================================================
+
+# ------ 3.1 How correlated are the two variables?
 
 # - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
+corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
 ### RESULTS: Correlation of 0.41, therefore no significant correlations.
 
 # Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, varlist$vars)
-#           Variable     KS
-# 1    InterestRate_Nom 0.6497
-# 2 InterestRate_Margin 0.6490
+csTable(datCredit_train_TFD, varlist$vars, seedVal=NA)
+#             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:    InterestRate_Nom      0.6448      0.6499      0.6499      0.6503      0.6483 0.64864
+# 2: InterestRate_Margin      0.6461      0.6481      0.6464      0.6474      0.6520 0.64800
+# 3:               Range      0.0013      0.0018      0.0035      0.0029      0.0037 0.00264
 
-### RESULTS:  After a few iterations, it would seem that [InterestRate_Nom] is a
-###           a better fit than [InterestRate_Margin], although with slim differences.
+### RESULTS:  [InterestRate_Nom] is a better fit than [InterestRate_Margin]
 
 # Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, varlist$vars)
+concTable(datCredit_valid_TFD, varlist$vars)
 #                 Variable Concordance LR_Statistic
 # 1:    InterestRate_Nom   0.5497724          165
 # 2: InterestRate_Margin   0.5452677          174
@@ -729,40 +776,37 @@ getConcs(datCredit_valid_TFD, varlist$vars)
 ### CONCLUSION: Variables are quite similar in predictave power, however are dissimilar
 ###              in correlation, therefore both can be kept in the model.
 
-# ------ 3.2 Explore how [InterestRate_Margin] can be improved.
 
-### INVESTIGATE: [InterestRate_Margin_Aggr_Med]
+
+# ------ 3.2 Will the aggregate portfolio mean for [InterestRate_Margin] perform better?
 
 vars <- c("InterestRate_Margin", "InterestRate_Margin_Aggr_Med")
 
-# - Correlation analysis
-datCredit_train_TFD %>% subset(select = vars) %>% cor(method = 'spearman')
-
-### RESULTS:  [InterestRate_Margin] and [InterestRate_Margin_Aggr_Med] does not have
-###           a significant correlation.
-### CONCLUSION: Both variables can be kept in the model.
-
 # Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#                     Variable     KS
-# 1          InterestRate_Margin 0.6504
-# 2 InterestRate_Margin_Aggr_Med 0.6482
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+# Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1: InterestRate_Margin_Aggr_Med      0.6468      0.6457      0.6485      0.6510      0.6492 0.64824
+# 2:          InterestRate_Margin      0.6484      0.6455      0.6476      0.6469      0.6453 0.64674
+# 3:                        Range      0.0016      0.0002      0.0009      0.0041      0.0039 0.00214
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+### RESULTS:  [InterestRate_Margin_Aggr_Med] both values have relatively good fits.
 
 # Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                         Variable Concordance LR_Statistic
-# 1: InterestRate_Margin_Aggr_Med   0.5506784           96
-# 2:          InterestRate_Margin   0.5452677          174
+concTable(datCredit_valid_TFD, vars)
+#                        Variable Concordance          SD LR_Statistic
+# 1: InterestRate_Margin_Aggr_Med   0.5506784 0.004195174           96
+# 2:          InterestRate_Margin   0.5452677 0.004064693          174
 
-### RESULTS:  [InterestRate_Margin_Aggr_Med] has a slightly higher concordance than [InterestRate_Margin].
+### RESULTS:  [InterestRate_Margin_Aggr_Med] has a slightly higher concordance than [InterestRate_Margin],
+###           although both are quite low.
 
-### CONCLUSIONS: Add [InterestRate_Margin_Aggr_Med] to the model.
+### CONCLUSIONS: Replace InterestRate_Margin with [InterestRate_Margin_Aggr_Med]
 
-varlist <- vecChange(varlist,Add=data.table(vars=c("InterestRate_Margin_Aggr_Med"), vartypes=c("prc")))
+varlist <- vecChange(varlist,Remove="InterestRate_Margin",Add=data.table(vars=c("InterestRate_Margin_Aggr_Med"), vartypes=c("prc")))
 
-### INVESTIGATE: Lagging [InterestRate_Margin_Aggr_Med]
+
+
+# ------ 3.2 Should we add lagging variables to the model?
 
 vars <- c("InterestRate_Margin_Aggr_Med","InterestRate_Margin_Aggr_Med_1",
           "InterestRate_Margin_Aggr_Med_12","InterestRate_Margin_Aggr_Med_2",
@@ -770,710 +814,547 @@ vars <- c("InterestRate_Margin_Aggr_Med","InterestRate_Margin_Aggr_Med_1",
           "InterestRate_Margin_Aggr_Med_5","InterestRate_Margin_Aggr_Med_6",
           "InterestRate_Margin_Aggr_Med_9")
 
-# - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
-
-### RESULTS: All are significantly correlated
-
 # Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#                     Variable     KS
-# 1          InterestRate_Margin 0.6504
-# 2 InterestRate_Margin_Aggr_Med 0.6482
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+# Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1: InterestRate_Margin_Aggr_Med_12      0.6449      0.6520      0.6510      0.6472      0.6511 0.64924
+# 2:  InterestRate_Margin_Aggr_Med_3      0.6500      0.6484      0.6492      0.6491      0.6492 0.64918
+# 3:    InterestRate_Margin_Aggr_Med      0.6479      0.6474      0.6485      0.6501      0.6497 0.64872
+# 4:  InterestRate_Margin_Aggr_Med_9      0.6504      0.6476      0.6471      0.6482      0.6495 0.64856
+# 5:  InterestRate_Margin_Aggr_Med_1      0.6477      0.6483      0.6469      0.6506      0.6480 0.64830
+# 6:  InterestRate_Margin_Aggr_Med_5      0.6499      0.6455      0.6463      0.6459      0.6507 0.64766
+# 7:  InterestRate_Margin_Aggr_Med_2      0.6461      0.6460      0.6453      0.6482      0.6490 0.64692
+# 8:  InterestRate_Margin_Aggr_Med_6      0.6464      0.6457      0.6462      0.6475      0.6466 0.64648
+# 9:  InterestRate_Margin_Aggr_Med_4      0.6481      0.6468      0.6434      0.6478      0.6448 0.64618
+# 10:                           Range      0.0055      0.0065      0.0076      0.0047      0.0063 0.00612
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+### RESULTS:  Difficult to make conclusive results with variability in KS-statistics.
 
 # Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                             Variable Concordance LR_Statistic
-# 1:  InterestRate_Margin_Aggr_Med_4   0.5611257          104
-# 2:  InterestRate_Margin_Aggr_Med_3   0.5603674          105
-# 3:  InterestRate_Margin_Aggr_Med_2   0.5575290          102
-# 4:  InterestRate_Margin_Aggr_Med_5   0.5566768           99
-# 5:  InterestRate_Margin_Aggr_Med_6   0.5566370           98
-# 6:  InterestRate_Margin_Aggr_Med_1   0.5555107           99
-# 7:  InterestRate_Margin_Aggr_Med_9   0.5546448           85
-# 8:    InterestRate_Margin_Aggr_Med   0.5506784           96
-# 9: InterestRate_Margin_Aggr_Med_12   0.5481947           68
+concTable(datCredit_valid_TFD, vars)
+#                           Variable Concordance          SD LR_Statistic
+# 1:  InterestRate_Margin_Aggr_Med_4   0.5611257 0.004199905          104
+# 2:  InterestRate_Margin_Aggr_Med_3   0.5603674 0.004199684          105
+# 3:  InterestRate_Margin_Aggr_Med_2   0.5575290 0.004200634          102
+# 4:  InterestRate_Margin_Aggr_Med_5   0.5566768 0.004176251           99
+# 5:  InterestRate_Margin_Aggr_Med_6   0.5566370 0.004185777           98
+# 6:  InterestRate_Margin_Aggr_Med_1   0.5555107 0.004193798           99
+# 7:  InterestRate_Margin_Aggr_Med_9   0.5546448 0.004170861           85
+# 8:    InterestRate_Margin_Aggr_Med   0.5506784 0.004195174           96
+# 9: InterestRate_Margin_Aggr_Med_12   0.5481947 0.004155018           68
 
-### RESULTS:  [InterestRate_Margin_Aggr_Med_4] has the best concordance, significantly
-###           better than [InterestRate_Margin_Aggr_Med].
+### RESULTS:  [InterestRate_Margin_Aggr_Med_4] seems to have the best concordance, 
+###           with [InterestRate_Margin_Aggr_Med_3] falling close behind.
 
-### CONCLUSION: Replace [InterestRate_Margin_Aggr_Med] with [InterestRate_Margin_Aggr_Med_4]
+### CONCLUSION: Add [InterestRate_Margin_Aggr_Med_3] to the model since it seems
+###             to have the second best goodness of fit and concordance.
 
-varlist <- vecChange(varlist,Remove=c("InterestRate_Margin_Aggr_Med"),
-                     Add=data.table(vars=c("InterestRate_Margin_Aggr_Med_4"),
-                                    vartypes=c("prc")))
+varlist <- vecChange(varlist,Add=data.table(vars=c("InterestRate_Margin_Aggr_Med_3"),
+                                            vartypes=c("prc")))
 
-# ------ 1.5 Test for proportionality in hazard models
 
-# [InterestRate_Nom]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ InterestRate_Nom, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"InterestRate_Nom", c(50,0.1))
-### RESULTS: NO trend away from 0, therefore do not reject proportionality.
 
-# [InterestRate_Margin]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ InterestRate_Margin, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"InterestRate_Margin", c(50,0.1))
-### RESULTS: NO trend away from 0, therefore do not reject proportionality.
+# ------ 3.3 What is the performance of current thematic variables in univariate models?
 
-# [InterestRate_Margin_Aggr_Med_4]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ InterestRate_Margin_Aggr_Med_4, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"InterestRate_Margin_Aggr_Med_4", c(50,0.01))
-### RESULTS: Small trend away from 0, therefore do not reject proportionality.
+vars <- c("InterestRate_Nom", "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3")
 
-# Add to model variables
-modelVar <- c(modelVar,varlist$vars)
+# Goodness of fit
+csTable(datCredit_train_TFD,vars)
+#                           Variable KS_Statistic
+# 1               InterestRate_Nom       0.6479
+# 2   InterestRate_Margin_Aggr_Med       0.6477
+# 3 InterestRate_Margin_Aggr_Med_3       0.6449
 
+### RESULTS: Variables seem to be a good fit.
+
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#                         Variable Concordance          SD LR_Statistic
+# 1: InterestRate_Margin_Aggr_Med_3   0.5603674 0.004199684          105
+# 2:   InterestRate_Margin_Aggr_Med   0.5506784 0.004195174           96
+# 3:               InterestRate_Nom   0.5497724 0.004486873          165
+
+### RESULTS: Concordances are quite low, this may lead to not including the variables into the model
+
+### CONCLUSION: Take note of low concordances, but evaluate the concordance of the full model.
+
+
+
+# ------ 3.4 What is the performance of current thematic cox ph model?
+
+# Build cox model based on all thematic variables
+coxInterest_train <- coxph(Surv(Start,End,Default_Ind) ~ InterestRate_Nom +
+                           InterestRate_Margin_Aggr_Med + InterestRate_Margin_Aggr_Med_3,
+                         id=LoanID, data=datCredit_train_TFD)
+
+# Kolmogorov-Smirnof of coxDelinq
+cs_ks_test(coxInterest_train,datCredit_train_TFD,GraphInd = FALSE) # 0.646
+
+# Accuracy
+coxInterest_valid<- coxph(Surv(Start,End,Default_Ind) ~ InterestRate_Nom +
+                            InterestRate_Margin_Aggr_Med + InterestRate_Margin_Aggr_Med_3, id=LoanID,
+                        data=datCredit_valid_TFD)
+summary(coxInterest_valid)
+# Concordance= 0.571
+
+timedROC(datCredit_valid_TFD, coxInterest_valid, month_Start=0, month_End=36,
+         fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
+         fld_EndTime="End", numDigits=0, Graph=FALSE)
+# AUC: 0.5214215
+#===========================================================================================
+
+### CONCLUSION: Low concordance (0.571) and AUC implies weak accuracy, therefore do  
+###             not include variables in final model.
+
+#============================================================================================
 # ------ 4. General
-varlist <- data.table(vars=c("Arrears","Balance","Instalment",
-                             "pmnt_method_grp","Principal","Undrawn_Amt",
+varlist <- data.table(vars=c("Balance","Instalment",
+                             "Principal","Undrawn_Amt",
                              "LN_TPE","Term"),
-                      vartypes=c("int", "fin", "fin", "cat", "int","fin", "cat", "int"))
+                      vartypes=c("int", "fin", "fin","int","cat", "int"))
 
-# ------ 4.1 Check correlations of variables to ascertain variables that are similar.
+#=========================================================================================
+# ------ 4.1 Which variables are highly correlated in the group?
 
 # - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
+corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
-### RESULTS: [Balance], [Instalment] and [Principal] are highly corrolated.
+### RESULTS: 1) [Balance], [Installment] and [Principal] are highly correlated.
 
-### INVESTIGATE: Determine which variable to remove.
+# ------ 4.2 Which variable in the correlated group should be kept in the model?
 
+# Initialize variable
 vars <- c("Balance", "Instalment", "Principal")
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
+# Goodness of fit test of variables
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+#     Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1: Instalment      0.6469      0.6492      0.6462      0.6506      0.6491 0.64840
+# 2:    Balance      0.6485      0.6453      0.6463      0.6501      0.6482 0.64768
+# 3:  Principal      0.6510      0.6434      0.6471      0.6472      0.6478 0.64730
+# 4:      Range      0.0041      0.0058      0.0009      0.0034      0.0013 0.00310
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+### RESULTS:  From the 5 iterations, [Instalment] seems to have the best fit.
 
 # Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#     Variable Concordance LR_Statistic
-# 1:  Principal   0.5827355          335
-# 2: Instalment   0.5636894           84
-# 3:    Balance   0.5544691          101
+concTable(datCredit_valid_TFD, vars)
+#     Variable Concordance          SD LR_Statistic
+# 1:  Principal   0.5827355 0.004098595          335
+# 2: Instalment   0.5636894 0.004286208           84
+# 3:    Balance   0.5544691 0.004145147          101
 
 ## RESULTS: [Principal] has the highest concordance
 
-### CONCOLUSION: Keep [Principal] in the varlist
+### CONCOLUSION:  Considering Principal has the best concordance, but the worse fit
+###               complicates the decision. However, [InstalmentToBalance_Aggr_Prop]
+###               contains information of both.
 
-varlist <- vecChange(varlist,Remove=data.table(vars=c("Instalment","Balance")))
+# ------ 4.2.1 Can [Balance] and [Instalment] be replaced with [InstalmentToBalance_Aggr_Prop]?
 
-# ------ 4.2 Incorporate a timing component to Age and Balance with reference to term.
+# Initialize variable
+vars <- c("Balance", "Instalment", "InstalmentToBalance_Aggr_Prop")
 
-varlist <- vecChange(varlist,Add=data.table(vars=c("AgeToTerm","BalanceToTerm"), vartypes=c("dec","dec")))
+# Goodness of fit test of variables
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+#                         Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:                    Instalment      0.6478      0.6507      0.6512      0.6501      0.6495 0.64986
+# 2: InstalmentToBalance_Aggr_Prop      0.6510      0.6501      0.6489      0.6497      0.6482 0.64958
+# 3:                       Balance      0.6464      0.6495      0.6457      0.6483      0.6478 0.64754
+# 4:                         Range      0.0046      0.0012      0.0055      0.0018      0.0017 0.00296
 
-# - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist$vars[varlist$vartypes != 'cat'], corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
+### RESULTS:  From the 5 iterations, [InstalmentToBalance_Aggr_Prop] consistently seems to outfit [Balance]
 
-### RESULTS: [Principal] and [BalanceToTerm] are highly correlated
+# Accuracy of variables
+concTable(datCredit_valid_TFD, vars)
+#                         Variable Concordance          SD LR_Statistic
+# 1:                    Instalment   0.5636894 0.004286208           84
+# 2:                       Balance   0.5544691 0.004145147          101
+# 3: InstalmentToBalance_Aggr_Prop   0.5146318 0.004341557           18
 
-### INVESTIGATE: Remove highly correlated variables
+### RESULTS:  [InstalmentToBalance_Aggr_Prop] has a worse concordance than [Instalment] and [Balance].
 
-vars <- c("Principal", "BalanceToTerm")
+### CONCLUSION: [InstalmentToBalance_Aggr_Prop] cannot replace [Instalment] and [Balance].
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#       Variable     KS
-# 2 BalanceToTerm 0.6480
-# 1     Principal 0.6466
+# ------ 4.2.1 Can [Balance] be replaced with [ArrearsToBalance_Aggr_Prop]?
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+# Initialize variable
+vars <- c("Balance", "ArrearsToBalance_Aggr_Prop")
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#         Variable Concordance LR_Statistic
-# 1:     Principal   0.5827355          335
-# 2: BalanceToTerm   0.5561134           99
+# Goodness of fit test of variables
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+#                     Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:                    Balance      0.6475      0.6519      0.6479      0.6482      0.6483 0.64876
+# 2: ArrearsToBalance_Aggr_Prop      0.6457      0.6440      0.6480      0.6446      0.6470 0.64586
+# 3:                      Range      0.0018      0.0079      0.0001      0.0036      0.0013 0.00294
 
-### RESULTS:  [Principal] has a higher concordance than that of
-###           [BalanceToTerm].
+### RESULTS:  From the 5 iterations, [Balance] seems to have the best fit.
 
-### CONCLUSION: Remove BalanceToTerm
+# Test for accuracy
+concTable(datCredit_valid_TFD, vars)
+#                     Variable Concordance          SD LR_Statistic
+# 1:                    Balance   0.5544691 0.004145147          101
+# 2: ArrearsToBalance_Aggr_Prop   0.5367480 0.004126016          118
 
-varlist <- vecChange(varlist,Remove="BalanceToTerm")
+## RESULTS: [Balance] has the highest concordance.
 
-# ------ 4.3 Test for proportionality in hazard models
+### CONCOLUSION:  [ArrearsToBalance_Aggr_Prop] cannot reaplace [Balance]
 
-# [Arrears]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ Arrears, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"Arrears", c(50,-50000))
-### RESULTS: Clear trend away from 0, therefore reject proportionality.
+### CONCLUSION: Remove [Instalment] and [Balance].
 
-# [pmnt_method_grp]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ pmnt_method_grp, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"pmnt_method_grp")
-### RESULTS: Clear trends away from 0, therefore reject proportionality.
+varlist <- vecChange(varlist,Remove=c("Instalment","Balance"))
 
-# [Principal]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ Principal, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"Principal", c(50,5000000))
-### RESULTS:  Small trend away from 0, may be influenced by extreme values,
-###           but do not reject proportionality.
+# ------ 4.3 How does [Term] compare to [AgeToTerm_Aggr_Mean]?
 
-# [Undrawn_Amt]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ Undrawn_Amt, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"Undrawn_Amt", c(50,1250000))
-### RESULTS: Small trend away from 0, may be influenced by extreme values,
-###           but do not reject proportionality.
+# Initialize variables
+vars <- c("Term", "AgeToTerm_Aggr_Mean")
 
-# [LN_TPE]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ LN_TPE, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"LN_TPE")
-### RESULTS: Clear trend away from 0, therefore reject proportionality.
+# Goodness of fit
+csTable(datCredit_train_TFD,vars,seedVal = NA)
+#               Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1: AgeToTerm_Aggr_Mean      0.6462      0.6514      0.6487      0.6471      0.6509 0.64886
+# 2:                Term      0.6455      0.6458      0.6486      0.6455      0.6465 0.64638
+# 3:               Range      0.0007      0.0056      0.0001      0.0016      0.0044 0.00248
 
-# [Term]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ Term, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"Term", c(50,50))
-### RESULTS: Clear trend away from 0, therefore reject proportionality.
+### RESULTS: [AgeToTerm_Aggr_Mean] seems to concistently outfit [Term].
 
-# [AgeToTerm]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ AgeToTerm, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"AgeToTerm")
-### RESULTS:  NO trend away from 0, although it does have some extreme values
-###           Do not reject proportionality.
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#               Variable Concordance          SD LR_Statistic
+# 1: AgeToTerm_Aggr_Mean   0.5091579 0.003670705           24
+# 2:                Term   0.5066915 0.002188255            2
 
-### CONCLUSION: Add [Principal], [Undrawn_Amt], [AgeToTerm] to the model.
+### RESULTS: Both have poor concordance.
 
-modelVar <- c(modelVar, c("Principal", "Undrawn_Amt", "AgeToTerm"))
+### CONCLUSION: Remove [Term].
 
-# ------ 5. Portfolio variables
-varlist <- data.table(vars=c("AgeToTerm_Aggr_Mean",
-                             "ArrearsToBalance_Aggr_Prop",
-                             "CuringEvents_Aggr_Prop",
-                             "InstalmentToBalance_Aggr_Prop",
+varlist <- vecChange(varlist,Remove=c("Term"))
+
+# ------ 4.4 What is the predictive power of the variables in univariate models?
+#============================================================================================
+vars <- c("Principal", "Undrawn_Amt", "LN_TPE")
+
+# Goodness of fit
+csTable(datCredit_train_TFD,vars)
+#       Variable KS_Statistic
+# 1   Principal       0.6479
+# 2 Undrawn_Amt       0.6477
+# 3      LN_TPE       0.6449
+
+### RESULTS: [LN_TPE] appears to have the weakest goodness of fit.
+
+# Accuracy
+concTable(datCredit_valid_TFD,vars)
+#       Variable Concordance           SD LR_Statistic
+# 1: Undrawn_Amt   0.6883511 0.0006726495         2126
+# 2:   Principal   0.5827355 0.0040985952          335
+# 3:      LN_TPE   0.5121296 0.0018064070           29
+
+### RESULTS:  [Undrawn_Amt] appears to have significant more concordance than the other variables.
+###           [LN_TPE] could possibly be removed.
+
+# ------ 4.4 What is the predictive power of the variables still in a single model?
+
+# Goodness of fit
+coxGen_train <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                  paste(vars,collapse=" + "))), id=LoanID,
+                      datCredit_train_TFD)
+
+
+GoF_CoxSnell_KS(coxGen_train,datCredit_train_TFD,GraphInd = FALSE) # 0.6485
+
+# Accuracy
+coxGen_valid <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                        paste(vars,collapse=" + "))), id=LoanID,
+                      datCredit_valid_TFD)
+
+concordance(coxGen_valid) # 0.6882
+
+# House keeping
+rm(coxGen_train, coxGen_valid)
+
+
+### CONCLUSION: Leave all variables in the model.
+
+#============================================================================================
+
+
+
+
+
+
+
+
+
+#============================================================================================
+# ------ 5. Portfolio Level
+varlist <- data.table(vars=c("CuringEvents_Aggr_Prop",
                              "NewLoans_Aggr_Prop"),
                       vartypes=c("dec", "dec", "dec", "dec", "dec"))
 
-# ------ 5.1 Check correlations of variables to ascertain variables that are similar.
+#============================================================================================
 
-# - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist$vars[varlist$vartypes != 'cat'], corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
-### RESULTS: [AgeToTerm_Aggr_Mean] and [ArrearsToBalance_Aggr_Prop] are highly correlated
 
-vars <- c("AgeToTerm_Aggr_Mean", "ArrearsToBalance_Aggr_Prop")
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#                   Variable     KS
-# 1        AgeToTerm_Aggr_Mean 0.6509
-# 2 ArrearsToBalance_Aggr_Prop 0.6481
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                       Variable Concordance LR_Statistic
-# 1: ArrearsToBalance_Aggr_Prop   0.5367480          118
-# 2:        AgeToTerm_Aggr_Mean   0.5091579           24
-
-### RESULTS:  [ArrearsToBalance_Aggr_Prop] has higher concordance than that of
-###           [AgeToTerm_Aggr_Mean].
-
-### CONCLUSION: Remove [AgeToTerm_Aggr_Mean] from the data.
-
-varlist <- vecChange(varlist,Remove="AgeToTerm_Aggr_Mean")
-
-# ------ 5.2 Test for proportionality in hazard models
-
-# [ArrearsToBalance_Aggr_Prop]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ ArrearsToBalance_Aggr_Prop, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"ArrearsToBalance_Aggr_Prop", c(50, 0.0005))
-### RESULTS: Minimal trend away from 0, therefore do not reject proportionality.
-
-# [CuringEvents_Aggr_Prop]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ CuringEvents_Aggr_Prop, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"CuringEvents_Aggr_Prop",c(100, 0.0015))
-### RESULTS: Minimal trend away from 0, therefore do not reject proportionality.
-
-# [InstalmentToBalance_Aggr_Prop]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ InstalmentToBalance_Aggr_Prop, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"InstalmentToBalance_Aggr_Prop",c(100, 0.0015))
-### RESULTS: Trends away from 0, therefore reject proportionality.
-
-# [NewLoans_Aggr_Prop]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ NewLoans_Aggr_Prop, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"NewLoans_Aggr_Prop",c(100, 0.007))
-### RESULTS: Minimal trend away from 0, therefore do not reject proportionality.
-
-### CONCLUSION: Add [ArrearsToBalance_Aggr_Prop], [CuringEvents_Aggr_Prop], [NewLoans_Aggr_Prop] to the model.
-
-modelVar <- c(modelVar, c("ArrearsToBalance_Aggr_Prop", "CuringEvents_Aggr_Prop", "NewLoans_Aggr_Prop"))
-
+#============================================================================================
 # ------ 6. Macro Economic
 varlist <- data.table(vars=c("M_DTI_Growth","M_Emp_Growth","M_Inflation_Growth",
                              "M_RealGDP_Growth","M_RealIncome_Growth","M_Repo_Rate"),
-                      vartypes=c("perc", "perc", "perc", "perc", "perc", "perc"))
+                      vartypes=c("prc", "prc", "prc", "prc", "prc", "prc"))
+#============================================================================================
 
-# ------ 6.1 Check correlations of variables to ascertain variables that are similar.
+
+
+# ------ 6.1 Which economic variables are highly correlated with one another?
 
 # - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, varlist$vars[varlist$vartypes != 'cat'], corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
+corrAnalysis(datCredit_train_TFD, varlist$vars[varlist$vartypes != 'cat'],
+             corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
 ### RESULTS: [M_Emp_Growth], [M_RealGDP_Growth] and [M_RealIncome_Growth] are highly correlated
-### NOTE: Each variable contains lagging variable, therefore first the lagging variables will
-###       tested and compared with the others.
 
-### INVESTIGATE: Lagging [M_Emp_Growth]
+# ------ 6.2 Which correlated variable should remain in the model?
 
-vars <- c("M_Emp_Growth_1","M_Emp_Growth_10","M_Emp_Growth_11","M_Emp_Growth_12",
-          "M_Emp_Growth_2","M_Emp_Growth_3","M_Emp_Growth_4","M_Emp_Growth_5",
-          "M_Emp_Growth_6","M_Emp_Growth_7","M_Emp_Growth_8","M_Emp_Growth_9",
-          "M_Emp_Growth")
+# Initialize variables
+vars <- c("M_Emp_Growth", "M_RealGDP_Growth", "M_RealIncome_Growth")
 
 # Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
+csTable(datCredit_train_TFD, vars, seedVal=NA)
+#             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:        M_Emp_Growth      0.6469      0.6484      0.6468      0.6498      0.6474 0.64786
+# 2:    M_RealGDP_Growth      0.6473      0.6463      0.6516      0.6449      0.6489 0.64780
+# 3: M_RealIncome_Growth      0.6445      0.6467      0.6448      0.6509      0.6518 0.64774
+# 4:               Range      0.0028      0.0021      0.0068      0.0060      0.0044 0.00442
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-#         Variable     KS
-# 12  M_Emp_Growth_9 0.6507
-# 6   M_Emp_Growth_3 0.6501
-# 3  M_Emp_Growth_11 0.6485
-# 11  M_Emp_Growth_8 0.6469
-# 13    M_Emp_Growth 0.6468
-# 2  M_Emp_Growth_10 0.6467
-# 4  M_Emp_Growth_12 0.6467
-# 1   M_Emp_Growth_1 0.6464
-# 10  M_Emp_Growth_7 0.6464
-# 7   M_Emp_Growth_4 0.6455
-# 9   M_Emp_Growth_6 0.6453
-# 5   M_Emp_Growth_2 0.6451
-# 8   M_Emp_Growth_5 0.6448
+### RESULTS:  Non-conclusive results as rankings fluctuated too much over 5 iterations.
 
 # Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#             Variable Concordance LR_Statistic
-# 1:    M_Emp_Growth   0.5267075           45
-# 2: M_Emp_Growth_11   0.5265101           21
-# 3: M_Emp_Growth_10   0.5225248           14
-# 4:  M_Emp_Growth_1   0.5224465           29
-# 5: M_Emp_Growth_12   0.5223535           28
-# 6:  M_Emp_Growth_2   0.5187988           17
-# 7:  M_Emp_Growth_9   0.5171781            8
-# 8:  M_Emp_Growth_3   0.5141904            8
-# 9:  M_Emp_Growth_4   0.5084908            3
-# 10:  M_Emp_Growth_8   0.5076886            4
-# 11:  M_Emp_Growth_5   0.5045795            0
-# 12:  M_Emp_Growth_7   0.5037239            1
-# 13:  M_Emp_Growth_6   0.5001361            0
+concTable(datCredit_valid_TFD, vars)
+#               Variable Concordance          SD LR_Statistic
+# 1: M_RealIncome_Growth   0.5341913 0.003951199           68
+# 2:        M_Emp_Growth   0.5267075 0.003999905           45
+# 3:    M_RealGDP_Growth   0.5211591 0.003910739           18
 
-### RESULTS:  [M_Emp_Growth] has the best concordance.
+### RESULTS:  [M_RealIncome_Growth] has the highest concordance, although the concordances
+###           are not that high.
 
-## INVESTIGATE: Lagging [M_RealGDP_Growth]
+### CONCLUSION: Keep M_RealIncome_Growth in the model.
 
-vars <- c("M_RealGDP_Growth_1","M_RealGDP_Growth_10","M_RealGDP_Growth_11",
-          "M_RealGDP_Growth_12","M_RealGDP_Growth_2","M_RealGDP_Growth_3",
-          "M_RealGDP_Growth_4","M_RealGDP_Growth_5","M_RealGDP_Growth_6",
-          "M_RealGDP_Growth_7","M_RealGDP_Growth_8","M_RealGDP_Growth_9","M_RealGDP_Growth")
-
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#             Variable     KS
-# 13    M_RealGDP_Growth 0.6507
-# 3  M_RealGDP_Growth_11 0.6506
-# 9   M_RealGDP_Growth_6 0.6500
-# 12  M_RealGDP_Growth_9 0.6496
-# 11  M_RealGDP_Growth_8 0.6490
-# 7   M_RealGDP_Growth_4 0.6489
-# 5   M_RealGDP_Growth_2 0.6485
-# 4  M_RealGDP_Growth_12 0.6484
-# 10  M_RealGDP_Growth_7 0.6470
-# 2  M_RealGDP_Growth_10 0.6467
-# 1   M_RealGDP_Growth_1 0.6465
-# 8   M_RealGDP_Growth_5 0.6464
-# 6   M_RealGDP_Growth_3 0.6442
-
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+varlist = vecChange(varlist, Remove=c("M_Emp_Growth", "M_RealGDP_Growth"))
 
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                 Variable Concordance LR_Statistic
-# 1: M_RealGDP_Growth_12   0.5240902           40
-# 2:    M_RealGDP_Growth   0.5211591           18
-# 3: M_RealGDP_Growth_11   0.5210253           29
-# 4:  M_RealGDP_Growth_1   0.5185701           12
-# 5:  M_RealGDP_Growth_2   0.5171132            7
-# 6: M_RealGDP_Growth_10   0.5164026           19
-# 7:  M_RealGDP_Growth_3   0.5131770            3
-# 8:  M_RealGDP_Growth_9   0.5111747           11
-# 9:  M_RealGDP_Growth_4   0.5105378            1
-# 10:  M_RealGDP_Growth_8   0.5051617            6
-# 11:  M_RealGDP_Growth_7   0.5005288            3
-# 12:  M_RealGDP_Growth_6   0.4971260            1
-# 13:  M_RealGDP_Growth_5   0.4933388            0
 
-### RESULTS:  [M_RealGDP_Growth_12] has the best concordance.
+# ------ 6.3 What are the predictive powers of the current variables in the models?
 
-varlist <- vecChange(varlist,Remove="M_RealGDP_Growth",Add=data.table(vars=c("M_RealGDP_Growth_12"), vartypes=c("prc")))
+# Initialize variables
+vars <- c("M_DTI_Growth", "M_Inflation_Growth", "M_RealIncome_Growth", "M_Repo_Rate")
 
-### INVESTIGATE: Lagging [M_RealIncome_Growth]
+# Compare goodness of fit of different variables
+csTable(datCredit_train_TFD,vars,seedVal = NA)
+#               Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
+# 1:  M_Inflation_Growth      0.6479      0.6488      0.6452      0.6466      0.6503 0.64776
+# 2:         M_Repo_Rate      0.6450      0.6501      0.6433      0.6472      0.6525 0.64762
+# 3: M_RealIncome_Growth      0.6448      0.6474      0.6470      0.6473      0.6471 0.64672
+# 4:        M_DTI_Growth      0.6454      0.6441      0.6466      0.6484      0.6471 0.64632
+# 5:               Range      0.0031      0.0060      0.0037      0.0018      0.0054 0.00400
 
-vars <- c("M_RealIncome_Growth_1","M_RealIncome_Growth_10","M_RealIncome_Growth_11","M_RealIncome_Growth_12",
-          "M_RealIncome_Growth_2","M_RealIncome_Growth_3","M_RealIncome_Growth_4","M_RealIncome_Growth_5",
-          "M_RealIncome_Growth_6","M_RealIncome_Growth_7","M_RealIncome_Growth_8","M_RealIncome_Growth_9","M_RealIncome_Growth")
+### RESULTS:  After 5 iterations, there is too much variability in kS-statistice, therefore no conclusions can be made.
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#             Variable     KS
-# 13    M_RealGDP_Growth 0.6507
-# 3  M_RealGDP_Growth_11 0.6506
-# 9   M_RealGDP_Growth_6 0.6500
-# 12  M_RealGDP_Growth_9 0.6496
-# 11  M_RealGDP_Growth_8 0.6490
-# 7   M_RealGDP_Growth_4 0.6489
-# 5   M_RealGDP_Growth_2 0.6485
-# 4  M_RealGDP_Growth_12 0.6484
-# 10  M_RealGDP_Growth_7 0.6470
-# 2  M_RealGDP_Growth_10 0.6467
-# 1   M_RealGDP_Growth_1 0.6465
-# 8   M_RealGDP_Growth_5 0.6464
-# 6   M_RealGDP_Growth_3 0.6442
+# Compare concordance of different variables
+concTable(datCredit_valid_TFD,vars)
+#               Variable Concordance          SD LR_Statistic
+# 1:        M_DTI_Growth   0.5350355 0.003955393          117
+# 2: M_RealIncome_Growth   0.5341913 0.003951199           68
+# 3:  M_Inflation_Growth   0.5202318 0.004253188           55
+# 4:         M_Repo_Rate   0.5180882 0.004234430           29
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+### RESULTS: [M_DTI_Growth] has the highest concordance, albeit not that high.
+### CONCLUSION: The low predictive power may be enhanced with lags.
 
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                   Variable Concordance LR_Statistic
-# 1:    M_RealIncome_Growth   0.5341913           68
-# 2:  M_RealIncome_Growth_1   0.5318903           58
-# 3:  M_RealIncome_Growth_2   0.5282074           46
-# 4:  M_RealIncome_Growth_3   0.5245396           33
-# 5:  M_RealIncome_Growth_4   0.5202059           23
-# 6:  M_RealIncome_Growth_5   0.5173732           15
-# 7:  M_RealIncome_Growth_6   0.5155281            9
-# 8: M_RealIncome_Growth_12   0.5131676           17
-# 9:  M_RealIncome_Growth_7   0.5125671            5
-# 10:  M_RealIncome_Growth_8   0.5087736            2
-# 11: M_RealIncome_Growth_11   0.5068548            7
-# 12:  M_RealIncome_Growth_9   0.5039898            0
-# 13: M_RealIncome_Growth_10   0.5013712            1
+# ------ 6.4 Which lags for current variables be included in the models?
 
-### RESULTS:  [M_RealIncome_Growth] has the best concordance.
-
-### INVESTIGATE: Which variable should be removed.
-
-vars <- c("M_Emp_Growth","M_RealGDP_Growth_12","M_RealIncome_Growth")
-
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#             Variable     KS
-# 1        M_Emp_Growth 0.6472
-# 2 M_RealGDP_Growth_12 0.6471
-# 3 M_RealIncome_Growth 0.6456
-
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                 Variable Concordance LR_Statistic
-# 1: M_RealIncome_Growth   0.5341913           68
-# 2:        M_Emp_Growth   0.5267075           45
-# 3: M_RealGDP_Growth_12   0.5240902           40
-
-### RESULTS:  [M_RealIncome_Growth] has the highest concordance.
-### CONCLUSION: Keep M_RealIncome_Growth in the varlist
-
-varlist <- vecChange(varlist,Remove = c("M_Emp_Growth", "M_RealGDP_Growth_12"))
-
-# ------ 6.2 Explore other lagging variables.
-
-### INVESTIGATE: [M_DTI_Growth]
-
+# ------ 6.4.1 Should lags for [M_DTI_Growth] be included in the models?
 vars <- c("M_DTI_Growth_1","M_DTI_Growth_10","M_DTI_Growth_11","M_DTI_Growth_12",
           "M_DTI_Growth_2","M_DTI_Growth_3","M_DTI_Growth_4","M_DTI_Growth_5",
-          "M_DTI_Growth_6","M_DTI_Growth_7","M_DTI_Growth_8","M_DTI_Growth_9","M_DTI_Growth")
+          "M_DTI_Growth_6","M_DTI_Growth_7","M_DTI_Growth_8","M_DTI_Growth_9",
+          "M_DTI_Growth")
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS:  Only [M_DTI_Growth] had a significant p-value, but concordance did improve.
+###           The third and sixth lags had significant coef.
 
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-#         Variable     KS
-# 7   M_DTI_Growth_4 0.6498
-# 8   M_DTI_Growth_5 0.6493
-# 12  M_DTI_Growth_9 0.6488
-# 6   M_DTI_Growth_3 0.6480
-# 10  M_DTI_Growth_7 0.6480
-# 1   M_DTI_Growth_1 0.6474
-# 3  M_DTI_Growth_11 0.6467
-# 2  M_DTI_Growth_10 0.6463
-# 13    M_DTI_Growth 0.6463
-# 5   M_DTI_Growth_2 0.6460
-# 9   M_DTI_Growth_6 0.6453
-# 4  M_DTI_Growth_12 0.6443
-# 11  M_DTI_Growth_8 0.6439
+# Build a model on these lags.
+vars <- c("M_DTI_Growth_3", "M_DTI_Growth_6","M_DTI_Growth")
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#           Variable Concordance LR_Statistic
-# 1: M_DTI_Growth_11   0.5669068          195
-# 2: M_DTI_Growth_12   0.5660056          196
-# 3: M_DTI_Growth_10   0.5655813          185
-# 4:  M_DTI_Growth_9   0.5563671          166
-# 5:  M_DTI_Growth_8   0.5523882          146
-# 6:  M_DTI_Growth_7   0.5477875          133
-# 7:  M_DTI_Growth_6   0.5447379          121
-# 8:  M_DTI_Growth_5   0.5411280          111
-# 9:  M_DTI_Growth_4   0.5384984          100
-# 10:  M_DTI_Growth_3   0.5361471           96
-# 11:  M_DTI_Growth_1   0.5360005          110
-# 12:  M_DTI_Growth_2   0.5358584          100
-# 13:    M_DTI_Growth   0.5350355          117
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
 
-### RESULTS:  [M_DTI_Growth_11] has the best concordance.
-### CONCLUSION: Replace [M_DTI_Growth] with [M_DTI_Growth_11]
+### RESULTS: lag 3 was not significant. Therefore remove the lag from the model
 
-varlist <- vecChange(varlist,Remove="M_DTI_Growth",Add=data.table(vars=c("M_DTI_Growth_11"), vartypes=c("prc")))
+vars <- c("M_DTI_Growth_6","M_DTI_Growth")
 
-### INVESTIGATE: [M_Inflation_Growth]
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
 
+### RESULTS: The concordance was improved and all the variables are significant.
+
+### CONCLUSION: Add [M_DTI_Growth_6] to the model.
+
+varlist <- vecChange(varlist,Add=data.table(vars="M_DTI_Growth_6", vartypes="prc"))
+
+
+
+# ------ 6.4.2 Should lags for [M_DTI_Growth] be included in the models?
 vars <- c("M_Inflation_Growth_1","M_Inflation_Growth_10","M_Inflation_Growth_11",
           "M_Inflation_Growth_12","M_Inflation_Growth_2","M_Inflation_Growth_3",
           "M_Inflation_Growth_4","M_Inflation_Growth_5","M_Inflation_Growth_6",
-          "M_Inflation_Growth_7","M_Inflation_Growth_8","M_Inflation_Growth_9","M_Inflation_Growth")
+          "M_Inflation_Growth_7","M_Inflation_Growth_8","M_Inflation_Growth_9",
+          "M_Inflation_Growth")
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#               Variable     KS
-# 9   M_Inflation_Growth_6 0.6515
-# 8   M_Inflation_Growth_5 0.6508
-# 12  M_Inflation_Growth_9 0.6499
-# 7   M_Inflation_Growth_4 0.6493
-# 6   M_Inflation_Growth_3 0.6488
-# 5   M_Inflation_Growth_2 0.6486
-# 10  M_Inflation_Growth_7 0.6475
-# 13    M_Inflation_Growth 0.6466
-# 2  M_Inflation_Growth_10 0.6464
-# 3  M_Inflation_Growth_11 0.6456
-# 11  M_Inflation_Growth_8 0.6444
-# 1   M_Inflation_Growth_1 0.6443
-# 4  M_Inflation_Growth_12 0.6438
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS:  [M_Inflation_Growth], [M_Inflation_Growth_12], [M_Inflation_Growth_11],
+###           [M_Inflation_Growth_3] and [M_Inflation_Growth_1] has significant p-values,
+###           with an improved concordance.
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                   Variable Concordance LR_Statistic
-# 1: M_Inflation_Growth_12   0.5582303          169
-# 2: M_Inflation_Growth_11   0.5554290          158
-# 3: M_Inflation_Growth_10   0.5541576          166
-# 4:  M_Inflation_Growth_8   0.5534695          172
-# 5:  M_Inflation_Growth_7   0.5533126          178
-# 6:  M_Inflation_Growth_6   0.5529680          182
-# 7:  M_Inflation_Growth_9   0.5517474          170
-# 8:  M_Inflation_Growth_5   0.5505816          177
-# 9:  M_Inflation_Growth_4   0.5466313          164
-# 10:  M_Inflation_Growth_3   0.5432397          138
-# 11:  M_Inflation_Growth_2   0.5333219          111
-# 12:  M_Inflation_Growth_1   0.5275290           83
-# 13:    M_Inflation_Growth   0.5202318           55
+# Build a model on these lags.
+vars <- c("M_Inflation_Growth", "M_Inflation_Growth_1","M_Inflation_Growth_3",
+          "M_Inflation_Growth_11", "M_Inflation_Growth_12")
 
-### RESULTS:  [M_Inflation_Growth_12] has the best concordance, which decrease as
-###           the lag increase.
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
 
-### CONCLUSION: Replace [M_Inflation_Growth] with [M_Inflation_Growth_12]
+### RESULTS: lag 11 is not significant. Therefore remove the lag from the model
 
-varlist <- vecChange(varlist,Remove="M_Inflation_Growth",Add=data.table(vars=c("M_Inflation_Growth_12"), vartypes=c("prc")))
+# Build a model on these lags.
+vars <- c("M_Inflation_Growth", "M_Inflation_Growth_1","M_Inflation_Growth_3",
+          "M_Inflation_Growth_12")
+
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+
+### RESULTS: lag 1 is not as significant as the other variables. Therefore remove the lag from the model
+
+# Build a model on these lags.
+vars <- c("M_Inflation_Growth","M_Inflation_Growth_3","M_Inflation_Growth_12")
+
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+
+### RESULTS: The concordance was improved and all the variables are significant.
+
+### CONCLUSION: Add [M_Inflation_Growth_3] and [M_Inflation_Growth_12] to the model.
+
+varlist <- vecChange(varlist,Add=data.table(vars=c("M_Inflation_Growth_3",
+                                                   "M_Inflation_Growth_12"),
+                                            vartypes=c("prc", "prc")))
 
 
-### INVESTIGATE: [M_Repo_Rate]
+# ------ 6.4.3 Should lags for [M_Repo_Rate] be included in the models?
 
 vars <- c("M_Repo_Rate_1","M_Repo_Rate_10","M_Repo_Rate_11","M_Repo_Rate_12",
           "M_Repo_Rate_2","M_Repo_Rate_3","M_Repo_Rate_4","M_Repo_Rate_5",
-          "M_Repo_Rate_6","M_Repo_Rate_7","M_Repo_Rate_8","M_Repo_Rate_9", "M_Repo_Rate")
+          "M_Repo_Rate_6","M_Repo_Rate_7","M_Repo_Rate_8","M_Repo_Rate_9",
+          "M_Repo_Rate")
 
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#         Variable     KS
-# 13    M_Repo_Rate 0.6519
-# 7   M_Repo_Rate_4 0.6505
-# 2  M_Repo_Rate_10 0.6499
-# 6   M_Repo_Rate_3 0.6499
-# 9   M_Repo_Rate_6 0.6485
-# 3  M_Repo_Rate_11 0.6475
-# 1   M_Repo_Rate_1 0.6474
-# 10  M_Repo_Rate_7 0.6466
-# 5   M_Repo_Rate_2 0.6461
-# 8   M_Repo_Rate_5 0.6449
-# 4  M_Repo_Rate_12 0.6447
-# 12  M_Repo_Rate_9 0.6444
-# 11  M_Repo_Rate_8 0.6420
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS:  [M_Repo_Rate], [M_Repo_Rate_3], [M_Repo_Rate_12],
+###           [M_Inflation_Growth_3] are the most significant values.
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#           Variable Concordance LR_Statistic
-# 1: M_Repo_Rate_12   0.5419933          154
-# 2: M_Repo_Rate_11   0.5408448          144
-# 3: M_Repo_Rate_10   0.5387710          131
-# 4:  M_Repo_Rate_9   0.5378973          121
-# 5:  M_Repo_Rate_8   0.5366254          116
-# 6:  M_Repo_Rate_7   0.5363693          109
-# 7:  M_Repo_Rate_6   0.5342596           99
-# 8:  M_Repo_Rate_5   0.5337216           94
-# 9:  M_Repo_Rate_4   0.5313324           84
-# 10:  M_Repo_Rate_3   0.5298802           72
-# 11:  M_Repo_Rate_2   0.5254836           58
-# 12:  M_Repo_Rate_1   0.5233577           46
-# 13:    M_Repo_Rate   0.5180882           29
+# Build a model on these lags.
+vars <- c("M_Repo_Rate", "M_Repo_Rate_3", "M_Repo_Rate_12")
 
-### RESULTS:  [M_Repo_Rate_12] has the best concordance, which decrease as
-###           the lag increase.
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS: All variables are significant with [M_Repo_Rate_3] being the most significant.         
 
-### CONCLUSION: Replace [M_Repo_Rate] with [M_Repo_Rate_12]
+### CONCLUSION: Add [M_Inflation_Growth_3] and [M_Inflation_Growth_12] to the model.
 
-varlist <- vecChange(varlist,Remove="M_Repo_Rate",Add=data.table(vars=c("M_Repo_Rate_12"), vartypes=c("prc")))
-
-# ------ 6.3 Test for proportionality in hazard models
-
-# [M_RealIncome_Growth]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ M_RealIncome_Growth, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"M_RealIncome_Growth", c(50,0.1))
-### RESULTS: Minimal trends away from 0, therefore do not reject proportionality.
-
-# [M_DTI_Growth_11]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ M_DTI_Growth_11, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"M_DTI_Growth_11", c(100,0.05))
-### RESULTS: Clear trend away from 0, therefore reject proportionality.
-
-# [M_Inflation_Growth_12]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ M_Inflation_Growth_12, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"M_Inflation_Growth_12", c(50,0.1))
-### RESULTS: Clear trend away from 0 initially, therefore reject proportionality.
-
-# [M_Repo_Rate_12]
-cox <- coxph(Surv(Start,End, Default_Ind) ~ M_Repo_Rate_12, datCredit_train_TFD)
-sfResiduals(cox,datCredit_train_TFD,"M_Repo_Rate_12", c(50,0.1))
-### RESULTS: Clear trend away from 0 initially, therefore reject proportionality.
-
-### CONCLUSION: Keep [M_RealIncome_Growth]
-
-modelVar <- c(modelVar,"M_RealIncome_Growth")
-
-# ------ 7. Final Model variables
-modelVar <- data.table(vars = modelVar)
-# [1] "g0_Delinq_Ave"                     "slc_acct_pre_lim_perc_imputed_med"
-# [3] "slc_acct_roll_ever_24_imputed_med" "InterestRate_Nom"                 
-# [5] "InterestRate_Margin"               "InterestRate_Margin_Aggr_Med_4"   
-# [7] "Principal"                         "Undrawn_Amt"                      
-# [9] "AgeToTerm"                         "ArrearsToBalance_Aggr_Prop"       
-# [11] "CuringEvents_Aggr_Prop"            "NewLoans_Aggr_Prop"               
-# [13] "M_RealIncome_Growth"
-
-# ------ 7.1 Check correlations of variables to ascertain variables that are similar.
-
-# - Correlation analysis
-corGroups <- corrAnalysis(datCredit_train_TFD, modelVar, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
-
-### RESULTS: 1) [g0_Delinq_Ave], [InterestRate_Margin_Aggr_Med_4] and [ArrearsToBalance_Aggr_Prop] are highly correlated
-###          2) [slc_acct_pre_lim_perc_imputed_med] and [Undrawn_Amt]
-
-### INVESTIGATE: [g0_Delinq_Ave], [InterestRate_Margin_Aggr_Med_4] and [ArrearsToBalance_Aggr_Prop]
-vars <- c("g0_Delinq_Ave", "InterestRate_Margin_Aggr_Med_4", "ArrearsToBalance_Aggr_Prop")
-
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#                       Variable     KS
-# 3     ArrearsToBalance_Aggr_Prop 0.6502
-# 2 InterestRate_Margin_Aggr_Med_4 0.6468
-# 1                  g0_Delinq_Ave 0.6431
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                           Variable Concordance LR_Statistic
-# 1: InterestRate_Margin_Aggr_Med_4   0.5611257          104
-# 2:                  g0_Delinq_Ave   0.5397435           90
-# 3:     ArrearsToBalance_Aggr_Prop   0.5367480          118
-
-### RESULTS:  [InterestRate_Margin_Aggr_Med_4] has the best concordance, significantly
-###           better than the other two options.
-
-modelVar <- vecChange(modelVar,Remove=c("g0_Delinq_Ave", "ArrearsToBalance_Aggr_Prop"))
-
-### INVESTIGATE: [slc_acct_pre_lim_perc_imputed_med] and [Undrawn_Amt]
-vars <- c("slc_acct_pre_lim_perc_imputed_med", "Undrawn_Amt")
-
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, vars)
-#                           Variable     KS
-# 1 slc_acct_pre_lim_perc_imputed_med 0.6497
-# 2                       Undrawn_Amt 0.6486
-### RESULTS:  Non-conclusive results as KS fluctuate too much.
-
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, vars)
-#                             Variable Concordance LR_Statistic
-# 1:                       Undrawn_Amt   0.6883511         2126
-# 2: slc_acct_pre_lim_perc_imputed_med   0.6360895         2865
-
-### RESULTS:  [Undrawn_Amt] has higher concordance than [slc_acct_pre_lim_perc_imputed_med].
-
-modelVar <- vecChange(modelVar,Remove=c("slc_acct_pre_lim_perc_imputed_med"))
-
-### INVESTIGATE: Explore variables
-
-# Obtain the KS-statistics for goodness of fit tests.
-getKS(datCredit_train_TFD, modelVar$vars)
-#                           Variable     KS
-# 3                   InterestRate_Nom 0.6500
-# 4                InterestRate_Margin 0.6488
-# 5     InterestRate_Margin_Aggr_Med_4 0.6481
-# 7                        Undrawn_Amt 0.6480
-# 8                          AgeToTerm 0.6479
-# 10                NewLoans_Aggr_Prop 0.6473
-# 11               M_RealIncome_Growth 0.6468
-# 9             CuringEvents_Aggr_Prop 0.6466
-# 1  slc_acct_pre_lim_perc_imputed_med 0.6465
-# 6                          Principal 0.6457
-# 2  slc_acct_roll_ever_24_imputed_med 0.6306
+varlist <- vecChange(varlist,Add=data.table(vars=c("M_Repo_Rate_3",
+                                                   "M_Repo_Rate_12"),
+                                            vartypes=c("prc", "prc")))
 
 
-# Obtain the concordance for different variables.
-getConcs(datCredit_valid_TFD, modelVar$vars)
-#                             Variable Concordance LR_Statistic
-# 1: slc_acct_roll_ever_24_imputed_med   0.8588785        18196
-# 2:                       Undrawn_Amt   0.6883511         2126
-# 3: slc_acct_pre_lim_perc_imputed_med   0.6360895         2865
-# 4:                         AgeToTerm   0.6179618           96
-# 5:                         Principal   0.5827355          335
-# 6:    InterestRate_Margin_Aggr_Med_4   0.5611257          104
-# 7:                NewLoans_Aggr_Prop   0.5571220          194
-# 8:                  InterestRate_Nom   0.5497724          165
-# 9:               InterestRate_Margin   0.5452677          174
-# 10:            CuringEvents_Aggr_Prop   0.5359976           82
-# 11:               M_RealIncome_Growth   0.5341913           68
+# ------ 6.4.4 Should lags for [M_RealIncome_Growth] be included in the models?
+vars <- c("M_RealIncome_Growth_1","M_RealIncome_Growth_10","M_RealIncome_Growth_11",
+          "M_RealIncome_Growth_12","M_RealIncome_Growth_2","M_RealIncome_Growth_3",
+          "M_RealIncome_Growth_4","M_RealIncome_Growth_5","M_RealIncome_Growth_6",
+          "M_RealIncome_Growth_7","M_RealIncome_Growth_8","M_RealIncome_Growth_9",
+          "M_RealIncome_Growth")
 
-# ------ Final test of TFD Model
-# Create the formula dynamically
-cox_formula_TFD <- as.formula(paste("Surv(Start, End, Default_Ind) ~", paste(modelVar$vars, collapse = " + ")))
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS:  [M_RealIncome_Growth], [M_RealIncome_Growth_12], [M_RealIncome_Growth_11],
+###           has significant p-values below the 0.001 threshold,
+###           with an improved concordance.
 
-# Fit the Cox model
-cox_TFD <- coxph(cox_formula_TFD, data = datCredit_train_TFD)
-c <- coefficients(cox_TFD)
-c <- data.table(var = names(c), coef = c, expCoef = round(exp(c),2))
-#                             var               coef                                     expCoef
-# 1: slc_acct_roll_ever_24_imputed_med    1.8476538050625                                        6.34
-# 2:                       Undrawn_Amt   -0.0000007237391                                        1.00
-# 3: slc_acct_pre_lim_perc_imputed_med  -54.3095078384995                                        0.00
-# 4:                         AgeToTerm    0.1132746140864                                        1.12
-# 5:                         Principal    0.0000002068101                                        1.00
-# 6:    InterestRate_Margin_Aggr_Med_4 -102.1416180753126                                        0.00
-# 7:                NewLoans_Aggr_Prop   91.5560480545481 5784774777758415903262608220248024662406.00
-# 8:                  InterestRate_Nom    3.4494865119585                                       31.48
-# 9:               InterestRate_Margin   -0.0548564444060                                        0.95
-# 10:            CuringEvents_Aggr_Prop -318.9388154248800                                        0.00
-# 11:               M_RealIncome_Growth   -0.7269168824253                                        0.48
+# Build a model on these lags.
+vars <- c("M_RealIncome_Growth", "M_RealIncome_Growth_12","M_RealIncome_Growth_11")
 
-concordance(cox_TFD)
-# 0.9278
+cox <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+summary(cox); rm(cox)
+### RESULTS: All values have significant p-values.
 
-tdROC(datCredit_valid_TFD, cox_TFD, month_Start = 0, month=3, numDigits=1);gc()
-tdROC(datCredit_valid_TFD, cox_TFD, month_Start = 4, month=12, numDigits=1);gc()
+
+### CONCLUSION: Add [M_RealIncome_Growth_12] and [M_RealIncome_Growth_11] to the model.
+
+varlist <- vecChange(varlist,Add=data.table(vars=c("M_RealIncome_Growth_11",
+                                                   "M_RealIncome_Growth_12"),
+                                            vartypes=c("prc", "prc")))
 
 
 
+# ------ 6.5 What is the predictive performance of the currrent thematic model?
 
-cox.zph(cox_TFD)
+# Initiialize macro-economic thematic variables
+vars <- c("M_DTI_Growth", "M_DTI_Growth_6", "M_Inflation_Growth",
+          "M_Inflation_Growth_3", "M_Inflation_Growth_12", "M_RealIncome_Growth",
+          "M_RealIncome_Growth_11", "M_RealIncome_Growth_12", "M_Repo_Rate",
+          "M_Repo_Rate_3", "M_Repo_Rate_12")
+
+coxMacro_train <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                          paste(vars,collapse=" + "))), id=LoanID,
+                        datCredit_train_TFD)
+summary(coxMacro_train)
+
+### RESULTS: [M_RealIncome_Growth...], [M_Inflation_Growth] and [M_DTI_Growth_6]
+###         does not have significant p-values.
+
+vars <- c("M_DTI_Growth", "M_Repo_Rate", "M_Repo_Rate_3",
+          "M_Repo_Rate_12")
+
+coxMacro_train <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                          paste(vars,collapse=" + "))), id=LoanID,
+                        datCredit_train_TFD)
+summary(coxMacro_train)
+
+### RESULTS: [M_Repo_Rate_12] does not have such significant p-values as the other variables.
+
+vars <- c("M_DTI_Growth", "M_Repo_Rate", "M_Repo_Rate_3")
+
+coxMacro_train <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                          paste(vars,collapse=" + "))), id=LoanID,
+                        datCredit_train_TFD)
+summary(coxMacro_train);rm(coxMacro_train)
+
+### RESULTS: All variables have significant p-values.
+
+#============================================================================================
+### CONCLUSION: [M_DTI_Growth], [M_Repo_Rate] and [M_Repo_Rate_3] should be included in the model variables.
+
+modelVar <- c(modelVar,vars)
+
+#============================================================================================

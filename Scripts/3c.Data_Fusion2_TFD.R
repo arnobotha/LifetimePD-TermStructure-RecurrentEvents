@@ -1,7 +1,8 @@
 # ================================ DATA FUSION - TFD ====================================
-# Subsample the full TFD credit dataset before fusing it with the base macroeconomic
-# variables from the macroeconomic data and then fusing it to the wider "input space" data.
-# Finally, apply feature engineering to create some new variables for the input space.
+# Subsample the full TFD credit dataset before fusing it to the wider "input space" data.
+# Finally, analyse and fix basic deficiencies within the input space, followed by
+# some basic feature engineering towards cultivating a comprehensive input space, suitable
+# for Cox regression modelling.
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Roland Breedt, Bernard Scheepers
@@ -14,7 +15,8 @@
 #   - 2c.Data_Prepare_Credit_Advanced2.R
 #   - 2d.Data_Enrich.R
 #   - 2e.Data_Prepare_Macro.R
-#   - 3a.Data_Transform.R
+#   - 2f.Data_Fusion1.R
+#   - 3a(i).Data_Transform.R
 
 # -- Inputs:
 #   - datInput.raw | raw input space imported in script 1
@@ -356,9 +358,15 @@ cat( ( datCredit_smp[is.na(InterestRate_Margin_imputed_mean), .N] == 0) %?%
 hist(datCredit_smp$InterestRate_Margin_imputed_mean, breaks="FD")
 ### RESULTS: Highly right-skewed distribution (as expected), with mean of -0.007405 vs median of -0.008, bounded by [-0.02, 0.12] for 5%-95% percentiles.
 
+# - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), datCredit_smp)
+
 
 
 # --- 4.3 Binning and factorisation
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), tempPath)
+
 # - Condense the payment group
 datCredit_smp[, pmnt_method_grp := 
                 case_when(slc_pmnt_method == "Debit Order FNB account" | slc_pmnt_method == "Debit Order other bank" ~ "Debit Order",
@@ -404,19 +412,19 @@ hist(datCredit_smp$AgeToTerm, breaks='FD'); skewness(datCredit_smp$AgeToTerm, na
 # Create [BalanceToTerm] variable
 datCredit_smp <- datCredit_smp %>% mutate(BalanceToTerm = Balance/Term)
 # Distributional analysis
-#describe(datCredit_smp$BalanceToTerm) ### AB: describe() stalled the process. disabled for now
+describe(datCredit_smp$BalanceToTerm) ### AB: describe() stalled the process. disabled for now
 ## RESULTS: [BalanceToTerm] has scale [-0.611292;90577.9], with 1531.3769 at 50% quantile and 2919.7919 at 75% quantile and mean of 2081
 hist(datCredit_smp$BalanceToTerm, breaks='FD'); skewness(datCredit_smp$BalanceToTerm, na.rm = T); datCredit_smp[BalanceToTerm==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 3.769301; 3.8% of variables have zero values.
 
 # - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), datCredit_smp)
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1c"), datCredit_smp)
 
 
 
 # --- 4.5 Featuring Engineering: Portfolio-level information
-
-if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), tempPath)
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1c"), tempPath)
 
 # - Pre default delinquency rate
 #Note: Creating an aggregated dataset with which to fuse to the full dataset
@@ -559,6 +567,9 @@ cat( (length(which(results_missingness > 0)) == 0) %?% "SAFE: No missingness, fu
 describe(datCredit_smp$InterestRate_Margin_Aggr_Med); plot(datCredit_smp[!duplicated(Date),InterestRate_Margin_Aggr_Med], type="b") # Only saving the base variable's descriptive statistics
 ### RESULTS: Variable follows a logical trend over time. Has mean -0.008077 and median -0.0085;
 # bounded by [-0.012, -0.0040] for 5%-95% percentiles; no outliers
+
+# - Save final snapshot to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), datCredit_smp)
 
 # Clean up
 rm(dat_IRM_Aggr, dat_IRM_Aggr_Check1, list_merge_variables, results_missingness, output, lags, ColNames,varSLC_Info_Cat, varSLC_Info_Num, varCredit_Info_Cat, varCredit_Info_Num, check.fuse1, check.fuse3, check.fuse4, lookup_IDs,

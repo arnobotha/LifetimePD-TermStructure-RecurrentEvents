@@ -7,10 +7,12 @@
 # -- Script dependencies:
 #   - 0.Setup.R
 #   - 1.Data_Import.R
-#   - 2a.Data_Prepare_Macro.R
-#   - 2b.Data_Prepare_Credit.R
-#   - 2c.Data_Enrich.R
-#   - 2d.Data_Fusion.R
+#   - 2a.Data_Prepare_Credit_Basic.R
+#   - 2b.Data_Prepare_Credit_Advanced.R
+#   - 2c.Data_Prepare_Credit_Advanced2.R
+#   - 2d.Data_Enrich.R
+#   - 2e.Data_Prepare_Macro.R
+#   - 2f.Data_Fusion1.R
 
 # -- Inputs:
 #   - datCredit_real | Prepared from script 2f.
@@ -304,10 +306,3 @@ ggsave(g5, file=paste0(genFigPath, paste0("FULL SET/Cumulative Baseline Hazards 
 
 # - House keeping
 rm(basehaz, datAggr5, g5)
-
-
-
-
-
-
-

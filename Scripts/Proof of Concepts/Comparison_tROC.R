@@ -119,10 +119,10 @@ plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
 
 # -- Save plots
 dpi <- 150 # need to decrease size for risk tables' text
-ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"/SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"Proof of Concepts/CoxExample1_SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 dpi <- 180 # reset
-ggsave(gsurv1c_d, file=paste0(genFigPath,"/SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+ggsave(gsurv1c_d, file=paste0(genFigPath,"Proof of Concepts/CoxExample1_SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 
@@ -257,7 +257,7 @@ tROC1$AUC; tROC1$ROC_graph
 # NOTE2: Enforces the ID-field.
 tROC2 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
               fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample2_cgd_dependence", genFigPath=genFigPath)
+              graphName="coxExample1_cgd_dependence", genFigPath=genFigPath)
 tROC2$AUC; tROC2$ROC_graph
 ### RESULTS: AUC: 59.36% up to t
 
@@ -268,7 +268,7 @@ tROC2$AUC; tROC2$ROC_graph
 # NOTE2: Enforces the ID-field.
 tROC2.multi <- tROC.multi(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
               fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample2_cgd_dependence", genFigPath=genFigPath, numThreads=6)
+              graphName="coxExample1_cgd_dependence", genFigPath=genFigPath, numThreads=6)
 tROC2.multi$AUC; tROC2.multi$ROC_graph
 ### RESULTS: AUC: 59.36% up to t
 

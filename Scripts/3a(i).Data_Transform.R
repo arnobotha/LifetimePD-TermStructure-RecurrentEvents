@@ -22,6 +22,7 @@
 #   - 2c.Data_Prepare_Credit_Advanced2.R
 #   - 2d.Data_Enrich.R
 #   - 2e.Data_Prepare_Macro.R
+#   - 2f.Data_Fusion1.R
 
 # -- Inputs:
 #   - datCredit_real | Prepared from script 2b.

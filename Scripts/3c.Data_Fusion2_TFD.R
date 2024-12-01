@@ -1,4 +1,4 @@
-# ================================ DATA FUSION - TFD=====================================
+# ================================ DATA FUSION - TFD ====================================
 # Subsample the full TFD credit dataset before fusing it with the base macroeconomic
 # variables from the macroeconomic data and then fusing it to the wider "input space" data.
 # Finally, apply feature engineering to create some new variables for the input space.
@@ -9,8 +9,12 @@
 # -- Script dependencies:
 #   - 0.Setup.R
 #   - 1.Data_Import.R
-#   - 3b.Data_Enrich2
-#   - 2a.Data_Prepare_Macro
+#   - 2a.Data_Prepare_Credit_Basic.R
+#   - 2b.Data_Prepare_Credit_Advanced.R
+#   - 2c.Data_Prepare_Credit_Advanced2.R
+#   - 2d.Data_Enrich.R
+#   - 2e.Data_Prepare_Macro.R
+#   - 3a.Data_Transform.R
 
 # -- Inputs:
 #   - datInput.raw | raw input space imported in script 1
@@ -26,21 +30,21 @@
 # NOTE: This script predominantly comes from another project (Kasmeer).
 # =======================================================================================
 
+
+
+
+
 # ------ 1. Preliminaries
 # --- 1.1 Load in Dataset
 if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath)
 
+
+
+
 # ------- 2. Subsampling
-# ------ 2.1 Time to First Default
-# --- 2.1 Preliminaries
 
-# --- Some feature engineering
-# - Creating a variable for the first observation of a loan (used as stratification variable)
-datCredit_TFD[, Date_First := Date[1], by=LoanID] 
-# [SANITY CHECK] Checking if the variable was created correctly
-(check.1 <- datCredit_TFD[is.na(Date_First),.N] == 0) # Should be TRUE
-cat(check.1 %?% 'SAFE: variable [Date_First] was successfully created.\n' %:% 'WARNING: variable [Date_First] was not successfully created!\n')
 
+# --- 2.1 Preliminaries and parameter definitions
 
 # - Field Names
 # Required field names
@@ -135,32 +139,7 @@ if (all(!is.na(stratifiers))){ # - Conditional loop for strata
 
 
 
-# ------- 3. Fusing credit with macroeconomic information
-# - Loan in datasets
-if (!exists('datMV')) unpack.ffdf(paste0(genPath,"datMV"), tempPath)
-
-# - Find intersection between fields in the credit dataset and the macroeconomic dataset
-(overlap_flds <- intersect(colnames(datCredit_smp), colnames(datMV))) # no overlapping fields except Date
-
-# - Merge on Date by performing a left-join | Only subsetting the fundamental/ base macroeconomic variables; the lags therof are fused in script 4a.Data_Fusion2.
-datCredit_smp <- merge(datCredit_smp, datMV, by="Date", all.x=T); gc()
-
-# - Validate merging success by checking for missingness (should be zero)
-list_merge_variables <- list(colnames(datMV))
-results_missingness <- list()
-for (i in 1:length(list_merge_variables)){
-  output <- sum(is.na(datCredit_smp$list_merge_variables[i]))
-  results_missingness[[i]] <- output
-}
-length(which(results_missingness > 0)) == 0 # confirmed, no missing values
-
-# - Clean-up
-rm(datMV, list_merge_variables, results_missingness); gc()
-
-
-
-
-# ------- 4. Fusing credit dataset with additional input fields
+# ------- 3. Fusing credit dataset with additional input fields
 # - Confirm if the input space data is loaded into memory
 if (!exists('datInput.raw')) unpack.ffdf(paste0(genPath,"creditdata_input1"), tempPath)
 
@@ -199,19 +178,18 @@ NROW(data_grain_check_merge <- datCredit_smp[, list(Freq = .N), by=list(LoanID, 
 # success, the data grain check is passed
 
 # - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_smp_a_TFD"), datCredit_smp)
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), datCredit_smp)
 # - Clean-up
 rm(datInput.raw, data_grain_check, data_grain_check_merge); gc()
 
 
 
 
-# ------- 5. Feature engineering for modelling purposes
-# --- 5.1 Confirm if the main dataset is loaded into memory
-if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_smp_a_TFD"), tempPath)
+# ------- 4. Feature engineering for modelling purposes
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), tempPath)
 
 
-# --- 5.2 Missing value diagnostics & treatments
+# --- 4.1 Missing value diagnostics & treatments
 # - Diagnostics of missing values in the additional engineered "SLC" input space | If missingness > 50% missing remove variable
 # Categorical variables
 table(is.na(datCredit_smp$slc_pmnt_method)) %>% prop.table()              # missingness: 11.84% - keep variable
@@ -296,14 +274,14 @@ describe(datCredit_smp$value_ind_slc_acct_prepaid_perc_dir_12)
 ### RESTULS: Binning successful, no missing values in [value_ind_slc_acct_prepaid_perc_dir_12]
 
 # [slc_acct_prepaid_perc_dir_12] - Missing value imputation
-describe(datCredit_smp$slc_acct_prepaid_perc_dir_12)
+# describe(datCredit_smp$slc_acct_prepaid_perc_dir_12) ### AB: describe() stalled the process. disabled for now
 ### RESULTS:    [slc_acct_prepaid_perc_dir_12] has scale [0;103696000000000] and 746130 observations have missing values; with 0 at 50% quantile and 0.2061 at 75% quantile and mean of 19686957
 ### CONCLUSION: Median imputation proceeds from the distribution of values which constitutes performance spells only (all associated values from default spells are excluded)
 # [TREATMENT] Median imputation for missing values
 datCredit_smp[, slc_acct_prepaid_perc_dir_12_imputed_med := 
                 ifelse(is.na(slc_acct_prepaid_perc_dir_12) | slc_acct_prepaid_perc_dir_12 == "", 
                        median(datCredit_smp[!is.na(PerfSpell_Key) & !(is.na(slc_acct_prepaid_perc_dir_12) | slc_acct_prepaid_perc_dir_12 == ""), slc_acct_prepaid_perc_dir_12], na.rm=TRUE), slc_acct_prepaid_perc_dir_12)]
-describe(datCredit_smp$slc_acct_prepaid_perc_dir_12_imputed_med)
+#describe(datCredit_smp$slc_acct_prepaid_perc_dir_12_imputed_med) ### AB: describe() stalled the process. disabled for now
 ### RESULTS: [slc_acct_prepaid_perc_dir_12_imputed] has scale [0;103696000000000] and 0 observations have missing values; with 0 at 50% quantile and 0.0002421 at 75% quantile and mean of 17355944
 hist(datCredit_smp$slc_acct_prepaid_perc_dir_12_imputed_med, breaks=500); skewness(datCredit_smp$slc_acct_prepaid_perc_dir_12_imputed_med, na.rm = T); datCredit_smp[slc_acct_prepaid_perc_dir_12_imputed_med==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 2509.185; 74.8% of variables have zero values.
@@ -336,7 +314,8 @@ suppressWarnings( datCredit_smp[, `:=`(value_ind_slc_days_excess = NULL, slc_day
                                         value_ind_ccm_worst_arrears_24m = NULL, ccm_worst_arrears_24m = NULL)]); gc()
 
 
-# --- 5.4 Analysis and Treatments of Numeric variables
+
+# --- 4.2 Analysis and Treatments of Numeric variables
 # - [Principal]
 describe(datCredit_smp$Principal)
 ### RESULTS: [Principal] has scale [0.17;22370000], with 512428    at 50% quantile and 850000 at 75% quantile and mean of 652573.
@@ -360,7 +339,8 @@ hist(datCredit_smp$Balance, breaks = 'FD'); skewness(datCredit_smp$Balance, na.r
 datCredit_smp <- datCredit_smp %>% mutate(InterestRate_Margin = round(InterestRate_Nom - (M_Repo_Rate+0.035), digits=4)) %>%
   relocate(InterestRate_Margin, .after=InterestRate_Nom)
 # Distributional analysis
-describe(datCredit_smp$InterestRate_Margin); hist(datCredit_smp$InterestRate_Margin, breaks="FD")
+#describe(datCredit_smp$InterestRate_Margin); ### AB: describe() stalled the process. disabled for now
+hist(datCredit_smp$InterestRate_Margin, breaks="FD")
 datCredit_smp[is.na(InterestRate_Margin), .N] / datCredit_smp[,.N] * 100
 ### RESULTS:    Highly right-skewed distribution (as expected), with mean of -0.007401 vs median of -0.008, 
 ###             bounded by [-0.02, 0.012] for 5%-95% percentiles; some negative outliers distort shape of distribution
@@ -372,11 +352,13 @@ datCredit_smp[, InterestRate_Margin_imputed_mean :=
 cat( ( datCredit_smp[is.na(InterestRate_Margin_imputed_mean), .N] == 0) %?% 
        'SAFE: Treatment successful for [InterestRate_Margin_imputed_mean].\n' %:% 
        'ERROR: Treatment failed for [InterestRate_Margin_imputed_mean] \n' )
-describe(datCredit_smp$InterestRate_Margin_imputed_mean); hist(datCredit_smp$InterestRate_Margin_imputed_mean, breaks="FD")
+#describe(datCredit_smp$InterestRate_Margin_imputed_mean); ### AB: describe() stalled the process. disabled for now
+hist(datCredit_smp$InterestRate_Margin_imputed_mean, breaks="FD")
 ### RESULTS: Highly right-skewed distribution (as expected), with mean of -0.007405 vs median of -0.008, bounded by [-0.02, 0.12] for 5%-95% percentiles.
 
 
-# --- 5.5 Binning and factorisation
+
+# --- 4.3 Binning and factorisation
 # - Condense the payment group
 datCredit_smp[, pmnt_method_grp := 
                 case_when(slc_pmnt_method == "Debit Order FNB account" | slc_pmnt_method == "Debit Order other bank" ~ "Debit Order",
@@ -398,14 +380,6 @@ barplot(table(datCredit_smp$PerfSpellResol_Type_Hist))
 datCredit_smp[,PerfSpellResol_Type_Hist:=factor(PerfSpellResol_Type_Hist)]
 ### RESULTS: No further treatment necessary
 
-# - [LN_TPE]
-describe(datCredit_smp$LN_TPE)
-datCredit_smp$LN_TPE %>% table() %>% prop.table()
-### RESULTS: [LN_TPE] has 2 levels and no missing values. 89% of observations are in level 'CHL' and 11% are in level 'WHL'
-# [TREATMENT] Apply factor transformation
-datCredit_smp[,LN_TPE:=factor(LN_TPE)]
-### RESULTS: ~ No further treatment necessary
-
 # - Factorised [g0_Delinq] variable
 datCredit_smp[,g0_Delinq_fac := as.factor(g0_Delinq)]
 describe(datCredit_smp$g0_Delinq_fac)
@@ -417,11 +391,11 @@ describe(datCredit_smp$InterestRate_Margin_imputed_bin)
 
 
 
-# --- 5.6 Feature Engineering: ratio-type variables (Period-level)
+# --- 4.4 Feature Engineering: ratio-type variables (Period-level)
 # - [AgeToTerm]
 # Create [AgeToTerm] variable
 datCredit_smp <- datCredit_smp %>% mutate(AgeToTerm = Age_Adj/Term)
-describe(datCredit_smp$AgeToTerm)
+#describe(datCredit_smp$AgeToTerm) ### AB: describe() stalled the process. disabled for now
 ### RESULTS: [AgeToTerm] has scale [0.00185185 ;58.3333], with 0.2875 at 50% quantile and 0.5333 at 75% quantile and mean of 0.3621
 hist(datCredit_smp$AgeToTerm, breaks='FD'); skewness(datCredit_smp$AgeToTerm, na.rm = T); datCredit_smp[AgeToTerm==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 16.15954; 0% of variables have zero values.
@@ -430,13 +404,19 @@ hist(datCredit_smp$AgeToTerm, breaks='FD'); skewness(datCredit_smp$AgeToTerm, na
 # Create [BalanceToTerm] variable
 datCredit_smp <- datCredit_smp %>% mutate(BalanceToTerm = Balance/Term)
 # Distributional analysis
-describe(datCredit_smp$BalanceToTerm)
+#describe(datCredit_smp$BalanceToTerm) ### AB: describe() stalled the process. disabled for now
 ## RESULTS: [BalanceToTerm] has scale [-0.611292;90577.9], with 1531.3769 at 50% quantile and 2919.7919 at 75% quantile and mean of 2081
 hist(datCredit_smp$BalanceToTerm, breaks='FD'); skewness(datCredit_smp$BalanceToTerm, na.rm = T); datCredit_smp[BalanceToTerm==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 3.769301; 3.8% of variables have zero values.
 
+# - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), datCredit_smp)
 
-# --- 5.7. Featuring Engineering: Portfolio-level information
+
+
+# --- 4.5 Featuring Engineering: Portfolio-level information
+
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), tempPath)
 
 # - Pre default delinquency rate
 #Note: Creating an aggregated dataset with which to fuse to the full dataset
@@ -454,10 +434,6 @@ for (i in seq_along(lags)){ # Looping over the specified lags and applying each 
 cat((anyNA(dat_g0_Delinq_Aggr)) %?% 'WARNING: One of the new [g0_Delinq_Any_Aggr_Prop] features has missing values. \n' %:%
       'SAFE: New [g0_Delinq_Any_Aggr_Prop] features created sucessfully without any missing values. \n')
 ### RESULTS: [g0_Delinq_Any_Aggr_Prop] variables created successfully without any missingness
-
-pack.ffdf(paste0(genPath,"creditdata_final_smp_test_TFD"), datCredit_smp)
-if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_smp_test_TFD"), tempPath)
-
 # Fusing the aggregated variable with its various lags to the full dataset
 datCredit_smp <- merge(datCredit_smp, dat_g0_Delinq_Aggr, by="Date", all.x=T)
 # [SANITY CHECK] Check new feature for illogical values
@@ -481,7 +457,8 @@ datCredit_smp[,g0_Delinq_Ave:=mean(ifelse(DefaultStatus1==0,g0_Delinq,0), na.rm=
 cat( (sum(datCredit_smp[, sum(is.na(g0_Delinq_Ave)), by=Date][,2])==0) %?% 
        'SAFE: New feature [g0_Delinq_Ave] has logical values.\n' %:% 
        'WARNING: New feature [g0_Delinq_Ave] has illogical values \n' )
-describe(datCredit_smp$g0_Delinq_Ave); hist(datCredit_smp$g0_Delinq_Ave, breaks="FD")
+#describe(datCredit_smp$g0_Delinq_Ave);  ### AB: describe() stalled the process. disabled for now
+hist(datCredit_smp$g0_Delinq_Ave, breaks="FD")
 ### RESULTS: Follows a logical trend, with mean of 0.06397 vs median of 0.05269,
 # bounded by [0.04357, 0.12998] for 5%-95% percentiles; no outliers
 
@@ -503,7 +480,8 @@ cat( (sum(datCredit_smp[, sum(is.na(InstalmentToBalance_Aggr_Prop)), by=Date][,2
        'SAFE: New feature [InstalmentToBalance_Aggr_Prop] has logical values.\n' %:% 
        'WARNING: New feature [InstalmentToBalance_Aggr_Prop] has illogical values \n' )
 describe(datCredit_smp$InstalmentToBalance_Aggr_Prop); plot(unique(datCredit_smp$Date),unique(datCredit_smp$InstalmentToBalance_Aggr_Prop), type="b")
-describe(datCredit_smp$ArrearsToBalance_Aggr_Prop); plot(unique(datCredit_smp$ArrearsToBalance_Aggr_Prop), type="b")
+#describe(datCredit_smp$ArrearsToBalance_Aggr_Prop); ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$ArrearsToBalance_Aggr_Prop), type="b")
 ### RESULTS [InstalmentToBalance_Aggr_Prop]: Variable has high volatility around 2010 as seen through the graphical plot. Mean of 0.01228 vs median of 0.01207,
 #            bounded by [0.01088, 0.01422] for 5%-95% percentiles; no outliers
 #                   [ArrearsToBalance_Aggr_Prop]: Variable has  mean of 0.0006134 vs median of 0.0004895,
@@ -515,7 +493,8 @@ datCredit_smp[, CuringEvents_Aggr_Prop := sum(PerfSpell_Counter==1 & PerfSpell_N
 cat( (sum(datCredit_smp[, sum(is.na(CuringEvents_Aggr_Prop)), by=Date][,2])==0) %?% 
        'SAFE: New feature [CuringEvents_Aggr_Prop] has logical values.\n' %:% 
        'WARNING: New feature [CuringEvents_Aggr_Prop] has illogical values \n' )
-describe(datCredit_smp$CuringEvents_Aggr_Prop); plot(unique(datCredit_smp$CuringEvents_Aggr_Prop), type="b")
+#describe(datCredit_smp$CuringEvents_Aggr_Prop); ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$CuringEvents_Aggr_Prop), type="b")
 ### RESULTS: Variable has mean of 0.001373 vs median of 0.0012615,
 # bounded by [0.0006567, 0.0026194] for 5%-95% percentiles; no outliers
 
@@ -587,8 +566,8 @@ rm(dat_IRM_Aggr, dat_IRM_Aggr_Check1, list_merge_variables, results_missingness,
 
 
 
-# ------ 6. Implementing a simple (loan-level) resampling scheme
-# --- 6.1 Apply resampling
+# ------ 5. Implementing a simple (loan-level) resampling scheme
+# --- 5.1 Apply resampling
 # - Set seed
 set.seed(1, kind="Mersenne-Twister")
 
@@ -621,7 +600,7 @@ ifelse(check.3, print('SAFE: All associated loan observations are clustered toge
 suppressWarnings(rm(smp_perc, dat_keys, dat_smp_keys, dat_train_keys, check.2, check.3, datCredit_smp_old_n, datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp))
 
 
-# --- 6.2 Saving the cross-validation scheme
+# --- 5.2 Saving the cross-validation scheme
 # - Training dataset
 pack.ffdf(paste0(genPath,"creditdata_train_TFD"), datCredit_train_TFD)
 
@@ -629,6 +608,6 @@ pack.ffdf(paste0(genPath,"creditdata_train_TFD"), datCredit_train_TFD)
 pack.ffdf(paste0(genPath,"creditdata_valid_TFD"), datCredit_valid_TFD)
 
 
-# --- 6.3 Clean up
+# --- 5.3 Clean up
 suppressWarnings(rm(dat_keys_smp_perf, dat_keys_smp_perf,  dat_train_keys_perf, dat_train_keys_def, datCredit_train_perf, datCredit_train_def,  datCredit_valid_perf, datCredit_valid_def,
                     check.4_a, check.4_b, check.4_c, check.5_a, check.5_b, datCredit_smp, datStrata_smp_min, datCredit_train_TFD, datCredit_valid_TFD));gc()

@@ -548,7 +548,7 @@ coxDelinq_valid<- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4 + g0_Delinq
                          data=datCredit_valid_TFD)
 
 # (0,3) (4,12) (13,24) (0,12) (0,36)
-timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
+tROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
         fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
         fld_EndTime="End", numDigits=0, Graph=FALSE)
 # AUC: 0.9760028

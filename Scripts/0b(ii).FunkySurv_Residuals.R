@@ -132,8 +132,8 @@ if (Test){
 CoxSnell_adjusted <- function(cox, dat){
   ### AB: This [Removed]-field seems hard-coded. I could not run GoF_CoxSnell_KS(coxExample) ...
   #       Though I suppose it is because you do not yet know how to program dynamically for given field names
-  #       I will therefore move to the timedROC-function, make it dynamically programmable and trust that you
-  #       will retro-apply the logic to this function, as well as possibly to GoF_CoxSnell_KS().
+  # UPDATE: It seems we only want to operate on the last row within a spell. This should rather be given to the function,
+  # instead of subsetting within the function, thereby generalising the function.
   cs <-  dat[Removed==1,Default_Ind] - 
     residuals(cox,type="martingale",collapse=dat$LoanID) +
     log(2)*(1 - dat[Removed==1,Default_Ind]) # Add log(2) to all observations that have a 0.

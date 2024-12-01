@@ -27,10 +27,10 @@ if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train
 
 # Subset the data set to select specific columns
 dat <- datCredit_train_TFD %>% subset(select=c(Date, LoanID, PerfSpell_Max_Date, Start, End, Default_Ind, BalanceToTerm))
-dat[,Removed := ifelse(Date==PerfSpell_Max_Date,1,0)] # Create an indicator vaiable for detecting the end of a performance spell
+dat[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)] # Create an indicator vaiable for detecting the end of a performance spell
 
 # Initialize variables
-valid <- dat$Removed==1 # Binary vector to index the end observation of each performance spell.
+valid <- dat$PerfSpell_Exit_Ind==1 # Binary vector to index the end observation of each performance spell.
 cox <- coxph(Surv(Start, End, Default_Ind) ~ BalanceToTerm, data = datCredit_train_TFD) # Build a cox model based on a single variable
 rexp <- rexp(nrow(dat),1);hist(rexp,breaks="FD") # Evaluate the unit exponential distribution of Cox-Snell residuals
 
@@ -75,7 +75,7 @@ rm(datGraph.1,g.1,cs.1,KS.1); gc()
 # observations that contain risk events, i.e. end of each performance spell.
 
 # Cox-Snell residuals
-cs.2 <- dat[Removed==1,Default_Ind] - residuals(cox,type="martingale",collapse=dat$LoanID) # Collapse residuals to only the observations at the end of each performance spell.
+cs.2 <- dat[PerfSpell_Exit_Ind==1,Default_Ind] - residuals(cox,type="martingale",collapse=dat$LoanID) # Collapse residuals to only the observations at the end of each performance spell.
 mean(cs.2)
 ### Result: 0.1474528
 ### Conclusion: Slightly improved mean, i.e. it is higher than previous. Therefore influence of censored Cox-Snell residuals is still severe.
@@ -144,7 +144,7 @@ rm(datGraph.3,g.3,cs.3,KS.3); gc()
 # It only includes observations that contain risk events, i.e. end of each performance spell.
 
 # Cox-Snell residuals
-cs.4 <- dat[Removed==1,Default_Ind] - residuals(cox,type="martingale",collapse=dat$LoanID) + log(2)*(1 - dat[Removed==1,Default_Ind])
+cs.4 <- dat[PerfSpell_Exit_Ind==1,Default_Ind] - residuals(cox,type="martingale",collapse=dat$LoanID) + log(2)*(1 - dat[PerfSpell_Exit_Ind==1,Default_Ind])
 mean(cs.4)
 ### Result: 0.7383935
 ### Conclusion: Reduced censoring rate considerably.

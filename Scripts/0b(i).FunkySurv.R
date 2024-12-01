@@ -1,8 +1,8 @@
 # ============================== SURVIVAL FUNCTIONS ==============================
-# Defining custom functions used across various projects
+# Defining bespoke customs relating to various generic aspects of survival analysis
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
-# SCRIPT AUTHOR(S): Marcel Muller
+# SCRIPT AUTHOR(S): Marcel Muller, Dr Arno Botha
 
 # VERSION: 1.0 (July-2023)
 # DESCRIPTION: 
@@ -10,6 +10,20 @@
 # that are used elsewhere in this project or, indeed, used across other projects.
 # Functions are grouped thematically.
 # ================================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+### AB: Given the work of Bernard, I'm no longer sure of the utility of the below.
 
 # --- function to compute the (unscaled) Schoenfeld residuals for a Cox PH model
 #   1) Schoenfeld residuals are computed for each specified variable in the training dataset
@@ -247,6 +261,11 @@ risksetROC_helper <- function(dat_explain, Input_Names = c("TimeInPerfSpell", "D
 }
 
 
+### AB [2024-11-28]: I suggest refactoring this swiss army knife into constituent parts, e.g.,
+# residuals on their own, prediction accuracy on its own (Harrel's C), and definitely separate from
+# time-dependent ROC-analysis. These topics may have some overlap, but they are distinct enough (in my view)
+# to stand on their own
+
 # --- function for computing various assessment measures for a given Cox Proportional Hazards model.
 #   1) A test can be conducted for proportional hazards and the Schoenfeld residuals for each covariate is plotted.
 #   2) The VIF can be computed for each covariate.
@@ -370,6 +389,7 @@ swiss_model <- function(dat_train, dat_explain, model, input.l = NULL, PH_assump
 
 
 
+### AB [2024-11-28]: Similarly, I am unsure of this part's utility
 
 # --- function for identifying FALSE default spells in a given dataset
 # Input: dat_given - The dataset in which false default spells should be identified

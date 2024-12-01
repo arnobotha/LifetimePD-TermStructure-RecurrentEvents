@@ -52,7 +52,7 @@ require(car)
 require(survivalROC) # for time-dependent ROC-analysis from Heagerty et al.
 #require(survAUC) # for time-dependent ROC-analysis (alternative from Potapov et al.)
 #require(tdROC) # for time-dependent ROC-analysis ([outdated?] alternative from Li et al.)
-require(timeROC) # for time-dependent ROC-analysis from Blanche2013([outdated?] alternative from Blanche)
+require(timeROC) # for time-dependent ROC-analysis from Blanche2013 (disavowed in script 0b(iii)). DO NOT USE IN CREDIT DOMAIN
 require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method from Heagerty, P.J., Zheng Y. (2005))
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
 require(discSurv)
@@ -133,4 +133,4 @@ source(paste0(path_cust,'0b(i).FunkySurv.R'))
 source(paste0(path_cust,'0b(ii).FunkySurv_Residuals.R'))
 
 # - Custom survival-related functions - time-dependent ROC-analyses and unit tests
-source(paste0(path_cust,'0b(iii).FunkySurv_timedROC.R'))
+source(paste0(path_cust,'0b(iii).FunkySurv_tROCkit.R'))

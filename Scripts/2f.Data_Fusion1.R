@@ -45,6 +45,10 @@ ptm <- proc.time() # for runtime calculations (ignore)
 if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final3"), tempPath)
 if (!exists('datMV')) unpack.ffdf(paste0(genPath,"datMV"), tempPath)
 if (!exists('datExclusions')) unpack.ffdf(paste0(genObjPath,"Exclusions-TruEnd"), tempPath)
+if (!exists('maxDate_observed') | !exists('minDate_observed')){
+  (maxDate_observed <- max(datCredit_real$Date, na.rm=T) )
+  (minDate_observed <- rollback(min(datCredit_real$Date, na.rm=T), roll_to_first = T) )
+}
 
 # - Population-level prevalence rate and record tally before any Exclusions
 # NOTE: choose default prior probability as measure for evaluating impact

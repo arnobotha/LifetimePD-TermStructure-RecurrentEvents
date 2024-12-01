@@ -135,7 +135,7 @@ CoxSnell_adjusted <- function(cox, dat){
   # UPDATE: It seems we only want to operate on the last row within a spell. This should rather be given to the function,
   # instead of subsetting within the function, thereby generalising the function.
   cs <-  dat[Removed==1,Default_Ind] - 
-    residuals(cox,type="martingale",collapse=dat$LoanID) +
+    residuals(cox,type="martingale",collapse=dat$PerfSpell_Key) +
     log(2)*(1 - dat[Removed==1,Default_Ind]) # Add log(2) to all observations that have a 0.
   return(cs)
 }

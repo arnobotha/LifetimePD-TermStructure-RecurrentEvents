@@ -86,11 +86,17 @@ datCredit_real$PerfSpellResol_Type_Hist2 %>% table() %>% prop.table()
 
 
 # --- 3.1a Time to First Default time definition
+# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
+# would like the validation set to include multiple spells in order to validate certain assumptions.
+
+# Dplyr-actions include in order the following tasks:
+# 1) Rename and adjust start and ending times for survival modelling
+# 2) Subset for performance spells only
 datCredit_TFD <- datCredit_real %>% mutate( Start = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter-1), # Records the start of time interval
                                             End = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter), # Records the end of time interval
                                             Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
                                                                   ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                            filter(!is.na(PerfSpell_Num)) # Filter for only the first performance spells
+                                            filter(!is.na(PerfSpell_Num)) # Filter for only performance spells
 # Sanity check - Should be TRUE
 datCredit_TFD[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
@@ -101,10 +107,13 @@ rm(datCredit_TFD); gc()
 
 
 # --- 3.1b Time to First Default time definition | Alternate version from AB
+# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
+# would like the validation set to include multiple spells in order to validate certain assumptions.
+
 # - Dplyr-actions include in order the following tasks:
-# 1) Subset only for performance spells, and for the first performing spell
+# 1) Subset for performance spells only
 # 2) Rename and adjust start and ending times for survival modelling
-datCredit_TFD2 <- subset(datCredit_real, !is.na(PerfSpell_Num) & PerfSpell_Num == 1) %>% 
+datCredit_TFD2 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>% 
   mutate(Start = PerfSpell_Counter-1, End = PerfSpell_Counter,
          Default_Ind = DefaultStatus1)
 ### AB: Using the "_Counter" variety is incorrect since it refers simply to the row index within a spell, i.e.,
@@ -123,10 +132,13 @@ rm(datCredit_TFD2); gc()
 
 
 # --- 3.1c Time to First Default time definition | Alternate and corrected version from AB
+# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
+# would like the validation set to include multiple spells in order to validate certain assumptions.
+
 # - Dplyr-actions include in order the following tasks:
-# 1) Subset only for performance spells, and for the first performing spell
+# 1) Subset for performance spells only
 # 2) Rename and adjust start and ending times for survival modelling
-datCredit_TFD3 <- subset(datCredit_real, !is.na(PerfSpell_Num) & PerfSpell_Num == 1) %>% 
+datCredit_TFD3 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>% 
   mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
          Default_Ind = DefaultStatus1)
 datCredit_TFD3[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully

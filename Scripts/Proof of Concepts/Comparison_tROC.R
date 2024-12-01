@@ -119,10 +119,10 @@ plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
 
 # -- Save plots
 dpi <- 150 # need to decrease size for risk tables' text
-ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"Proof of Concepts/CoxExample1_SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 dpi <- 180 # reset
-ggsave(gsurv1c_d, file=paste0(genFigPath,"Proof of Concepts/CoxExample1_SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+ggsave(gsurv1c_d, file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 
@@ -241,43 +241,67 @@ risksetROC::risksetROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start,
 # ----- Package: tROCkit() | custom "package"/function
 # Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator
 
-# - Calculate AUC up to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t)
-# NOTE2: Foregoes the ID-field for comparative purposes with survivalROC()
+# - Calculate AUC up to given prediction time for correctly-fitted Cox model
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
 tROC1 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
               fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_independence", genFigPath=genFigPath)
+              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
 tROC1$AUC; tROC1$ROC_graph
 ### RESULTS: AUC: 57.69% up to t, which is very close to that of survivalROC
 # In fact, we discovered a small indexing error in survivalROC() which explain this small discrepancy exactly
 
 
-# - Calculate AUC up to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t)
-# NOTE2: Enforces the ID-field.
+# - Calculate AUC up to given prediction time for correctly-fitted Cox model, 
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 tROC2 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
               fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_dependence", genFigPath=genFigPath)
+              graphName="coxExample1_cgd_dependence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
 tROC2$AUC; tROC2$ROC_graph
 ### RESULTS: AUC: 59.36% up to t
 
 
-# - Multi-threaded calculation of the  AUC up to given prediction time for correctly-fitted Cox model, 
-# assuming independence | NNE-kernel for S(t)
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t)
-# NOTE2: Enforces the ID-field.
+# - Multi-threaded calculation of the AUC up to given prediction time for correctly-fitted Cox model, 
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 tROC2.multi <- tROC.multi(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
               fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_dependence", genFigPath=genFigPath, numThreads=6)
+              graphName="coxExample1_cgd_dependence", genFigPath=paste0(genFigPath, "Proof of Concepts/"), numThreads=6)
 tROC2.multi$AUC; tROC2.multi$ROC_graph
-### RESULTS: AUC: 59.36% up to t
+### RESULTS: AUC: 59.36% up to t. Same AUC, validated as in tROC2.
+
+
+# - Calculate AUC up from given start to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
+# NOTE3: For comparison with risksetsROC, in mimicking the ID-approach roughly
+tROC3 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
+              fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
+tROC3$AUC; tROC3$ROC_graph
+### RESULTS: AUC: 95.48% at t. Closest to the "LocalCox"-method of risksetsROC, which yielded 94.16%
+
+
+# - Calculate AUC up from given start to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
+# NOTE3: For comparison with tROC2, in mimicking the ID-approach roughly
+tROC4 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
+              fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
+tROC4$AUC; tROC4$ROC_graph
+### RESULTS: AUC: 98.39% at t.
+
 
 
 
 ### AB: Need to rewire the fields here, though I need an actual dataset to do that.
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 tROC(datGiven=datCredit_valid_TFD, cox=coxDelinq, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
      fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-     graphName="DefaultSurvModel-Cox", genFigPath=paste0(genFigPath, "TFD/tdROC/"))
+     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
 
 
 

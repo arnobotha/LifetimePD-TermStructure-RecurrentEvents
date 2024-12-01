@@ -48,7 +48,7 @@ if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD")
 
 # --- 2.1 Preliminaries and parameter definitions
 
-# - Field Names
+# - Field Names and other parameters
 # Required field names
 resolPerf_targetVar <- "Defaulted" # Reference level in the performance spell resolution type (as specified by [resolPerf_start]) for the target variable
 clusVar <- "LoanID"
@@ -67,14 +67,14 @@ resolPerf <- "PerfSpellResol_Type_Hist2" # Field name of performance spell resol
 resolPerf_stop <- "PerfSpellResol_Type_Hist3" # Field name for performance spell resolution rate; specific for the stopping time cohort | Assign [resolPerf] if not interested in controlling the resolution rate facet for stop dates
 resolPerf_stop2 <- "Defaulted" # Name of the main resolution type (typically default) used to obtain a single facet (this level needs to be within the resolPerf_stop variable) | Set to NA if not interested in creating additional facets for the performance spells using stopping time
 
-# - Implied sampling fraction for downsampling step
+# - Implied sampling fraction for the downsampling step
 smp_perc <- smp_size/length(unique(datCredit_TFD[,get(clusVar)]))
 
 # - Minimum strata requirements
 minStrata_size <- 0 # Minimum strata size specified for subsample
 
 
-# --- 2.2 Subsampling (simple clustered )
+# --- 2.2 Subsampling (simple clustered)
 # - Set seed
 set.seed(1, kind="Mersenne-Twister")
 # - Conditional loop for stratifiers
@@ -84,11 +84,13 @@ if (all(is.na(stratifiers))){ # No stratifiers
   # Use simple random sampling to select the loan IDs that ought to be in the subsampled dataset
   dat_smp_keys <- dat_keys %>% slice_sample(prop=smp_perc) %>% as.data.table()
 } else { # Stratifiers
-  # Get unique loan account IDs from the full dataset
+  # - Get unique loan account IDs from the full dataset
   dat_keys <- unique(datCredit_TFD[, mget(c(clusVar, stratifiers))])
-  # Use simple random sampling with the stratifiers to select the loan IDs that ought to be in the subsampled dataset
+  # - Use simple random sampling with the stratifiers to select the loan IDs that ought to be in the subsampled dataset
   dat_smp_keys <- dat_keys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_perc) %>% as.data.table()
 }
+# - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), dat_smp_keys)
 
 # - Obtain the associated loan records as to create the subsampled dataset
 datCredit_smp <- copy(datCredit_TFD[get(clusVar) %in% dat_smp_keys[, get(clusVar),]])
@@ -412,7 +414,7 @@ hist(datCredit_smp$AgeToTerm, breaks='FD'); skewness(datCredit_smp$AgeToTerm, na
 # Create [BalanceToTerm] variable
 datCredit_smp <- datCredit_smp %>% mutate(BalanceToTerm = Balance/Term)
 # Distributional analysis
-describe(datCredit_smp$BalanceToTerm) ### AB: describe() stalled the process. disabled for now
+describe(datCredit_smp$BalanceToTerm)
 ## RESULTS: [BalanceToTerm] has scale [-0.611292;90577.9], with 1531.3769 at 50% quantile and 2919.7919 at 75% quantile and mean of 2081
 hist(datCredit_smp$BalanceToTerm, breaks='FD'); skewness(datCredit_smp$BalanceToTerm, na.rm = T); datCredit_smp[BalanceToTerm==0,.N]/datCredit_smp[,.N]
 ### RESULTS:    Distribution is skewed to the right; Skewness = 3.769301; 3.8% of variables have zero values.
@@ -448,7 +450,8 @@ datCredit_smp <- merge(datCredit_smp, dat_g0_Delinq_Aggr, by="Date", all.x=T)
 cat( ( sum(datCredit_smp[DefaultStatus1==0, sum(g0_Delinq_Any_Aggr_Prop + sum(g0_Delinq==0)/.N, na.rm=T), by=Date][,2])==sum(datCredit_smp[DefaultStatus1==0,.N,by=Date][,2]) & (sum(is.na(datCredit_smp$g0_Delinq_Any_Aggr_Prop))==0)) %?% 
        'SAFE: New feature [g0_Delinq_Any_Aggr_Prop] has logical values.\n' %:% 
        'WARNING: New feature [g0_Delinq_Any_Aggr_Prop] has illogical values \n' )
-describe(datCredit_smp$g0_Delinq_Any_Aggr_Prop); plot(unique(datCredit_smp$g0_Delinq_Any_Aggr_Prop), type="b")
+#describe(datCredit_smp$g0_Delinq_Any_Aggr_Prop); ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$g0_Delinq_Any_Aggr_Prop), type="b")
 ### RESULTS: Variable has a logical trend, with mean of 0.05828 vs median of 0.04720, 
 # bounded by [0.03926, 0.11895] for 5%-95% percentiles; no large outliers
 #PROBLEM
@@ -487,7 +490,8 @@ cat( (sum(datCredit_smp[, sum(is.na(ArrearsToBalance_Aggr_Prop)), by=Date][,2])=
 cat( (sum(datCredit_smp[, sum(is.na(InstalmentToBalance_Aggr_Prop)), by=Date][,2])==0) %?% 
        'SAFE: New feature [InstalmentToBalance_Aggr_Prop] has logical values.\n' %:% 
        'WARNING: New feature [InstalmentToBalance_Aggr_Prop] has illogical values \n' )
-describe(datCredit_smp$InstalmentToBalance_Aggr_Prop); plot(unique(datCredit_smp$Date),unique(datCredit_smp$InstalmentToBalance_Aggr_Prop), type="b")
+#describe(datCredit_smp$InstalmentToBalance_Aggr_Prop);  ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$Date),unique(datCredit_smp$InstalmentToBalance_Aggr_Prop), type="b")
 #describe(datCredit_smp$ArrearsToBalance_Aggr_Prop); ### AB: describe() stalled the process. disabled for now
 plot(unique(datCredit_smp$ArrearsToBalance_Aggr_Prop), type="b")
 ### RESULTS [InstalmentToBalance_Aggr_Prop]: Variable has high volatility around 2010 as seen through the graphical plot. Mean of 0.01228 vs median of 0.01207,
@@ -515,7 +519,8 @@ datCredit_smp[, AgeToTerm_Aggr_Mean := mean(Age_Adj/Term, na.rm=T), by=Date]
 cat( (sum(datCredit_smp[, sum(is.na(AgeToTerm_Aggr_Mean)), by=Date][,2])==0) %?% 
        'SAFE: New feature [AgeToTerm_Aggr_Mean] has logical values.\n' %:% 
        'WARNING: New feature [AgeToTerm_Aggr_Mean] has illogical values \n' )
-describe(datCredit_smp$AgeToTerm_Aggr_Mean); plot(unique(datCredit_smp$AgeToTerm_Aggr_Mean), type="b")
+#describe(datCredit_smp$AgeToTerm_Aggr_Mean); ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$AgeToTerm_Aggr_Mean), type="b")
 ### RESULTS: Variable behaves as expected, i.e., increases as the loan portfolio matures. Has mean 0.3621 and median 0.3878
 # bounded by [0.2568, 0.4006] for 5%-95% percentiles; no outliers
 
@@ -525,7 +530,8 @@ datCredit_smp[, PerfSpell_Maturity_Aggr_Mean := mean(PerfSpell_Age, na.rm=T), by
 cat( (sum(datCredit_smp[, sum(is.na(PerfSpell_Maturity_Aggr_Mean)), by=Date][,2])==0) %?% 
        'SAFE: New feature [PerfSpell_Maturity_Aggr_Mean] has logical values.\n' %:% 
        'WARNING: New feature [Perf_SpellMaturity_Aggr_Mean] has illogical values \n' )
-describe(datCredit_smp$PerfSpell_Maturity_Aggr_Mean); plot(unique(datCredit_smp$PerfSpell_Maturity_Aggr_Mean), type="b")
+#describe(datCredit_smp$PerfSpell_Maturity_Aggr_Mean); ### AB: describe() stalled the process. disabled for now
+plot(unique(datCredit_smp$PerfSpell_Maturity_Aggr_Mean), type="b")
 ### RESULTS: Mean performance spell age seem to decrease over time. Has mean 135.1 and median 140.68;
 # bounded by [93.54, 152.44] for 5%-95% percentiles; no outliers
 
@@ -577,35 +583,41 @@ rm(dat_IRM_Aggr, dat_IRM_Aggr_Check1, list_merge_variables, results_missingness,
 
 
 
-# ------ 5. Implementing a simple (loan-level) resampling scheme
-# --- 5.1 Apply resampling
+
+# ------ 5. Apply a basic cross-validation clustered resampling scheme with possible stratification
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), tempPath)
+if (!exists('dat_smp_keys')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), tempPath)
+
 # - Set seed
 set.seed(1, kind="Mersenne-Twister")
 
-# - Use simple random sampling with the stratifiers to select the loan IDs that ought to be in the training dataset
-if (all(!is.na(stratifiers))){ # Stratifiers
+# - Implement the clustered (possibly stratified) resampling scheme by first randomly selecting loan IDs 
+# using the given sampling fraction
+if (all(!is.na(stratifiers))){ # enforce Stratifiers
   dat_train_keys <- dat_smp_keys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_frac) %>% as.data.table() 
 } else { # No stratifiers
   dat_train_keys <- dat_smp_keys %>% slice_sample(prop=smp_frac) %>% as.data.table()
 }
 
-# - Obtain the associated loan records as to create the training dataset
-datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]);gc()
-# - Ensure that the training set only contains the first performance spell
-datCredit_train_TFD <- datCredit_train_TFD[PerfSpell_Num == 1,]
-
-# - Obtain the associated loan records of the validation dataset
+# - Extract the entire loan histories into the training set for those randomly select loans IDs,
+# while selecting only the first performing spell (given the model definition)
+# NOTE: the validation set deliberately includes multiple spells to test certain modelling assumptions
+datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]) %>% 
+  subset(PerfSpell_Num == 1)
 datCredit_valid_TFD <- copy(datCredit_smp[!(get(clusVar) %in% dat_train_keys[, get(clusVar)]),]);gc()
 
 # - [SANITY CHECK] Reconciling the cardinalities of the training and the validation dataset to the subsampled dataset
-check.2 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] # Should be TRUE
-ifelse(check.2, print('SAFE: Training and validation datasets reconstitue subsampled dataset'),
-                print('WARNING: Training and validation datasets does not reconstitue subsampled dataset \n' ))
-
-# - [SANITY CHECK] Checking if all account-specific observations are clustered together
-check.3 <- length(unique(datCredit_smp$LoanID)) == length(unique(datCredit_train_TFD$LoanID)) + length(unique(datCredit_valid_TFD$LoanID))
-ifelse(check.3, print('SAFE: All associated loan observations are clustered together in the training and validation datasets; no cross-contamination detected '),
-                print('WARNING: Not all associated loan observations are clustered together in the training and validation datasets; cross-contamination may exist \n' ))
+### AB: These sanity checks will always fail for the way in which we resample (i.e., training has specifically only first-time spells)
+# However, I did not want to delete this code-segment, since it will apply for other time definition models
+# check.2 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] # Should be TRUE
+# ifelse(check.2, print('SAFE: Training and validation datasets reconstitue subsampled dataset'),
+#                 print('WARNING: Training and validation datasets do not reconstitue subsampled dataset \n' ))
+# 
+# # - [SANITY CHECK] Checking if all account-specific observations are clustered together
+# check.3 <- length(unique(datCredit_smp$LoanID)) == length(unique(datCredit_train_TFD$LoanID)) + length(unique(datCredit_valid_TFD$LoanID))
+# ifelse(check.3, print('SAFE: All associated loan observations are clustered together in the training and validation datasets; no cross-contamination detected '),
+#                 print('WARNING: Not all associated loan observations are clustered together in the training and validation datasets; cross-contamination may exist \n' ))
 
 # - Clean up
 suppressWarnings(rm(smp_perc, dat_keys, dat_smp_keys, dat_train_keys, check.2, check.3, datCredit_smp_old_n, datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp))

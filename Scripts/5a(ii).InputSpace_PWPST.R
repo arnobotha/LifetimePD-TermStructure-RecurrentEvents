@@ -1521,7 +1521,7 @@ c <- data.table(Variable=names(c),Coefficient=c)
 # Variable         Coefficient
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_PWPST,datCredit_train_PWPST, GraphInd=FALSE) # 0.6408
+GoF_CoxSnell_KS(cox_PWPST,datCredit_train_PWPST, GraphInd=TRUE, legPos=c(0.2,0.5)) # 0.6408
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
@@ -1530,5 +1530,12 @@ GoF_CoxSnell_KS(cox_PWPST,datCredit_train_PWPST, GraphInd=FALSE) # 0.6408
 # Build model based on variables
 concordance(cox_PWPST, newdata=datCredit_valid_PWPST)
 # Concordance= 0.9942 se= 0.0005169
+
+tROC.multi(datCredit_valid_PWPST, cox_PWPST, month_Start=0, month_End=12, sLambda=0.05,
+           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
+           eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
+           graphName="timedROC-Graph_PWPST",
+           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
+
 
 ### RESULTS: Accuracy for the model seems to be a bit high.

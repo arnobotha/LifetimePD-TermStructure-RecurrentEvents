@@ -1328,7 +1328,7 @@ c <- coefficients(cox_TFD)
 # 18:               M_RealIncome_Growth   -2.3490754410016
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.2,0.5)) # 0.6288
+GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6288
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 

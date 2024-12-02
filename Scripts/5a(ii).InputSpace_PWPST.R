@@ -1521,7 +1521,7 @@ c <- data.table(Variable=names(c),Coefficient=c)
 # Variable         Coefficient
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_PWPST,datCredit_train_PWPST, GraphInd=TRUE, legPos=c(0.2,0.5)) # 0.6408
+GoF_CoxSnell_KS(cox_PWPST,datCredit_train_PWPST, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6408
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 

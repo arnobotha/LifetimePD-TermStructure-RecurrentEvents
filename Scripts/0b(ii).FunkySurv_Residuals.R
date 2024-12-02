@@ -21,7 +21,10 @@ if (Test){
   # Lightly prepare data into a generic format that can span our eventual credit dataset as well
   dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
             rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
-  
+  # dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
+  #                 start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
+  dat[order(ID),Removed := ifelse(ID != shift(ID,type="lead"),1,0)]
+  dat[is.na(Removed),Removed := TRUE]
   # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
   coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
                       data=dat, id=ID)
@@ -97,9 +100,9 @@ GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
     datplot <- rbind( data.table(x=cs,type="1_Cox-Snell"),
                       data.table(x=exp,type="2_Unit_Exponential"))
     vCol <- brewer.pal(8,"Set1")[c(2,3)]
-    vLabel <- c("1_Cox-Snell"=bquote("Adjusted Cox-Snell Residual "*italic(r)^(cs)),
+    vLabel <- c("1_Cox-Snell"=bquote("Adjusted Cox-Snell Residuals "*italic(r)^(cs)),
                 "2_Unit_Exponential"="Unit Exponential")
-    dpi <- 
+    dpi <- 350
     
     # Plot the ECDFs with ggplot2
     gg <- ggplot(datplot,aes(x=x,group=type)) + theme_minimal() + 
@@ -114,7 +117,8 @@ GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
                  label = paste("D =", percent(KS)), hjust = -0.1, vjust = -0.1, fill="white", alpha=0.6) +
         scale_color_manual(name = "Distributions", values = vCol, labels=vLabel) +
         scale_linetype_discrete(name = "Distributions",labels=vLabel) +
-        scale_y_continuous(label=percent)
+        scale_y_continuous(label=percent) + 
+        scale_x_continuous(lim=c(NA,10))
     
     # Save figure
     ggsave(gg, file=paste0(genFigPath, "TFD/Kolmogorov-Smirnov/KS",".png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
@@ -130,6 +134,15 @@ GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
 
 ### AB: I provided the following structure for you to complete, after addressing other comments
 # --- Unit test: GoF_CoxSnell_KS()
+gg <- GoF_CoxSnell_KS(coxExample,dat, legPos = c(0.2,0.7))
+
+
+
+
+
+
+
+
 # csResult <- GoF_CoxSnell_KS(coxExample,T)
 # csResult$Stat;csResult$KS_graph
 # ### RESULTS: D=0.1921

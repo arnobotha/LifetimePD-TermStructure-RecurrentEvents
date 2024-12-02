@@ -1349,17 +1349,18 @@ objROC1 <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda
      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
 objROC1$AUC; objROC1$ROC_graph
 proc.time() - ptm
-### RESULTS: 3874.65 (65 mins)
+### RESULTS: AUC up to t: 91.21%, achieved in 5633.98 secs (94 mins)
 
 # - Multi-threaded calculation of the # AUC from given start up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
-tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+objROC1 <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
      fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numThreads=5)
+objROC1$AUC; objROC1$ROC_graph
 proc.time() - ptm
-### RESULTS: 3874.65 (65 mins)
+### RESULTS: AUC up to t: 91.21%, achieved in 3577.71  secs (59.63 mins)
 
 
 

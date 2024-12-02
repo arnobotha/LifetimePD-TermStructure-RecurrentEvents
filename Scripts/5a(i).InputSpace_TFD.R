@@ -1345,10 +1345,11 @@ GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=FALSE) # 0.6288
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 objROC1 <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-     fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+     fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
 objROC1$AUC; objROC1$ROC_graph
 proc.time() - ptm
+### RESULTS: 3874.65 (65 mins)
 
 # - Multi-threaded calculation of the # AUC from given start up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
@@ -1356,8 +1357,9 @@ proc.time() - ptm
 ptm <- proc.time() #IGNORE: for computation time calculation;
 tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
      fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numthreads=5)
+     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numThreads=5)
 proc.time() - ptm
+### RESULTS: 3874.65 (65 mins)
 
 
 

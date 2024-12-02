@@ -357,13 +357,32 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
     sArea <- sum(vWidth * vMidpoints) # AUC
     
     
+    # -- Revert name changes 
+    if (Grouped_Ind & HasStarting_Ind){
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event)),
+               old=c("StartTime", "EndTime", "ID", "Event_Ind"))
+    } else if (!Grouped_Ind & HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_Event)),
+               old=c("StartTime", "EndTime", "Event_Ind"))
+      # - Set indicators according to which the rest of the program will function conditionally
+      Grouped_Ind <- F
+      HasStarting_Ind <- T
+    } else if (!Grouped_Ind & !HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_EndTime, fld_Event)),
+               old=c("EndTime", "Event_Ind"))
+    } else if (Grouped_Ind & !HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_EndTime, fld_ID, fld_Event)),
+               old=c("EndTime", "ID", "Event_Ind"))
+    }
+    
     # -- If toggled, produce an ROC-graph with annotations
     if(Graph){
       
       # - Create a data object for plotting purposes
       datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
       datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
-      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1])) # annotate with concordance (Harrell's C)
+      # - Annotate with concordance (Harrell's C)
+      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1]))
       
       # - Aesthetic parameters
       vCol <- brewer.pal(8,"Set1")[c(2)]
@@ -398,7 +417,7 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
   }, error = function(e){
     print(e)
     cat("Reverting necessary name changes in given dataset and exiting .. \n")
-  }, finally = {
+    
     # - Revert name changes 
     if (Grouped_Ind & HasStarting_Ind){
       setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event)),
@@ -415,7 +434,8 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
     } else if (Grouped_Ind & !HasStarting_Ind) {
       setnames(datGiven, new=c(c(fld_EndTime, fld_ID, fld_Event)),
                old=c("EndTime", "ID", "Event_Ind"))
-    }    
+    }  
+    
   }) # ----------------- End of tryCatch-block -----------------
   
   # - Generic cleanup (should parts of this function be run in debug/interactive mode)
@@ -611,12 +631,10 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       
       { # ----------------- Start of Outer Loop -----------------
         # j <- 1 # testing condition
-        
         prepDat <- S_t.estimator(vMarkers=vMarkers, vMarkers_unique=vMarkers_unique, 
                       vStartTimes=vStartTimes, vEventTimes=vEventTimes, vEventTimes_Filtered=vEventTimes_Filtered, 
                       vEventInds=vEventInds, eventVal=eventVal, threshold=thresholds[j], 
                       estMethod=estMethod, sLambda=sLambda, nRows=nRows)
-        
         
       } # ----------------- End of Outer Loop -----------------
       stopCluster(cl.port); #proc.time() - ptm
@@ -672,64 +690,20 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
                       .packages=c('data.table'), .export=c('ROC_quants.estimator')) %dopar%
       
     { # ----------------- Start of Outer Loop -----------------
-      
+      # c <- 2 # testing condition    
       prepData <- ROC_quants.estimator(vMarkers=vMarkers, threshold=thresholds[c], vSurvProb=vSurvProb,
-                                       S_mean=S_mean, nRows=nRows,
-                                       Grouped_Ind=Grouped_Ind)
-      
+                                       S_mean=S_mean, nRows=nRows, datGiven=datGiven, Grouped_Ind=Grouped_Ind)
     } # ----------------- End of Outer Loop -----------------
     stopCluster(cl.port); #proc.time() - ptm
     
-    ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
-                                     datGiven=NA, Grouped_Ind) {
     
-    
-      
-    # NOTE: Estimation hereof depends on whether independence is assumed or not amongst rows in the provided data
-    if (Grouped_Ind==F) { # Independence amongst all observations
-      
-      # - Empirical distribution of markers being less than the current threshold p_c
-      cumulMark <- mean(vMarkers <= thresholds[c], na.rm=T)
-      
-      # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
-      # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
-      S_tc <- sum(vSurvProb[vMarkers > thresholds[c]], na.rm=T)/nRows
-      
-      # - Calculate TPR and FPR according to Heagerty2000
-      vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
-      vFPR[c] <- S_tc/S_mean # FPR
-      
-    } else { # Dependence amongst observations, clustered by a given ID-value
-      
-      # - Empirical distribution of markers being less than the current threshold p_c
-      # First, we obtain the proportion amongst all cases with markers less than or equal to p_c
-      # Then, we calculate the grand mean amongst all of these ID-level proportions.
-      cumulMark = mean(datGiven[,list(Prop = sum(Marker <= thresholds[c])/.N), by=list(ID)]$Prop, na.rm=T)
-      
-      #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/nRows # Sum of survival probabilities for Marker values greater than threshold
-      
-      # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
-      # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
-      # NOTE2: Firstly, we obtain the mean survival probability amongst markers associated with an ID, conditioned on
-      # these markers exceeding the threshold.
-      #       Secondly, we calculate the grand mean amongst all of these ID-level mean survival probabilities given p_c
-      S_tc <- mean(datGiven[,list(S_tc_ID=sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), 
-                            by=list(ID)]$S_tc_ID, na.rm=T)
-      
-      # - Calculate TPR and FPR according to Heagerty2000
-      vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
-      vFPR[c] <- S_tc/S_mean # FPR
-    }
-    }
-    
-    
-    # --- Constructing the ROC-graph itself using the Trapezoidal Rule from numerical integration practices
+    # -- Constructing the ROC-graph itself using the Trapezoidal Rule from numerical integration practices
     # NOTE: We apply the trapezoidal rule as in survivalROC() from Heagerty2000, implicitly following 
     # DeLong1988 and Fawcett2008 but not exactly
     # - Attach the lower boundary to the vectors of TPR and FPR (cannot be done earlier)
     # Note that we are increasing the dimensions by 1 and will need to use (nThresh+1)
-    vTPR <- c(1, vTPR)
-    vFPR <- c(1, vFPR)
+    vTPR <- c(1, datROC$TPR)
+    vFPR <- c(1, datROC$FPR)
     # - Bar width = difference between consecutive points, having removed outer boundaries
     vWidth <- vFPR[-(nThresh+1)] - vFPR[-1] 
     # - Calculate Bar height = Average between two consecutive points, having removed outer boundaries
@@ -738,13 +712,33 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
     sArea <- sum(vWidth * vMidpoints) # AUC
     
     
+    # -- Revert name changes 
+    if (Grouped_Ind & HasStarting_Ind){
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event)),
+               old=c("StartTime", "EndTime", "ID", "Event_Ind"))
+    } else if (!Grouped_Ind & HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_Event)),
+               old=c("StartTime", "EndTime", "Event_Ind"))
+      # - Set indicators according to which the rest of the program will function conditionally
+      Grouped_Ind <- F
+      HasStarting_Ind <- T
+    } else if (!Grouped_Ind & !HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_EndTime, fld_Event)),
+               old=c("EndTime", "Event_Ind"))
+    } else if (Grouped_Ind & !HasStarting_Ind) {
+      setnames(datGiven, new=c(c(fld_EndTime, fld_ID, fld_Event)),
+               old=c("EndTime", "ID", "Event_Ind"))
+    }
+    
     # -- If toggled, produce an ROC-graph with annotations
     if(Graph){
       
       # - Create a data object for plotting purposes
       datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
       datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
-      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1])) # annotate with concordance (Harrell's C)
+      # - Annotate with concordance (Harrell's C)
+      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1]))
+      
       
       # - Aesthetic parameters
       vCol <- brewer.pal(8,"Set1")[c(2)]
@@ -783,7 +777,6 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
   }, error = function(e){
     print(e)
     cat("Reverting necessary name changes in given dataset and exiting .. \n")
-  }, finally = {
     # - Revert name changes 
     if (Grouped_Ind & HasStarting_Ind){
       setnames(datGiven, new=c(c(fld_StartTime, fld_EndTime, fld_ID, fld_Event)),
@@ -818,8 +811,10 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
 
 # ------Helper functions for enabling a multithreading environment
 
-# Used within tROC.multi within a multi-threaded loop in estimating the survival probability at a given
-# prediction time (implicit within Vmarkers) and, more importantly, at a given threshold.
+# - Function for estimating marker-conditional average survival probability S(t,c)
+# Used in tROC.multi() within a multi-threaded loop in estimating the survival probability at a given
+# prediction time (implicit within vEventTimes_Filtered) and, more importantly, at a given threshold
+# for markers (beyond which a positive is predicted, and below which a negative is predicted)
 S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, vEventTimes_Filtered,
                           vEventInds, eventVal, threshold, estMethod, sLambda, nRows) {
   
@@ -873,4 +868,51 @@ S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, v
   
   # - Save the pooled survival probability (at last ordered event time) as the main result for the current threshold
   return(data.table(Threshold=threshold, S_t=S_0))
+}
+
+
+# - Function for estimating threshold-specific confusion matrix elements for time-dependent ROC-analyses
+# Used in tROC.multi() within a multi-threaded loop in estimating the True and False Positive Rates at
+# a particular prediction time (implicit in the estimated Survival probability vector), and, more importantly, 
+# at a given threshold for markers (beyond which a positive is predicted, and below which a negative is predicted)
+ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
+                                 datGiven=NA, Grouped_Ind) {
+  
+  # NOTE: Estimation hereof depends on whether independence is assumed or not amongst rows in the provided data
+  if (Grouped_Ind==F) { # Independence amongst all observations
+    
+    # - Empirical distribution of markers being less than the current threshold p_c
+    cumulMark <- mean(vMarkers <= thresholds[c], na.rm=T)
+    
+    # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
+    # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
+    S_tc <- sum(vSurvProb[vMarkers > thresholds[c]], na.rm=T)/nRows
+    
+    # - Calculate TPR and FPR according to Heagerty2000
+    sTPR <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
+    sFPR <- S_tc/S_mean # FPR
+    
+  } else { # Dependence amongst observations, clustered by a given ID-value
+    
+    # - Empirical distribution of markers being less than the current threshold p_c
+    # First, we obtain the proportion amongst all cases with markers less than or equal to p_c
+    # Then, we calculate the grand mean amongst all of these ID-level proportions.
+    cumulMark = mean(datGiven[,list(Prop = sum(Marker <= thresholds[c])/.N), by=list(ID)]$Prop, na.rm=T)
+    
+    #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/nRows # Sum of survival probabilities for Marker values greater than threshold
+    
+    # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
+    # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
+    # NOTE2: Firstly, we obtain the mean survival probability amongst markers associated with an ID, conditioned on
+    # these markers exceeding the threshold.
+    #       Secondly, we calculate the grand mean amongst all of these ID-level mean survival probabilities given p_c
+    S_tc <- mean(datGiven[,list(S_tc_ID=sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), 
+                          by=list(ID)]$S_tc_ID, na.rm=T)
+    
+    # - Calculate TPR and FPR according to Heagerty2000
+    sTPR <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
+    sFPR <- S_tc/S_mean # FPR
+  }
+  
+  return(data.table(Threhsold=threshold, TPR=sTPR, FPR=sFPR))
 }

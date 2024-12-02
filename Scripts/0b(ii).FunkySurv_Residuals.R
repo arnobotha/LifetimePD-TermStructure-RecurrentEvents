@@ -134,7 +134,11 @@ GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
 
 ### AB: I provided the following structure for you to complete, after addressing other comments
 # --- Unit test: GoF_CoxSnell_KS()
-gg <- GoF_CoxSnell_KS(coxExample,dat, legPos = c(0.2,0.7))
+#gg <- GoF_CoxSnell_KS(coxExample, dat, legPos = c(0.2,0.7))
+### AB: In resolving this error ("object 'Removed' not found)", we first have to strip out any dependency on the
+# (awefully-named) [Removed] variable. The function should work ONLY on what it is given, i.e., coxExample, dat, legPos.
+# Otherwise it is no longer generic and becomes 'specific' to our context, which defeats the point .
+
 
 
 

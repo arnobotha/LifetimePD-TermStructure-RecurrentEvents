@@ -153,37 +153,83 @@ survivalROC::survivalROC(Stime=datCredit_train_TFD$End, status=datCredit_train_T
                          method = "NNE",  span=0.05, predict.time=predictTime,
                          marker=round(predict(cox_TFD, type="lp"),2))
 proc.time() - ptm
-### RESULTS: AUC: 56.16% up to t, achieved in 
+### RESULTS: AUC: 94% % up to t, achieved in 8781.23 sec (146.35 mins)
 ### AB: When this is done running, note results, then restart PC for a fresh session, before testing tROC.multi()
 
 
 
 # --- Package: tROCkit() | custom "package"/function
-# Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator
-# - Calculate AUC from given start up to given prediction time in following the CD-approach
+# NOTE: Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator and 0/1-kernel
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 3 in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
-objROC1_TFD <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-                fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
+predictTime <- 3
+objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+                          fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
 objROC1_TFD$AUC; objROC1_TFD$ROC_graph
 proc.time() - ptm
+### RESULTS: AUC up to t: 91.21%, achieved in   secs ( mins)
+
+
+# -- Calculate AUC from given start up to given prediction time in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+# NOTE3: This iteration is obviously slow, but kept for quantifying the improvement in runtime speed.
+# ptm <- proc.time() #IGNORE: for computation time calculation;
+# objROC2_TFD <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+#                     fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+#                     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
+# objROC2_TFD$AUC; objROC2_TFD$ROC_graph
+# proc.time() - ptm
 ### RESULTS: AUC up to t: 91.21%, achieved in 5633.98 secs (94 mins)
-### AB: I need to remember to rename the current objROC1 to the given name above
 
 
-# - Multi-threaded calculation of the # AUC from given start up to given prediction time in following the CD-approach
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 12 in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
-objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+predictTime <- 12
+objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
                       fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numThreads=5)
-objROC1_TFD$AUC; objROC1_TFD$ROC_graph
+                      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
+                      genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+objROC2_TFD$AUC; objROC2_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 91.21%, achieved in 3577.71  secs (59.63 mins)
-### AB: This is v1. v2 is built, though I have yet to test it again. So the results above (runtime) will hopefully change
+### RESULTS: AUC up to t: %, achieved in   secs ( mins)
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 24
+objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+                          fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+objROC3_TFD$AUC; objROC3_TFD$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: %, achieved in   secs ( mins)
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 36
+objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+                          fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+objROC4_TFD$AUC; objROC4_TFD$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: %, achieved in   secs ( mins)
+
+
 
 
 

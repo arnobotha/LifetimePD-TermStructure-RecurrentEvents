@@ -478,17 +478,29 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
 #         [genFigPath], A given path directory in which the ROC-graph (if produced) will be saved.
 #         [numThreads]: The number of threads to register when iterating independently on different parts of the population
 #                       in a multi-threaded fashion.
+#         [caseStudyName]: An optional name to assign the assessment log in tracking the multithreaded performance whilst hte
+#                           function is running.
+#         [reportFlag]: An indicator whether thread-specific results should be reported within a communal text file in 
+#                       tracking the overall progress of the function whilst running on larger datasets
+#         [genObjPath]: A given path directory in which the results of any multithreaded parts are stored for safekeeping
 # Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
 #         [ROC_graph]: The associated ROC-graph as a ggplot-object
 tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                  fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-                 Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/"), numThreads=4){
+                 Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/"), numThreads=4, caseStudyName="Main",
+                 genObjPath=paste0(getwd(),"/"), reportFlag=T) {
   
   # ------ Preliminaries 
   # -- Testing Conditions
   # datGiven = copy(dat); cox=coxExample; month_End=203; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
   # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End";
-  # graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath; numThreads=6
+  # graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath; numThreads=6; reportFlag=T
+  # -- Testing conditions 2 (real-world data)
+  # datGiven = copy(datCredit_valid_TFD); cox=cox_TFD; month_End=12; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
+  # fld_ID="PerfSpell_Key"; fld_Event="PerfSpell_Event"; eventVal=1; fld_StartTime="Start"; fld_EndTime="End";
+  # graphName="DefaultSurvModel-Cox1_Depedendence"; genFigPath=paste0(genFigPath, "TFD/"); numThreads=6; reportFlag=T; caseStudyName="Main"
+  
+
   
   # -- Error handling
   if (!is.data.table(datGiven)) {
@@ -624,8 +636,9 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       # NOTE: nThresh is identical to length(vMarkers_unique)
       
       # - Iterate across loan space using multi-threaded setup
-      #ptm <- proc.time() #IGNORE: for computation time calculation
+      ptm <- proc.time() #IGNORE: for computation time calculation
       cl.port <- makeCluster(numThreads); registerDoParallel(cl.port) # multi-threading setup
+      cat("New Job: Estimating average survival probability across each given threshold ..", file=paste0("assesslog_",caseStudyName,".txt"), append=F)
       datS_t <- foreach(j=1:nThresh, .combine='rbind', .verbose=F, .inorder=T,
                      .packages=c('data.table'), .export=c('S_t.estimator')) %dopar%
       
@@ -634,12 +647,17 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
         prepDat <- S_t.estimator(vMarkers=vMarkers, vMarkers_unique=vMarkers_unique, 
                       vStartTimes=vStartTimes, vEventTimes=vEventTimes, vEventTimes_Filtered=vEventTimes_Filtered, 
                       vEventInds=vEventInds, eventVal=eventVal, threshold=thresholds[j], 
-                      estMethod=estMethod, sLambda=sLambda, nRows=nRows)
+                      estMethod=estMethod, sLambda=sLambda, nRows=nRows, 
+                      reportFlag=reportFlag, iteration=j, nThresh=nThresh, caseStudyName=caseStudyName)
         
       } # ----------------- End of Outer Loop -----------------
-      stopCluster(cl.port); #proc.time() - ptm
+      stopCluster(cl.port); proc.time() - ptm
       
     } else{ stop("Unknown estimation method.") }
+    
+    # - Save to disk (zip) for quick disk-based retrieval later
+    pack.ffdf(paste0(genObjPath,"tROC_Results_", caseStudy_Name,"_Avg-S(t)_(", month_Start, ",", month_End, ").png"),
+                     , datS_t)
     
     # - Obtain an index mapping between the unique marker vector x' and the raw (non-distinct) marker vector x such that each element
     # in this mapping (corresponding to each value in x, i.e., the mapping has the same dimensions as x) denotes the index in x' that 
@@ -816,7 +834,14 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
 # prediction time (implicit within vEventTimes_Filtered) and, more importantly, at a given threshold
 # for markers (beyond which a positive is predicted, and below which a negative is predicted)
 S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, vEventTimes_Filtered,
-                          vEventInds, eventVal, threshold, estMethod, sLambda, nRows) {
+                          vEventInds, eventVal, threshold, estMethod, sLambda, nRows, reportFlag=F, iteration, nThresh, caseStudyName="Main") {
+  
+  if (reportFlag) {
+    cat(paste0("\n 1)[", iteration, " of ", nThresh, "] Estimating average survivor probability S(t,c) given a threshold [c=",
+               threshold, "] at and beyownd which a cases' Marker (or risk score) will be predicted as a positive event, and below which",
+               " the case will be predicted as a negative event."), paste0("assesslog_",caseStudyName,".txt"), append=T);
+    Sys.sleep(0.1)
+  }
   
   # threshold = thresholds[j]   # testing condition
   # -- Create a distance vector between each marker and the current threshold

@@ -630,6 +630,9 @@ cat( (length(which(results_missingness > 0)) == 0) %?% "SAFE: No missingness, fu
        "WARNING: Missingness in certain macroecnomic fields detected, fusion compromised.\n")
 ### RESULTS: No missingness observed, continue with packing away the data
 
+# - Save final snapshot to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), datCredit_smp)
+
 # - Cleanup
 rm(datMV, list_merge_variables, results_missingness, datMV_Check1); gc()
 

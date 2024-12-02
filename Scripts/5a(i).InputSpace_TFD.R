@@ -1328,7 +1328,7 @@ c <- coefficients(cox_TFD)
 # 18:               M_RealIncome_Growth   -2.3490754410016
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=FALSE) # 0.6288
+GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.2,0.5)) # 0.6288
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
@@ -1374,5 +1374,12 @@ tROC.multi(datCredit_valid_TFD, cox_TFD, month_Start=0, month_End=12, sLambda=0.
 # Build model based on variables
 concordance(cox_TFD, newdata=datCredit_valid_TFD)
 # 0.9713
+
+tROC.multi(datCredit_valid_TFD, cox_TFD, month_Start=0, month_End=12, sLambda=0.05,
+           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
+           eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
+           graphName="timedROC-Graph_TFD",
+           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
+
 
 ### RESULTS: Accuracy for the model seems to be a bit high.

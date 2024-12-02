@@ -363,7 +363,7 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
       # - Create a data object for plotting purposes
       datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
       datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
-      conc=percent(as.numeric(concordance(cox)[1])) # annotate with concordance (Harrell's C)
+      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1])) # annotate with concordance (Harrell's C)
       
       # - Aesthetic parameters
       vCol <- brewer.pal(8,"Set1")[c(2)]
@@ -744,7 +744,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       # - Create a data object for plotting purposes
       datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
       datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
-      conc=percent(as.numeric(concordance(cox)[1])) # annotate with concordance (Harrell's C)
+      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1])) # annotate with concordance (Harrell's C)
       
       # - Aesthetic parameters
       vCol <- brewer.pal(8,"Set1")[c(2)]

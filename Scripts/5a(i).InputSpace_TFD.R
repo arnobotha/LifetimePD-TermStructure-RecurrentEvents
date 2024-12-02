@@ -11,8 +11,10 @@
 #   - 2b.Data_Prepare_Credit_Advanced.R
 #   - 2c.Data_Prepare_Credit_Advanced2.R
 #   - 2d.Data_Enrich.R
+#   - 2e.Data_Prepare_Macro.R
 #   - 2f.Data_Fusion1.R
-#   - 3b.Data_Enrich2.R
+#   - 3a(i).Data_Transform.R
+#   - 3c.Data_Fusion2.R
 
 # -- Inputs:
 #   - datCredit_train_TFD | Prepared from script 3b
@@ -42,7 +44,7 @@ datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),
 ### AB: Same comment here as before
 
 datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
-
+### AB: This variable is created but seemingly never used? Rather remote if true.
 
 ### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., 0b(i).
 # Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
@@ -1331,56 +1333,3 @@ c <- coefficients(cox_TFD)
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6288
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
-
-
-
-
-
-
-
-# --- Out-of-sample prediction accuracy using time-dependent ROC-analysis via a custom function tROC()
-
-# - Calculate AUC from given start up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-ptm <- proc.time() #IGNORE: for computation time calculation;
-objROC1 <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-     fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
-objROC1$AUC; objROC1$ROC_graph
-proc.time() - ptm
-### RESULTS: AUC up to t: 91.21%, achieved in 5633.98 secs (94 mins)
-
-# - Multi-threaded calculation of the # AUC from given start up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-ptm <- proc.time() #IGNORE: for computation time calculation;
-objROC1 <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-     fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numThreads=5)
-objROC1$AUC; objROC1$ROC_graph
-proc.time() - ptm
-### RESULTS: AUC up to t: 91.21%, achieved in 3577.71  secs (59.63 mins)
-
-
-
-tROC.multi(datCredit_valid_TFD, cox_TFD, month_Start=0, month_End=12, sLambda=0.05,
-           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
-           eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
-           graphName="timedROC-Graph_TFD",
-           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
-
-
-
-# Build model based on variables
-concordance(cox_TFD, newdata=datCredit_valid_TFD)
-# 0.9713
-
-tROC.multi(datCredit_valid_TFD, cox_TFD, month_Start=0, month_End=12, sLambda=0.05,
-           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
-           eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
-           graphName="timedROC-Graph_TFD",
-           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
-
-
-### RESULTS: Accuracy for the model seems to be a bit high.

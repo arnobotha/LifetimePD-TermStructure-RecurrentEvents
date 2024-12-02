@@ -30,170 +30,23 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 
 ### HOMEWORK: Create [Removed], [slc_acct_roll_ever_24_imputed_med_f]
 datCredit_train_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
+### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
 datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 datCredit_train_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
+### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
+# By doing so, we are breaking our own "mould"/pattern. Move these into the appropriate section within script 3c.
 
 datCredit_valid_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
 datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
+### AB: Same comment here as before
 
 datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
 
-# Define functions for the analysis
-# Spell check
-# Ensures that the variables contained in a vector is indeed in a column.
-colCheck <- function(cols, dataset) {
-  # Check if all columns exist in the dataset
-  missing_cols <- cols[!(cols %in% colnames(dataset))]
-  
-  if (length(missing_cols) == 0) {
-    paste0("SAFE: All columns are in the dataset")
-  } else {
-    warning("WARNING: Some columns are not in the dataset.")
-    paste0("Columns not in the dataset: ", paste(missing_cols, collapse = ", "))
-  }
-}
 
-# Remove variables
-# Used to remove and/or add variable names to a vector.
-vecChange <- function(Vector,Remove=FALSE,Add=FALSE){
-  v <- Vector
-  if (all(Remove != FALSE)) {v <- Vector[!(Vector$vars %in% Remove)]} # Remove values in [Remove]
-  if (all(Add != FALSE)) {v <- rbind(v,Add[!(Add$vars %in% Vector$vars)])} # Add values in [Add]
-  return(v)
-}
+### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., 0b(i).
+# Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
 
-# Create Correlation function
-# Used to detect variables that are highly correlated (> 0.6)
-corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
-  # Compute the correlation matrix
-  corrMat <- as.data.table(data) %>% subset(select = varlist) %>% cor(method = method)
-  
-  # Visualize the correlation matrix
-  corrplot(corrMat, type = 'upper', addCoef.col = 'black', tl.col = 'black', diag=FALSE,
-           tl.srt = 45)
-  
-  # Find correlations exceeding the threshold
-  corrCoordinates <- which(abs(corrMat) > corrThresh & abs(corrMat) < 1 & upper.tri(corrMat), arr.ind = TRUE)
-  
-  if(nrow(corrCoordinates) != 0){
-    # Create a data table with correlation pairs
-    corrProbs <- data.table(x = rownames(corrMat)[corrCoordinates[, 1]], y = colnames(corrMat)[corrCoordinates[, 2]])
-    
-    # Print the identified correlations
-    for (i in 1:nrow(corrProbs)) {
-      cat("Absolute correlations of ",percent(corrMat[corrProbs[i, x], corrProbs[i, y]]),
-          " found for ", corrProbs[i, x], " and ", corrProbs[i, y],"\n")
-    }
-  }else{
-    cat("No significant correlations were detected")
-  }
-}
-
-# Table concordance statistic of single variable cox ph models
-# Used to compare predictive performance of variables
-concTable <- function(data_train, data_valid, variables) {
-  # Use lapply to efficiently compute concordances for all univariate models
-  results <- lapply(variables, function(var) {
-    formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
-    tryCatch({
-      model <- coxph(formula,id=LoanID, data = data_train)# Fit Cox model
-      c <- concordance(model, newdata=data_valid)
-      conc <- as.numeric(c[1])# Extract concordance
-      sd <- sqrt(c$var)# Extract concordance variability
-      lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
-      # Return results as a data.table
-      data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat)
-    }, warning = function(w) {
-      cat("Warning: ", w$message, " for variable: ", var, "\n")
-      stop()
-    }, error = function(e) {
-      cat("Error: ", e$message, " for variable: ", var, "\n")
-      stop()
-    })
-  })
-  
-  # Combine all results into a single data.table
-  results <- rbindlist(results)
-  
-  # Sort by concordance in descending order
-  setorder(results, -Concordance)
-  
-  return(results)
-}
-
-# Table B statistics of single variable cox ph models
-# Used to compare the goodness of fit of variables
-csTable <- function(data,variables,seedVal=1,numIt=5){
-  
-  # Simulate null distribution if seedVal is not NA
-  # Initialize results
-  results <- data.frame(Variable = variables, B_Statistic = NA_real_)
-  
-  # Simulate null distribution if seedVal is not NA
-  if (!is.na(seedVal)) {
-    set.seed(seedVal, kind = "Mersenne-Twister")
-    #null_distribution <- rexp(nrow(data))
-    
-    # Vectorized calculation for B statistics
-    results$B_Statistic <- sapply(variables, function(var) {
-      formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
-      tryCatch({
-        model <- coxph(formula, data = data, id=LoanID)  # Fit a univariate Cox model
-        GoF_CoxSnell_KS(model, data, GraphInd=F)$Stat  # Calculate B statistic
-      }, warning = function(w) {
-        cat("Warning: ", w$message, " for variable: ", var, "\n")
-        NA
-      }, error = function(e) {
-        cat("Error: ", e$message, " for variable: ", var, "\n")
-        NA
-      })
-    })
-    
-    # Sort results by B statistic in descending order
-    results <- results[order(-results$B_Statistic, na.last = TRUE), ]
-    
-    # Return results and range of B statistics
-    return(list(Table = results, Range = diff(range(results$B_Statistic, na.rm = TRUE))))
-    
-  } else {
-    # Perform iterative B calculation when seedVal is NA
-    matResults <- matrix(NA, nrow = length(variables), ncol = numIt,
-                         dimnames = list(variables,
-                                         paste0("Iteration_", 1:numIt))) %>%
-      as.data.table()
-    
-    for (it in seq_len(numIt)) {
-      #null_distribution <- rexp(nrow(data))
-      
-      # Vectorized iteration for B statistics
-      matResults[, it] <- sapply(variables, function(var) {
-        formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
-        tryCatch({
-          model <- coxph(formula, data = data)
-          GoF_CoxSnell_KS(model, data, GraphInd = FALSE)$Stat
-        }, warning = function(w) {
-          cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
-          NA
-        }, error = function(e) {
-          cat("Error: ", e$message, " for variable: ", var, " in iteration: ", it, "\n")
-          NA
-        })
-      })
-    }
-    
-    # Compute additional statistics for the results matrix
-    colRanges <- matResults[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))]
-    matResults <- rbind(matResults, Range = colRanges, fill=T)
-    matResults[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]
-    
-    matResults <- cbind(Variables = c(variables,"Range"),matResults)
-    setorder(matResults,-Average)
-    
-    # Return matrix of B statistics
-    return(matResults)
-  }
-}
 #============================================================================================
 # ------ 1. Delinquency measures
 varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num",
@@ -1360,8 +1213,21 @@ concordance(coxMacro, newdata=datCredit_valid_TFD)# 0.5509
 modelVar <- c(modelVar,"M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6",
               "M_RealIncome_Growth")
 
+
+
+
+
 #============================================================================================
 # ------ 7. Final Model
+
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
+if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
+### AB: If the changes are made to the process flow (i.e., moving data prep to where they belong), then the above
+# alone should work before fitting the final model. Naturally, I am not going to run through the above, I am only
+# interested in the final model, and will trust that you have now learned the essentials of the 
+# "thematic variable selection process". ;-) Delete this comment (as with all my "### AB"-comments) after addressing/reading
+
 # ------ 7.1 How does the univariate models compare with one another?
 # Initialize variables
 vars <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
@@ -1415,19 +1281,32 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
 # 16:                            LN_TPE   0.5121296 0.0018064070          154
 # 17:               M_RealIncome_Growth   0.4658087 0.0039511993           35
 
-# ------ 7.2 What is the predictive performance of a single model?
+# ------ 7.2 What is the predictive performance of the final model containing the selected variables?
 # Initialize variables
 vars <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
           "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
           "pmnt_method_grp", "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-          "Principal", "Undrawn_Amt", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
+          "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+### AB: I removed [Undrawn_Amt] since it is known to be a faulty variable. This removal was already actioned 
+# in script 2f. Kindly remove any reliance in the themes above on this variable
+
+# - Initialize variables | AB-variant
+vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
+           "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
+           "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
+           "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
+           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+### AB: I received "exp overflow due to covariates" error when trying to fit this model.
+# This is likely because the exponentiated form of certain variables and the 
+# coxPH-function then struggles to obtain a good fit. So I simply tweaked the variable list a bit just 
+# so that I can at least get some fitted model to test. Problem 'children': [pmnt_method_grp]
 # 
 # Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
-                               paste(vars,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+                               paste(vars2,collapse=" + "))), id=LoanID, datCredit_train_TFD)
 c <- coefficients(cox_TFD)
-c <- data.table(Variable=names(c),Coefficient=c)
+(c <- data.table(Variable=names(c),Coefficient=c))
 #                             Variable        Coefficient
 # 1:           PerfSpell_g0_Delinq_Num    0.0033543172679
 # 2:                           Arrears    0.0000705150839
@@ -1453,7 +1332,42 @@ GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=FALSE) # 0.6288
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
-# Accuracy
+
+
+
+
+
+
+# --- Out-of-sample prediction accuracy using time-dependent ROC-analysis via a custom function tROC()
+
+# - Calculate AUC from given start up to given prediction time in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+objROC1 <- tROC(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+     fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
+objROC1$AUC; objROC1$ROC_graph
+proc.time() - ptm
+
+# - Multi-threaded calculation of the # AUC from given start up to given prediction time in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+     fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), numthreads=5)
+proc.time() - ptm
+
+
+
+tROC.multi(datCredit_valid_TFD, cox_TFD, month_Start=0, month_End=12, sLambda=0.05,
+           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
+           eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
+           graphName="timedROC-Graph_TFD",
+           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
+
+
 
 # Build model based on variables
 concordance(cox_TFD, newdata=datCredit_valid_TFD)

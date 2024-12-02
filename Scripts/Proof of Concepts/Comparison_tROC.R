@@ -241,7 +241,7 @@ risksetROC::risksetROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start,
 # ----- Package: tROCkit() | custom "package"/function
 # Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator
 
-# - Calculate AUC up to given prediction time for correctly-fitted Cox model
+# - Calculate AUC up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
 tROC1 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
@@ -252,7 +252,7 @@ tROC1$AUC; tROC1$ROC_graph
 # In fact, we discovered a small indexing error in survivalROC() which explain this small discrepancy exactly
 
 
-# - Calculate AUC up to given prediction time for correctly-fitted Cox model, 
+# - Calculate AUC up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 tROC2 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
@@ -262,7 +262,7 @@ tROC2$AUC; tROC2$ROC_graph
 ### RESULTS: AUC: 59.36% up to t
 
 
-# - Multi-threaded calculation of the AUC up to given prediction time for correctly-fitted Cox model, 
+# - Multi-threaded calculation of the AUC up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 tROC2.multi <- tROC.multi(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
@@ -272,7 +272,7 @@ tROC2.multi$AUC; tROC2.multi$ROC_graph
 ### RESULTS: AUC: 59.36% up to t. Same AUC, validated as in tROC2.
 
 
-# - Calculate AUC up from given start to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
+# - Calculate AUC from given start up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
 # NOTE3: For comparison with risksetsROC, in mimicking the ID-approach roughly
@@ -283,7 +283,7 @@ tROC3$AUC; tROC3$ROC_graph
 ### RESULTS: AUC: 95.48% at t. Closest to the "LocalCox"-method of risksetsROC, which yielded 94.16%
 
 
-# - Calculate AUC up from given start to given prediction time for correctly-fitted Cox model, assuming independence | NNE-kernel for S(t)
+# - Calculate AUC from given start up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
 # NOTE3: For comparison with tROC2, in mimicking the ID-approach roughly
@@ -293,19 +293,8 @@ tROC4 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End
 tROC4$AUC; tROC4$ROC_graph
 ### RESULTS: AUC: 98.39% at t.
 
-
-
-
-### AB: Need to rewire the fields here, though I need an actual dataset to do that.
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-tROC(datGiven=datCredit_valid_TFD, cox=coxDelinq, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-     fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-     graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"))
-
-
-
 # - cleanup
-suppressWarnings(rm(gsurv1c_a, gsurv1c_d, haz_dat, kmExample, kmExample_survFitSummary, coxExample, coxExample2))
+suppressWarnings(rm(gsurv1c_a, gsurv1c_d, haz_dat, kmExample, kmExample_survFitSummary, coxExample, coxExample2,
+                    dat, cgd, cgd0))
   
   

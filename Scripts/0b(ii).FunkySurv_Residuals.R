@@ -21,103 +21,11 @@ if (Test){
   # Lightly prepare data into a generic format that can span our eventual credit dataset as well
   dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
             rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
-  #dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
-  #                start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
-  
-  # --- Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
-  # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
-  # All competing events preclude the main event from happening and are therefore considered as censored
-  # ID is set as the spell key, with no stratification
-  kmExample <- survfit(Surv(time=Start, time2=End, event=Event_Ind==1,type="counting") ~ 1, 
-                       id=ID, data=dat)
-  summary(kmExample)$table # overall summary
-  ### RESULTS: 76 events, with median survival probability at time 334 \in [280, 373] as a 95% Confidence Interval
-  (kmExample_survFitSummary <- surv_summary(kmExample))
-  ### RESULTS: Median survival time of 334 has standard error of 5.8%, which is relatively large
-  
-  
-  # --- Graphing survival and related quantities from fitted KM-model | S(t), h(t)
-  
-  # -- Graphing parameters
-  vCol <- brewer.pal(10, "Paired")[c(10)] # for S(t)
-  vCol2 <- brewer.pal(10, "Paired")[c(10,9)] # for h(t)
-  sSpan <- 0.1; # span for LOESS-smoother in h(t)
-  vlabel <- paste0("Loess-smoothed hazard [span: ", sSpan, "]") # for h(t)
-  mainEventName <- "CGD"
-  chosenFont <- "Cambria"
-  
-  # -- Survival probability, S(t)=y
-  (gsurv1c_a <- ggsurvplot(kmExample, fun="pct", conf.int=T, legend="none", 
-                           break.time.by=round(max(kmExample$time)/8), palette=vCol,
-                           xlab = bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell"),
-                           ylab = bquote(Survival~probability~"["*.(mainEventName)*"]"*~italic(S(t))*": spell-level (Kaplan-Meier)"), 
-                           xlim=c(0, max(kmExample$time)+1), surv.median.line = "hv", censor=F, 
-                           ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
-                           tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
-                           cumevents=T, cumevents.title="Cumulative number of events", 
-                           cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
-                           risk.table.title = "Number in (% of) sample at risk of main event", font.family=chosenFont, fontsize=2.5))
-  
-  
-  # -- Discrete baseline hazard function: h(t) | Empirical estimation method
-  # - create plotting data object
-  haz_dat <- data.table(Time=kmExample$time, AtRisk_n=kmExample$n.risk, 
-                        Event_n = kmExample$n.event, Censored_n=kmExample$n.censor,
-                        hazard=kmExample$n.event/kmExample$n.risk, 
-                        CumulHazard = kmExample$cumhaz, #Nelson-Aalen estimator
-                        Group="1",Surv_KM = kmExample$surv) %>% 
-    filter(Event_n > 0 | Censored_n >0) %>%
-    # Discrete-time variants
-    mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
-    mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
-  haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
-  # - create alternative versions for sanity checks
-  haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
-  haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
-  # - conduct sanity checks
-  all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
-  all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
-  all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
-  plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
-  ### RESULTS: The discrepancy is very small difference due to estimator method differences
-  
-  # - Graph object for shorter time, informed by previous graphs
-  (gsurv1c_d <- ggplot(haz_dat[Time<=300,], aes(x=Time,y=hazard)) + theme_minimal() +
-      geom_line(linetype="solid", colour=vCol2[1]) + geom_point(colour=vCol2[1]) + 
-      geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
-      labs(y=bquote(plain(Estimated~hazard*" function ["*.(mainEventName)*"]"*~italic(h(t))*": spell-level (Kaplan-Meier)")), 
-           x=bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell")) + 
-      theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-      scale_colour_manual(name="", values=vCol2[2], labels=vlabel) + 
-      scale_fill_manual(name="", values=vCol2[2], labels=vlabel) + 
-      scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-      scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
-  ### RESULTS: The hazard appears to be near-constant over time, with some notable oscillation over some prediction periods.
-  # However, when viewed in tandem with S(t), itself almost a straight downward-sloping line, it makes sense for hazard
-  # to be near-flat. The oscillation also seems more pronounced towards later prediction periods than earlier ones.
-  
-  # -- Save plots
-  dpi <- 150 # need to decrease size for risk tables' text
-  ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"/SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
-         width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
-  dpi <- 180 # reset
-  ggsave(gsurv1c_d, file=paste0(genFigPath,"/SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
-         width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
-  
-  
   
   # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
   coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
                       data=dat, id=ID)
   summary(coxExample)
-  
-  # --- Fit a Cox regression model incorrectly by ignoring the clustering and heterogeneous variance, assuming that
-  # all observations are subject-level (one row per subject) and therefore independent from one another (wrong)
-  coxExample_wrong <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
-                      data=dat)
-  summary(coxExample_wrong)
-  ### RESULTS: standard errors (as measured using the robust-variant of the log-rank test) are inflated
-  #   in this wrongly-fit model, as a result of assuming independence amongst observations within a cluster/spell per subject
 }
 
 
@@ -257,7 +165,7 @@ GoF_CoxSnell_graph <- function(cox){
 # GoF_CoxSnell_graph(coxExample)
 # 
 
-### AB: Is the following still truly necessary? If so, then comment what this is all about
+### AB: Is the following still truly necessary? If so, then write a comment about what this is all about
 # # p <- ggplot(datGraph, aes(x = x)) +
 # geom_line(aes(y = cs, color = "Residuals")) +
 #   geom_line(aes(y = exp, color = "Exponential")) +

@@ -68,7 +68,7 @@ datCredit_real[, Date_First := Date[1], by=LoanID]
 # - Creating an indicator variable variable for when a loan exists a performance spell
 datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
 ### AB: I can appreciate the novelty of this variable, well done. However, its naming sucks, so I have changed it
-# across the entire codebase (up to script 4b, at least, since I know you were working on the later ones)
+# across the entire codebase (up to script 5a, at least, since I know you were working on the later ones)
 # to something more descriptive.
 
 # - Creating new spell resolution types

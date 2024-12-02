@@ -664,45 +664,62 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
     vTPR <- c(rep(NA, nThresh-1),0) # Initialise vector and set threshold boundaries
     vFPR <- c(rep(NA, nThresh-1),1) # Initialise vector and set threshold boundaries
     
-    
     # -- Iterate across thresholds and calculate TPR and FPR given that each threshold conditions the risk set
-    for (c in 1:(nThresh )) {
+    # but do so across a multithreaded setup
+    #ptm <- proc.time() #IGNORE: for computation time calculation
+    cl.port <- makeCluster(numThreads); registerDoParallel(cl.port) # multi-threading setup
+    datROC <- foreach(c=1:nThresh, .combine='rbind', .verbose=F, .inorder=T,
+                      .packages=c('data.table'), .export=c('ROC_quants.estimator')) %dopar%
       
-      # NOTE: Estimation hereof depends on whether independence is assumed or not amongst rows in the provided data
-      if (Grouped_Ind==F) { # Independence amongst all observations
-        
-        # - Empirical distribution of markers being less than the current threshold p_c
-        cumulMark <- mean(vMarkers <= thresholds[c], na.rm=T)
-        
-        # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
-        # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
-        S_tc <- sum(vSurvProb[vMarkers > thresholds[c]], na.rm=T)/nRows
-        
-        # - Calculate TPR and FPR according to Heagerty2000
-        vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
-        vFPR[c] <- S_tc/S_mean # FPR
-        
-      } else { # Dependence amongst observations, clustered by a given ID-value
-        
-        # - Empirical distribution of markers being less than the current threshold p_c
-        # First, we obtain the proportion amongst all cases with markers less than or equal to p_c
-        # Then, we calculate the grand mean amongst all of these ID-level proportions.
-        cumulMark = mean(datGiven[,list(Prop = sum(Marker <= thresholds[c])/.N), by=list(ID)]$Prop, na.rm=T)
-        
-        #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/nRows # Sum of survival probabilities for Marker values greater than threshold
-        
-        # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
-        # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
-        # NOTE2: Firstly, we obtain the mean survival probability amongst markers associated with an ID, conditioned on
-        # these markers exceeding the threshold.
-        #       Secondly, we calculate the grand mean amongst all of these ID-level mean survival probabilities given p_c
-        S_tc <- mean(datGiven[,list(S_tc_ID=sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), 
-                              by=list(ID)]$S_tc_ID, na.rm=T)
-        
-        # - Calculate TPR and FPR according to Heagerty2000
-        vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
-        vFPR[c] <- S_tc/S_mean # FPR
-      }
+    { # ----------------- Start of Outer Loop -----------------
+      
+      prepData <- ROC_quants.estimator(vMarkers=vMarkers, threshold=thresholds[c], vSurvProb=vSurvProb,
+                                       S_mean=S_mean, nRows=nRows,
+                                       Grouped_Ind=Grouped_Ind)
+      
+    } # ----------------- End of Outer Loop -----------------
+    stopCluster(cl.port); #proc.time() - ptm
+    
+    ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
+                                     datGiven=NA, Grouped_Ind) {
+    
+    
+      
+    # NOTE: Estimation hereof depends on whether independence is assumed or not amongst rows in the provided data
+    if (Grouped_Ind==F) { # Independence amongst all observations
+      
+      # - Empirical distribution of markers being less than the current threshold p_c
+      cumulMark <- mean(vMarkers <= thresholds[c], na.rm=T)
+      
+      # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
+      # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
+      S_tc <- sum(vSurvProb[vMarkers > thresholds[c]], na.rm=T)/nRows
+      
+      # - Calculate TPR and FPR according to Heagerty2000
+      vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
+      vFPR[c] <- S_tc/S_mean # FPR
+      
+    } else { # Dependence amongst observations, clustered by a given ID-value
+      
+      # - Empirical distribution of markers being less than the current threshold p_c
+      # First, we obtain the proportion amongst all cases with markers less than or equal to p_c
+      # Then, we calculate the grand mean amongst all of these ID-level proportions.
+      cumulMark = mean(datGiven[,list(Prop = sum(Marker <= thresholds[c])/.N), by=list(ID)]$Prop, na.rm=T)
+      
+      #S_lam <- sum(datGiven$Surv_prob[datGiven$Marker > thresholds[c]])/nRows # Sum of survival probabilities for Marker values greater than threshold
+      
+      # - Calculate mean survival probability given current threshold p_c, within the subset of marker values exceeding p_c
+      # NOTE: The inner operation amounts to the indicator function in the equation of S_{lambda_n}(p_c,t)
+      # NOTE2: Firstly, we obtain the mean survival probability amongst markers associated with an ID, conditioned on
+      # these markers exceeding the threshold.
+      #       Secondly, we calculate the grand mean amongst all of these ID-level mean survival probabilities given p_c
+      S_tc <- mean(datGiven[,list(S_tc_ID=sum(ifelse(Marker > thresholds[c],Surv_prob,0),na.rm=T)/.N), 
+                            by=list(ID)]$S_tc_ID, na.rm=T)
+      
+      # - Calculate TPR and FPR according to Heagerty2000
+      vTPR[c] <- ((1-cumulMark) - S_tc)/(1 - S_mean) # TPR
+      vFPR[c] <- S_tc/S_mean # FPR
+    }
     }
     
     
@@ -755,7 +772,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       retObj <- list(AUC = sArea, ROC_graph=gg, Thresholds=c(-Inf, thresholds), TPR=vTPR, 
                      FPR=vFPR, SurvivalProb_Mean = S_mean)
       
-    } else{ retObj <- list(AUC = sArea, Thresholds=c(-Inf, thresholds), TPR=vTPR, FPR=vFPR, SurvivalProb_Mean = S_mean) } 
+    } else{ retObj <- list(AUC = sArea, Thresholds=c(-Inf, thresholds), TPR=vTPR, FPR=vFPR, SurvivalProb_Mean = S_mean) }
     
     
     # - Conclude program and return results
@@ -783,7 +800,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
     } else if (Grouped_Ind & !HasStarting_Ind) {
       setnames(datGiven, new=c(c(fld_EndTime, fld_ID, fld_Event)),
                old=c("EndTime", "ID", "Event_Ind"))
-    }    
+    }
   }) # ----------------- End of tryCatch-block -----------------
   
   # - Generic cleanup (should parts of this function be run in debug/interactive mode)

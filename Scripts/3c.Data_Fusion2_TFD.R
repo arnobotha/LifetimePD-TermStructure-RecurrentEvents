@@ -190,10 +190,15 @@ rm(datInput.raw, data_grain_check, data_grain_check_merge); gc()
 
 
 # ------- 4. Feature engineering for modelling purposes
+
+# - Load in main dataset (subsampled)
 if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), tempPath)
+### AB [2024-12-01]: This is an old version of the original script for data fusion. I will systematically update this
+# portion for us to the newer format that we have adopted across multiple other codebases (e.g., the ClassifierDiagnostics-codebase)
+# Suspected impact on modelling results: minimal. Destined impact on readability and reproduciblity: massive.
 
 
-# --- 4.1 Missing value diagnostics & treatments
+# --- 4.1 Missing value diagnostics, treatments, and general distributional analyses
 # - Diagnostics of missing values in the additional engineered "SLC" input space | If missingness > 50% missing remove variable
 # Categorical variables
 table(is.na(datCredit_smp$slc_pmnt_method)) %>% prop.table()              # missingness: 11.84% - keep variable
@@ -204,7 +209,8 @@ table(is.na(datCredit_smp$slc_days_excess)) %>% prop.table()              # miss
 table(is.na(datCredit_smp$slc_acct_pre_lim_perc)) %>% prop.table()        # missingness: 11.84% - keep variable
 table(is.na(datCredit_smp$slc_acct_prepaid_perc_dir_12)) %>% prop.table() # missingness: 11.84% - keep variable
 
-# - Categorical variables
+
+# --- Categorical variables
 # [slc_pmnt_method] - Missing value indicators
 describe(datCredit_smp$slc_pmnt_method)
 ### RESULTS: [slc_pmnt_method] has 7 levels and 5555434 observations and 7 missing values. Bin the missing values with the already existent "unknown" bin.
@@ -231,7 +237,8 @@ describe(datCredit_smp$slc_acct_arr_dir_3)
 datCredit_smp[,slc_acct_arr_dir_3:=factor(slc_acct_arr_dir_3)]
 ### RESULTS: Missing values imputed and facorisation applied to the levels of the variable.
 
-# - Numerical variables
+
+# --- Numerical variables
 # [slc_past_due_amt] - Missing value indicators
 datCredit_smp[, value_ind_slc_past_due_amt := ifelse(is.na(slc_past_due_amt) | slc_past_due_amt == "", 0, 1)]
 describe(datCredit_smp$value_ind_slc_past_due_amt)
@@ -319,7 +326,9 @@ suppressWarnings( datCredit_smp[, `:=`(value_ind_slc_days_excess = NULL, slc_day
 
 
 
-# --- 4.2 Analysis and Treatments of Numeric variables
+# --- 4.2 Missing value treatments (numeric variables)
+# Analyse whether to use mean or median value imputation
+
 # - [Principal]
 describe(datCredit_smp$Principal)
 ### RESULTS: [Principal] has scale [0.17;22370000], with 512428    at 50% quantile and 850000 at 75% quantile and mean of 652573.
@@ -365,7 +374,7 @@ pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), datCredit_smp)
 
 
 
-# --- 4.3 Binning and factorisation
+# --- 4.3 Feature Engineering: Binning and factorisation
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), tempPath)
 
@@ -575,11 +584,54 @@ describe(datCredit_smp$InterestRate_Margin_Aggr_Med); plot(datCredit_smp[!duplic
 # bounded by [-0.012, -0.0040] for 5%-95% percentiles; no outliers
 
 # - Save final snapshot to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), datCredit_smp)
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1d"), datCredit_smp)
 
 # Clean up
 rm(dat_IRM_Aggr, dat_IRM_Aggr_Check1, list_merge_variables, results_missingness, output, lags, ColNames,varSLC_Info_Cat, varSLC_Info_Num, varCredit_Info_Cat, varCredit_Info_Num, check.fuse1, check.fuse3, check.fuse4, lookup_IDs,
    Covariate_Info, lookup, lookup2);gc()
+
+
+
+
+# --- 9. Macroeconomic feature engineering
+
+# - Loading in the raw dataset
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1d"), tempPath)
+if (!exists('datMV')) unpack.ffdf(paste0(genPath,"datMV"), tempPath)
+
+# - Lags of all MVs
+# Specifying the lags (monthly) that should be applied
+lags <- c(1,2,3,6,9,12)
+# Creating a dataset with which to check if the lags are applied correctly to the macroeconomic variables
+datMV_Check1 <- data.table(Variable = NULL, Check = NULL)
+# Getting the column names with which to apply the lags
+ColNames <- colnames(datMV)[-1]
+# Looping over the specified lags and applying each to each of the specified columns
+for (i in seq_along(lags)){
+  for (j in seq_along(ColNames)){
+    datMV[, (paste0(ColNames[j],"_",lags[i])) := fcoalesce(shift(get(ColNames[j]), n=lags[i], type="lag"), get(ColNames[j]))]
+  }
+}
+# [SANITY CHECK] Check datMV for any missingness
+cat( anyNA(datMV) %?% "WARNING: Missingness detected in the lagged macroeconomic variables.\n" %:%
+       "SAFE: Lags applied successfully to the macroeconomic variables.\n")
+### Results: Lagged variables created successfully, no missingness present
+
+# - Merging the macroeconomic information to the subsampled dataset
+datCredit_smp <- merge(datCredit_smp, subset(datMV, select=colnames(datMV)[!(colnames(datMV) %in% ColNames)]), by = "Date", all.x = T)
+# - Validate merging success )by checking for missingness (should be zero)
+list_merge_variables <- list(colnames(datMV))
+results_missingness <- list()
+for (i in 1:length(list_merge_variables)){
+  output <- sum(is.na(datCredit_smp$list_merge_variables[i]))
+  results_missingness[[i]] <- output
+}
+cat( (length(which(results_missingness > 0)) == 0) %?% "SAFE: No missingness, fusion with macroeconomic data is successful.\n" %:%
+       "WARNING: Missingness in certain macroecnomic fields detected, fusion compromised.\n")
+### RESULTS: No missingness observed, continue with packing away the data
+
+# - Cleanup
+rm(datMV, list_merge_variables, results_missingness, datMV_Check1); gc()
 
 
 
@@ -634,3 +686,4 @@ pack.ffdf(paste0(genPath,"creditdata_valid_TFD"), datCredit_valid_TFD)
 # --- 5.3 Clean up
 suppressWarnings(rm(dat_keys_smp_perf, dat_keys_smp_perf,  dat_train_keys_perf, dat_train_keys_def, datCredit_train_perf, datCredit_train_def,  datCredit_valid_perf, datCredit_valid_def,
                     check.4_a, check.4_b, check.4_c, check.5_a, check.5_b, datCredit_smp, datStrata_smp_min, datCredit_train_TFD, datCredit_valid_TFD));gc()
+

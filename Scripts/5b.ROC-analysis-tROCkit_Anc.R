@@ -154,6 +154,7 @@ survivalROC::survivalROC(Stime=datCredit_train_TFD$End, status=datCredit_train_T
                          marker=round(predict(cox_TFD, type="lp"),2))
 proc.time() - ptm
 ### RESULTS: AUC: 56.16% up to t, achieved in 
+### AB: When this is done running, note results, then restart PC for a fresh session, before testing tROC.multi()
 
 
 

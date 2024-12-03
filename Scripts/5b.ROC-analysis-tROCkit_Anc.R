@@ -166,13 +166,13 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 3
-objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
+objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
                           caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC1_TFD$AUC; objROC1_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 91.21%, achieved in   secs ( mins)
+### RESULTS: AUC up to t: 91.39%, achieved in 1175.70 secs ( 19.6 mins)
 
 
 # -- Calculate AUC from given start up to given prediction time in following the CD-approach
@@ -193,13 +193,13 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 12
-objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1,
+objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
                       fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                       graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
                       caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC2_TFD$AUC; objROC2_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: %, achieved in   secs ( mins)
+### RESULTS: AUC up to t: 91.21%, achieved in 2232.91 secs (37.22 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
@@ -207,13 +207,13 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 24
-objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
+objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
                           caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC3_TFD$AUC; objROC3_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: %, achieved in   secs ( mins)
+### RESULTS: AUC up to t: 90.91%, achieved in 3698.95 secs (61.65 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
@@ -221,17 +221,20 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 36
-objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
+objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=genFigPath, 
                           caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC4_TFD$AUC; objROC4_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: %, achieved in   secs ( mins)
-
-DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence
+### RESULTS: AUC up to t: 90.95%, achieved in 5171.97 secs (5171.97 mins)
 
 
+# -- Store experimental objects | Memory optimisation
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_03"), objROC1_TFD);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_12"), objROC2_TFD);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_24"), objROC3_TFD);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_36"), objROC4_TFD);
 
 
 
@@ -256,6 +259,13 @@ DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence
 
 
 # ----------------- 4. Create combined ROC-graph across multiple prediction times
+
+# - Ensure required objects exist in memory
+if (!exists('objROC1_TFD')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_03"), tempPath);gc()
+if (!exists('objROC2_TFD')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_12"), tempPath);gc()
+if (!exists('objROC3_TFD')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_24"), tempPath);gc()
+if (!exists('objROC4_TFD')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_36"), tempPath);gc()
+
 # - Set ROC-parameters and initialize data structures
 vecPercTimepoint <- c(3,12,24,36)
 vecTROC <- list(objROC1_TFD, objROC2_TFD, objROC3_TFD, objROC4_TFD)
@@ -314,3 +324,8 @@ chosenFont <- "Cambria"
 dpi <- 200
 ggsave(gg, file=paste0(paste0(genFigPath, "TFD/DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence.png")), 
        width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+
+
+# - cleanup
+suppressWarnings( rm(gg, vLabels, vLabels_F, vecTROC, datGraph, dat, objROC1_TFD, objROC2_TFD, objROC3_TFD, objROC4_TFD,
+   km_TFD, km_TFD_survFitSummary, cox_TFD, datCredit_train_TFD, datCredit_valid_TFD) )

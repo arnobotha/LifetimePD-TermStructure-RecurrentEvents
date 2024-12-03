@@ -822,7 +822,8 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
                        vMarkers, vStartTimes,S_t, vMarkers_unique, vEventTimes_Main, vEventTimes_Filtered, vDiff, 
                        Neigh_Mid, Neigh_Mid2, Neigh_UpperB, Neigh_LowerB, Neigh_UpperB_ind, Neigh_LowerB_ind, 
                        weights, S_0, n_values, d_values, vMatched, vMatch2, vSurvProb, S_mean, vTPR, vFPR, 
-                       cumulMark, S_tc, vWidth, vMidpoints, sArea, datGraph, datSegment, conc, gg, retObj) )
+                       cumulMark, S_tc, vWidth, vMidpoints, sArea, datGraph, datSegment, conc, gg, retObj,
+                       datS_t, datROC, cl.port) )
 }
 
 

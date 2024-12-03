@@ -57,18 +57,18 @@ summary(coxExample)
 #         [fld_EndTime]: A required field name that designates the stop or raw event times
 #         [Graph]: A boolean-valued toggle to produce the ROC-graph as a ggplot-object.
 #         [graphName]: The base name under which the produced ggplot graph will be saved in the given path directory
-#         [genFigPath], A given path directory in which the ROC-graph (if produced) will be saved
+#         [genFigPathGiven], A given path directory in which the ROC-graph (if produced) will be saved
 # Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
 #         [ROC_graph]: The associated ROC-graph as a ggplot-object
 tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                      fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-                     Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/")){
+                     Graph=TRUE, graphName="timedROC-Graph", genFigPathGiven=paste0(getwd(),"/")){
   
   # ------ Preliminaries 
   # -- Testing Conditions
   #datGiven = copy(dat); cox=coxExample; month_End=203; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
   #fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End";
-  #graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath
+  #graphName="coxExample_cgd"; eventVal=1; genFigPathGiven=genFigPath
   
   # -- Error handling
   if (!is.data.table(datGiven)) {
@@ -92,8 +92,8 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
   if (anyNA(c(fld_Event, eventVal, fld_StartTime, fld_EndTime))) {
     stop("The arguments [fld_Event], [eventVal], [fld_StartTime], [fld_EndTime], and [lfd_Marker] cannot be missing and must be specified. \n")
   }
-  if ((Graph & is.na(graphName)) | (Graph & is.na(genFigPath))) {
-    stop("The graphing arguments [graphName] and [genFigPath] cannot be missing and must be specified when desiring an ROC-graph. \n")
+  if ((Graph & is.na(graphName)) | (Graph & is.na(genFigPathGiven))) {
+    stop("The graphing arguments [graphName] and [genFigPathGiven] cannot be missing and must be specified when desiring an ROC-graph. \n")
   }
   
   # -- Obtain Markers/prediction scores M_i for i=1,...,n cases (not necessarily subjects) and assign as thresholds
@@ -404,7 +404,7 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
       
       # Save graph
       dpi <- 200
-      ggsave(gg, file=paste0(genFigPath, graphName,"(",month_Start,",",month_End,").png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+      ggsave(gg, file=paste0(genFigPathGiven, graphName,"(",month_Start,",",month_End,").png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
       
       retObj <- list(AUC = sArea, ROC_graph=gg, Thresholds=c(-Inf, thresholds), TPR=vTPR, FPR=vFPR, SurvivalProb_Mean = S_mean)
     } else{ retObj <- list(AUC = sArea, Thresholds=c(-Inf, thresholds), TPR=vTPR, FPR=vFPR, SurvivalProb_Mean = S_mean) } 
@@ -475,33 +475,32 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
 #         [fld_EndTime]: A required field name that designates the stop or raw event times.
 #         [Graph]: A boolean-valued toggle to produce the ROC-graph as a ggplot-object.
 #         [graphName]: The base name under which the produced ggplot graph will be saved in the given path directory.
-#         [genFigPath], A given path directory in which the ROC-graph (if produced) will be saved.
+#         [genFigPathGiven], A given path directory in which the ROC-graph (if produced) will be saved.
 #         [numThreads]: The number of threads to register when iterating independently on different parts of the population
 #                       in a multi-threaded fashion.
 #         [caseStudyName]: An optional name to assign the assessment log in tracking the multithreaded performance whilst hte
 #                           function is running.
 #         [reportFlag]: An indicator whether thread-specific results should be reported within a communal text file in 
 #                       tracking the overall progress of the function whilst running on larger datasets
-#         [genObjPath]: A given path directory in which the results of any multithreaded parts are stored for safekeeping
 #         [logPath]: A given path directory in which the log file is stored in tracking the performance of the multithreaded loop
 # Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
 #         [ROC_graph]: The associated ROC-graph as a ggplot-object
 tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                        fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-                       Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/"), numThreads=4, 
-                       caseStudyName="Main",reportFlag=T, genObjPath=paste0(getwd(),"/"), logPath=paste0(getwd(),"/")) {
+                       Graph=TRUE, graphName="timedROC-Graph", genFigPathGiven=paste0(getwd(),"/"), numThreads=4, 
+                       caseStudyName="Main",reportFlag=T, logPath=paste0(getwd(),"/")) {
   
   # ------ Preliminaries 
   # -- Testing Conditions
   # datGiven = copy(dat); cox=coxExample; month_End=203; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
   # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End"; caseStudyName="Main"
-  # graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath; numThreads=6; reportFlag=T; 
-  # logPath=paste0(getwd(),"/"); genObjPath=paste0(getwd(),"/")
+  # graphName="coxExample_cgd"; eventVal=1; genFigPathGiven=paste0(genFigPath, "/TFD"); numThreads=6; reportFlag=T; 
+  # logPath=paste0(getwd(),"/")
   # -- Testing conditions 2 (real-world data)
-  # datGiven = copy(datCredit_valid_TFD); cox=cox_TFD; month_End=12; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
+  # datGiven = copy(datCredit_valid_TFD); cox=cox_TFD; month_End=12; numDigits=0; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
   # fld_ID="PerfSpell_Key"; fld_Event="PerfSpell_Event"; eventVal=1; fld_StartTime="Start"; fld_EndTime="End";
-  # graphName="DefaultSurvModel-Cox1_Depedendence"; genFigPath=paste0(genFigPath, "TFD/"); numThreads=6; reportFlag=T; caseStudyName="Main";
-  # logPath=genPath; genObjPath <- genObjPath
+  # graphName="DefaultSurvModel-Cox1_Depedendence"; genFigPathGiven=paste0(genFigPath, "/TFD"); numThreads=6; reportFlag=T; caseStudyName="Main"
+  # logPath=genPath
   
   
   # -- Error handling
@@ -526,8 +525,8 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
   if (anyNA(c(fld_Event, eventVal, fld_StartTime, fld_EndTime))) {
     stop("The arguments [fld_Event], [eventVal], [fld_StartTime], [fld_EndTime], and [lfd_Marker] cannot be missing and must be specified. \n")
   }
-  if ((Graph & is.na(graphName)) | (Graph & is.na(genFigPath))) {
-    stop("The graphing arguments [graphName] and [genFigPath] cannot be missing and must be specified when desiring an ROC-graph. \n")
+  if ((Graph & is.na(graphName)) | (Graph & is.na(genFigPathGiven))) {
+    stop("The graphing arguments [graphName] and [genFigPathGiven] cannot be missing and must be specified when desiring an ROC-graph. \n")
   }
   
   
@@ -659,9 +658,6 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       
     } else{ stop("Unknown estimation method.") }
     
-    # - Save to disk (zip) for quick disk-based retrieval later
-    pack.ffdf(paste0(genObjPath,"tROC_Results_", caseStudyName,"_Avg-S(t)_(", month_Start, ",", month_End, ")"), datS_t)
-    
     # - Obtain an index mapping between the unique marker vector x' and the raw (non-distinct) marker vector x such that each element
     # in this mapping (corresponding to each value in x, i.e., the mapping has the same dimensions as x) denotes the index in x' that 
     # represents the unique value's position and/or rank in x'.
@@ -785,7 +781,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       
       # Save graph
       dpi <- 200
-      ggsave(gg, file=paste0(genFigPath, graphName,"(",month_Start,",",month_End,").png"), 
+      ggsave(gg, file=paste0(genFigPathGiven, graphName,"(",month_Start,",",month_End,").png"), 
              width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
       
       retObj <- list(AUC = sArea, ROC_graph=gg, Thresholds=c(-Inf, thresholds), TPR=vTPR, 

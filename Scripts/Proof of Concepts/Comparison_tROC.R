@@ -293,6 +293,100 @@ tROC4 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End
 tROC4$AUC; tROC4$ROC_graph
 ### RESULTS: AUC: 98.39% at t.
 
+
+
+
+# ----------------- 5. Compare ROC-analyses using the same fitted Cox model across various prediction times
+# NOTE: The previous KM-analyses can be used to deduce meaningful prediction times
+
+# - Set ROC-parameters and initialize data structures
+vecPercentiles <- c(0.95,0.9,0.75,0.6) # for finding vecPercTimepoint (next)
+vecPercTimepoint <- rep(NA, length(vecPercentiles))
+vecTROC <- vector("list", length=length(vecPercTimepoint))
+vecSurvROC <- copy(vecTROC)
+vLabels <- copy(vecTROC)
+
+# -- Iterate across selected prediction times t and run ROC(t)-functions, followed by storing the results into list objects
+for (i in 1:length(vecPercTimepoint)) {
+  # i <- 1 # Testing condition
+  
+  # - Chosen percentile of survival times, used later as a prediction time,
+  vecPercTimepoint[i] <- min(kmExample$time[kmExample$surv <= vecPercentiles[i]],na.rm=T)
+  cat(paste0("\nKaplan-Meier: Survival time at the ", percent(vecPercentiles[i]), 
+             " percentile of the unique event time distribution: ", vecPercTimepoint[i])) 
+
+  # - Calculate AUC up to given prediction time in following the CD-approach
+  # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+  # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values  
+  vecTROC[[i]] <- tROC(datGiven=dat, cox=coxExample, month_End=vecPercTimepoint[i], estMethod="NN-0/1", numDigits=2, 
+                       fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                       graphName="coxExample1_cgd_dependence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
+  
+  # - Calculate AUC up to given prediction time for correctly-fitted Cox model
+  # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t)
+  vecSurvROC[[i]] <- survivalROC::survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start, 
+                           method = "NNE",  span=0.05, predict.time=vecPercTimepoint[i],
+                           marker=round(predict(coxExample, type="lp"),2))
+  
+  # - Reporting to console
+  cat(paste0(", tROC-AUC: ", percent(vecTROC[[i]]$AUC, accuracy=0.01), 
+             ", survROC-AUC: ", percent(vecSurvROC[[i]]$AUC, accuracy=0.01)))
+}
+
+
+# -- Create a combined data object for plotting purposes
+for (i in 1:length(vecPercTimepoint)) {
+  # i <-1 # testing condition
+  
+  # datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
+  
+  # - Create a data object for the current prediction time
+  if (i == 1) {
+    datGraph <- data.table(PredictTime=as.character(vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+                           x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR)
+    
+  } else {
+    datGraph <- rbind(datGraph, 
+                      data.table(PredictTime= vecPercTimepoint[i], Threshold=vecTROC[[i]]$Thresholds, 
+                                 x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR))
+  }
+  vLabels[[i]] <- bquote("Prediction time "*italic(t)==.(vecPercTimepoint[i])*"; AUC: "*.(percent(vecTROC[[i]]$AUC, accuracy=0.01)))
+}
+
+
+# -- Graph a combined ROC-graph across prediction times t
+# - Aesthetic parameters
+vCol <- brewer.pal(8,"Set1")
+vLabels_F <- setNames(vLabels, vecPercTimepoint)
+chosenFont <- "Cambria"
+
+# - Create ROC-graph
+(gg <- ggplot(datGraph, aes(x=x,y=y,group=PredictTime)) + theme_minimal() + 
+      theme(text = element_text(family=chosenFont), legend.position="inside", 
+        legend.position.inside = c(0.75,0.25),
+        legend.background = element_rect(fill="snow2", color="black",
+                                         linetype="solid", linewidth=0.1)) +
+      labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
+         bquote("True Positive Rate "*italic(T^"+"))) + 
+      # Main line graph
+      geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.5) + 
+      geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=1) + 
+      # Add 45-degree line
+      geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.5) +
+      # Facets and scales
+      scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
+      scale_linetype_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+      scale_shape_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+      scale_y_continuous(label=percent) + scale_x_continuous(label=percent))
+  
+
+# - Save graph
+dpi <- 200
+ggsave(gg, file=paste0(paste0(genFigPath, "Proof of Concepts/coxExample1-CombinedROC-cgd_independence.png")), 
+       width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+
+
+
 # - cleanup
 suppressWarnings(rm(gsurv1c_a, gsurv1c_d, haz_dat, kmExample, kmExample_survFitSummary, coxExample, coxExample2,
                     dat, cgd, cgd0))

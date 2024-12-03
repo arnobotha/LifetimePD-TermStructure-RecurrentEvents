@@ -135,16 +135,16 @@ summary(cox_TFD)
 # ----------------- 3. Conduct & compare ROC-analyses at fixed prediction time
 # NOTE: ROC-analyses are conducted using the same fitted Cox model at a specific prediction time t
 
-# - Decide prediction point t at which we would like to conduct a time-dependent ROC-analysis
-# assuming the cumulative/dynamic (CD) context, i.e., that TPR is calculated given that 
-# raw event times T_{ijt} are less than or equal to the given prediction time t
-predictTime <- 12 # 90% percentile survival time (203); median: 338
-
 
 # ------ Time to first Default (TFD) definition
 
 # --- Package: survivalROC()
 # Using survivalROC with NNE-estimator of S(t) under the CD-approach | NNE-kernel for S(t)
+
+# - Decide prediction point t at which we would like to conduct a time-dependent ROC-analysis
+# assuming the cumulative/dynamic (CD) context, i.e., that TPR is calculated given that 
+# raw event times T_{ijt} are less than or equal to the given prediction time t
+predictTime <- 12 # 90% percentile survival time (203); median: 338
 
 # - Calculate AUC up to given prediction time for correctly-fitted Cox model
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t)
@@ -166,10 +166,10 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 3
-objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC1_TFD$AUC; objROC1_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 91.21%, achieved in   secs ( mins)
@@ -193,10 +193,10 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 12
-objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
+objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1,
                       fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                      graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
-                      genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                      graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
+                      caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC2_TFD$AUC; objROC2_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)
@@ -207,10 +207,10 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 24
-objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC3_TFD$AUC; objROC3_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)
@@ -221,15 +221,15 @@ proc.time() - ptm
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 ptm <- proc.time() #IGNORE: for computation time calculation;
 predictTime <- 36
-objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=1, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=genFigPath, 
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC4_TFD$AUC; objROC4_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)
 
-
+DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence
 
 
 
@@ -250,3 +250,67 @@ proc.time() - ptm
 # objROC1_PWP$AUC; objROC1_PWP$ROC_graph
 # proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in  secs ( mins)
+
+
+
+
+
+# ----------------- 4. Create combined ROC-graph across multiple prediction times
+# - Set ROC-parameters and initialize data structures
+vecPercTimepoint <- c(3,12,24,36)
+vecTROC <- list(objROC1_TFD, objROC2_TFD, objROC3_TFD, objROC4_TFD)
+vLabels <- vector("list", length=length(vecPercTimepoint))
+
+
+# ------ Time to first Default (TFD) definition
+
+# -- Create a combined data object for plotting purposes
+for (i in 1:length(vecPercTimepoint)) {
+  # i <-1 # testing condition
+  
+  # datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
+  
+  # - Create a data object for the current prediction time
+  if (i == 1) {
+    datGraph <- data.table(PredictTime=as.character(vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+                           x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR)
+    
+  } else {
+    datGraph <- rbind(datGraph, 
+                      data.table(PredictTime= vecPercTimepoint[i], Threshold=vecTROC[[i]]$Thresholds, 
+                                 x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR))
+  }
+  vLabels[[i]] <- bquote("Prediction time "*italic(t)==.(vecPercTimepoint[i])*"; AUC: "*.(percent(vecTROC[[i]]$AUC, accuracy=0.01)))
+}
+
+
+# -- Graph a combined ROC-graph across prediction times t
+# - Aesthetic parameters
+vCol <- brewer.pal(8,"Set1")
+vLabels_F <- setNames(vLabels, vecPercTimepoint)
+chosenFont <- "Cambria"
+
+# - Create ROC-graph
+(gg <- ggplot(datGraph, aes(x=x,y=y,group=PredictTime)) + theme_minimal() + 
+    theme(text = element_text(family=chosenFont), legend.position="inside", 
+          legend.position.inside = c(0.75,0.25),
+          legend.background = element_rect(fill="snow2", color="black",
+                                           linetype="solid", linewidth=0.1)) +
+    labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
+           bquote("True Positive Rate "*italic(T^"+"))) + 
+    # Main line graph
+    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.5) + 
+    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=1) + 
+    # Add 45-degree line
+    geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.5) +
+    # Facets and scales
+    scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
+    scale_linetype_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+    scale_shape_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+    scale_y_continuous(label=percent) + scale_x_continuous(label=percent))
+
+
+# - Save graph
+dpi <- 200
+ggsave(gg, file=paste0(paste0(genFigPath, "TFD/DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence.png")), 
+       width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")

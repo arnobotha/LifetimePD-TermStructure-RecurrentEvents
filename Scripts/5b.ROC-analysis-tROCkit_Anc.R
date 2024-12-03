@@ -169,7 +169,7 @@ predictTime <- 3
 objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC1_TFD$AUC; objROC1_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 91.21%, achieved in   secs ( mins)
@@ -196,7 +196,7 @@ predictTime <- 12
 objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
                       fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                       graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
-                      genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+                      genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC2_TFD$AUC; objROC2_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)
@@ -210,7 +210,7 @@ predictTime <- 24
 objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC3_TFD$AUC; objROC3_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)
@@ -224,7 +224,7 @@ predictTime <- 36
 objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6)
+                          genObjPath=genObjPath, caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
 objROC4_TFD$AUC; objROC4_TFD$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in   secs ( mins)

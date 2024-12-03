@@ -483,24 +483,26 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
 #         [reportFlag]: An indicator whether thread-specific results should be reported within a communal text file in 
 #                       tracking the overall progress of the function whilst running on larger datasets
 #         [genObjPath]: A given path directory in which the results of any multithreaded parts are stored for safekeeping
+#         [logPath]: A given path directory in which the log file is stored in tracking the performance of the multithreaded loop
 # Output: [AUC]: The time-dependent Area under the curve (AUC) in summarising the corresponding time-dependent ROC-graph
 #         [ROC_graph]: The associated ROC-graph as a ggplot-object
 tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-                 fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
-                 Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/"), numThreads=4, caseStudyName="Main",
-                 genObjPath=paste0(getwd(),"/"), reportFlag=T) {
+                       fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
+                       Graph=TRUE, graphName="timedROC-Graph", genFigPath=paste0(getwd(),"/"), numThreads=4, 
+                       caseStudyName="Main",reportFlag=T, genObjPath=paste0(getwd(),"/"), logPath=paste0(getwd(),"/")) {
   
   # ------ Preliminaries 
   # -- Testing Conditions
   # datGiven = copy(dat); cox=coxExample; month_End=203; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
-  # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End";
-  # graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath; numThreads=6; reportFlag=T
+  # fld_ID="ID"; fld_Event="Event_Ind"; fld_StartTime="Start"; fld_EndTime="End"; caseStudyName="Main"
+  # graphName="coxExample_cgd"; eventVal=1; genFigPath=genFigPath; numThreads=6; reportFlag=T; 
+  # logPath=paste0(getwd(),"/"); genObjPath=paste0(getwd(),"/")
   # -- Testing conditions 2 (real-world data)
   # datGiven = copy(datCredit_valid_TFD); cox=cox_TFD; month_End=12; numDigits=2; Graph=TRUE; month_Start=0; estMethod="NN-0/1";sLambda=0.05;
   # fld_ID="PerfSpell_Key"; fld_Event="PerfSpell_Event"; eventVal=1; fld_StartTime="Start"; fld_EndTime="End";
-  # graphName="DefaultSurvModel-Cox1_Depedendence"; genFigPath=paste0(genFigPath, "TFD/"); numThreads=6; reportFlag=T; caseStudyName="Main"
+  # graphName="DefaultSurvModel-Cox1_Depedendence"; genFigPath=paste0(genFigPath, "TFD/"); numThreads=6; reportFlag=T; caseStudyName="Main";
+  # logPath=genPath; genObjPath <- genObjPath
   
-
   
   # -- Error handling
   if (!is.data.table(datGiven)) {
@@ -610,7 +612,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       # -- Preliminaries
       
       # - Initialize empty data structures for implementing the current method
-      S_t <- numeric(nThresh) #Initialise the eventual survival probability vector across unique ordered failure times
+      #S_t <- numeric(nThresh) #Initialise the eventual survival probability vector across unique ordered failure times
       
       # - Obtain unique Markers (predictions from the given Cox-model), and order them as before according to 
       # the indices of the ordered unique event times
@@ -637,27 +639,28 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       
       # - Iterate across loan space using multi-threaded setup
       ptm <- proc.time() #IGNORE: for computation time calculation
-      cl.port <- makeCluster(numThreads); registerDoParallel(cl.port) # multi-threading setup
-      cat("New Job: Estimating average survival probability across each given threshold ..", file=paste0("assesslog_",caseStudyName,".txt"), append=F)
+      cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
+      cat("New Job: Estimating average survival probability across each given threshold ..",
+          file=paste0(logPath,"assesslog_",caseStudyName,".txt"), append=F)
       datS_t <- foreach(j=1:nThresh, .combine='rbind', .verbose=F, .inorder=T,
-                     .packages=c('data.table'), .export=c('S_t.estimator')) %dopar%
-      
-      { # ----------------- Start of Outer Loop -----------------
-        # j <- 1 # testing condition
-        prepDat <- S_t.estimator(vMarkers=vMarkers, vMarkers_unique=vMarkers_unique, 
-                      vStartTimes=vStartTimes, vEventTimes=vEventTimes, vEventTimes_Filtered=vEventTimes_Filtered, 
-                      vEventInds=vEventInds, eventVal=eventVal, threshold=thresholds[j], 
-                      estMethod=estMethod, sLambda=sLambda, nRows=nRows, 
-                      reportFlag=reportFlag, iteration=j, nThresh=nThresh, caseStudyName=caseStudyName)
+                        .packages=c('data.table'), .export=c('S_t.estimator')) %dopar%
         
-      } # ----------------- End of Outer Loop -----------------
+        { # ----------------- Start of Outer Loop -----------------
+          # j <- 1 # testing condition
+          prepDat <- S_t.estimator(vMarkers=vMarkers, vMarkers_unique=vMarkers_unique, 
+                                   vStartTimes=vStartTimes, vEventTimes=vEventTimes, vEventTimes_Filtered=vEventTimes_Filtered, 
+                                   vEventInds=vEventInds, eventVal=eventVal, threshold=thresholds[j], 
+                                   estMethod=estMethod, sLambda=sLambda, nRows=nRows, reportFlag=reportFlag, 
+                                   iteration=j, nThresh=nThresh, caseStudyName=caseStudyName, logPath=logPath,
+                                   defChoice="ForLoop2")
+          
+        } # ----------------- End of Outer Loop -----------------
       stopCluster(cl.port); proc.time() - ptm
       
     } else{ stop("Unknown estimation method.") }
     
     # - Save to disk (zip) for quick disk-based retrieval later
-    pack.ffdf(paste0(genObjPath,"tROC_Results_", caseStudy_Name,"_Avg-S(t)_(", month_Start, ",", month_End, ").png"),
-                     , datS_t)
+    pack.ffdf(paste0(genObjPath,"tROC_Results_", caseStudyName,"_Avg-S(t)_(", month_Start, ",", month_End, ")"), datS_t)
     
     # - Obtain an index mapping between the unique marker vector x' and the raw (non-distinct) marker vector x such that each element
     # in this mapping (corresponding to each value in x, i.e., the mapping has the same dimensions as x) denotes the index in x' that 
@@ -702,17 +705,21 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
     
     # -- Iterate across thresholds and calculate TPR and FPR given that each threshold conditions the risk set
     # but do so across a multithreaded setup
-    #ptm <- proc.time() #IGNORE: for computation time calculation
+    ptm <- proc.time() #IGNORE: for computation time calculation
+    cat("\n\n\n Estimating vector of confusion matrix elements (TPR, FPR) across each given threshold ..",
+        file=paste0(logPath,"assesslog_",caseStudyName,".txt"), append=T)
     cl.port <- makeCluster(numThreads); registerDoParallel(cl.port) # multi-threading setup
     datROC <- foreach(c=1:nThresh, .combine='rbind', .verbose=F, .inorder=T,
                       .packages=c('data.table'), .export=c('ROC_quants.estimator')) %dopar%
       
-    { # ----------------- Start of Outer Loop -----------------
-      # c <- 2 # testing condition    
-      prepData <- ROC_quants.estimator(vMarkers=vMarkers, threshold=thresholds[c], vSurvProb=vSurvProb,
-                                       S_mean=S_mean, nRows=nRows, datGiven=datGiven, Grouped_Ind=Grouped_Ind)
-    } # ----------------- End of Outer Loop -----------------
-    stopCluster(cl.port); #proc.time() - ptm
+      { # ----------------- Start of Outer Loop -----------------
+        # c <- 2 # testing condition    
+        prepData <- ROC_quants.estimator(vMarkers=vMarkers, threshold=thresholds[c], vSurvProb=vSurvProb,
+                                         S_mean=S_mean, nRows=nRows, datGiven=datGiven, Grouped_Ind=Grouped_Ind,
+                                         iteration=c, nThresh=nThresh, reportFlag=reportFlag,
+                                         caseStudyName=caseStudyName, logPath=logPath)
+      } # ----------------- End of Outer Loop -----------------
+    stopCluster(cl.port); proc.time() - ptm
     
     
     # -- Constructing the ROC-graph itself using the Trapezoidal Rule from numerical integration practices
@@ -822,7 +829,6 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
                        cumulMark, S_tc, vWidth, vMidpoints, sArea, datGraph, datSegment, conc, gg, retObj) )
 }
 
-# NOTE: Unit tests for tROC.multi() are performed in a proof of concept script called Comparison_tROC()
 
 
 
@@ -834,13 +840,16 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
 # prediction time (implicit within vEventTimes_Filtered) and, more importantly, at a given threshold
 # for markers (beyond which a positive is predicted, and below which a negative is predicted)
 S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, vEventTimes_Filtered,
-                          vEventInds, eventVal, threshold, estMethod, sLambda, nRows, reportFlag=F, iteration, nThresh, caseStudyName="Main") {
+                          vEventInds, eventVal, threshold, estMethod, sLambda, nRows, reportFlag=T, 
+                          iteration, nThresh, caseStudyName="Main", defChoice="ForLoop", logPath="C:/") {
+  # -- Testing conditions
+  #  iteration <- 49; threshold <- thresholds[iteration]; reportFlag=T; defChoice="ForLoop"
   
   if (reportFlag) {
-    cat(paste0("\n 1)[", iteration, " of ", nThresh, "] Estimating average survivor probability S(t,c) given a threshold [c=",
+    cat(paste0("\n 1)[", iteration, " of ", nThresh, "] Estimating average survivor probability S(t,c) given a marker threshold [c=",
                threshold, "] at and beyownd which a cases' Marker (or risk score) will be predicted as a positive event, and below which",
-               " the case will be predicted as a negative event."), paste0("assesslog_",caseStudyName,".txt"), append=T);
-    Sys.sleep(0.1)
+               " the case will be predicted as a negative event."), 
+        file=paste0(logPath, "assesslog_",caseStudyName,".txt"), append=T);
   }
   
   # threshold = thresholds[j]   # testing condition
@@ -870,26 +879,48 @@ S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, v
     
     # - Apply chosen kernel function: 1 if the Marker is within the neighbourhood, 0 otherwise
     # NOTE: thresholds[j] and vMarkers_unique[j] will always be equal
-    weights <- ifelse(((vMarkers - vMarkers_unique[j]) <= Neigh_UpperB) & 
-                        ((vMarkers - vMarkers_unique[j]) >= Neigh_LowerB),  1,0)
+    weights <- ifelse(((vMarkers - vMarkers_unique[iteration]) <= Neigh_UpperB) & 
+                        ((vMarkers - vMarkers_unique[iteration]) >= Neigh_LowerB),  1,0)
   } else{ stop("Unknown kernel choice.")}
   
   # -- S(t) can now be estimated by calculating the event and at-risk populations across filtered event times s,
   # as weighted by the kernel function [weights]
-  S_0 <- 1 # Initialise the starting survival probability to 100%
-  for (jj in 1:length(vEventTimes_Filtered)) { 
+  
+  # 2 different methods by which S(t) can be calculated; kept for experimentation purposes
+  if (defChoice=="ForLoop") {
+    S_0 <- 1 # Initialise the starting survival probability to 100%
+    for (jj in 1:length(vEventTimes_Filtered)) {
+      # jj <- 2   # - At each filtered event time s, calculate the number of at-risk cases within the current neighbourhood
+      n_values <- sum(weights * (vStartTimes <= vEventTimes_Filtered[jj]) &
+                        (vEventTimes >= vEventTimes_Filtered[jj]),na.rm=T)
+      # - At each filtered event time s, calculate the number of cases within the current neighbourhood
+      # that experienced the event exactly at the current s
+      d_values <- sum(weights * (vStartTimes <= vEventTimes_Filtered[jj]) &
+                        (vEventTimes == vEventTimes_Filtered[jj])*(vEventInds==eventVal),na.rm=T)
+      
+      # - Calculate the well-known KM-based survival factor vector given the current filtered event time s
+      if (n_values>0) S_0 <- S_0 * (1 - (d_values / n_values)) else 1
+    }    
+  } else {
     
-    # - At each filtered event time s, calculate the number of at-risk cases within the current neighbourhood
-    n_values <- sum(weights * (vStartTimes <= vEventTimes_Filtered[jj]) & 
-                      (vEventTimes >= vEventTimes_Filtered[jj]),na.rm=T) 
-    # - At each filtered event time s, calculate the number of cases within the current neighbourhood 
-    # that experienced the event exactly at the current s
-    d_values <- sum(weights * (vStartTimes <= vEventTimes_Filtered[jj]) & 
-                      (vEventTimes == vEventTimes_Filtered[jj])*(vEventInds==eventVal),na.rm=T) 
+    # Calculate the number of at-risk cases for all event times
+    n_values <- sapply(vEventTimes_Filtered, function(t) {
+      sum(weights * (vStartTimes <= t) & (vEventTimes >= t), na.rm = TRUE)
+    })
     
-    # - Calculate the well-known KM-based survival factor vector given the current filtered event time s
-    if (n_values>0) S_0 <- S_0 * (1 - (d_values / n_values))
+    # Calculate the number of events occurring exactly at each event time
+    d_values <- sapply(vEventTimes_Filtered, function(t) {
+      sum(weights * (vStartTimes <= t) & 
+            (vEventTimes == t) * (vEventInds == eventVal), na.rm = TRUE)
+    })
+    
+    # Compute survival factors for all event times
+    survival_factors <- ifelse(n_values > 0, 1 - (d_values / n_values), 1)
+    
+    # Overall survival probability
+    S_0 <- prod(survival_factors)
   }
+  
   
   # - Save the pooled survival probability (at last ordered event time) as the main result for the current threshold
   return(data.table(Threshold=threshold, S_t=S_0))
@@ -900,8 +931,15 @@ S_t.estimator <- function(vMarkers, vMarkers_unique, vStartTimes, vEventTimes, v
 # Used in tROC.multi() within a multi-threaded loop in estimating the True and False Positive Rates at
 # a particular prediction time (implicit in the estimated Survival probability vector), and, more importantly, 
 # at a given threshold for markers (beyond which a positive is predicted, and below which a negative is predicted)
-ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
-                                 datGiven=NA, Grouped_Ind) {
+ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, datGiven=NA, Grouped_Ind, 
+                                 logPath="C:/",reportFlag=T, iteration, nThresh, caseStudyName="Main") {
+  
+  if (reportFlag) {
+    cat(paste0("\n 1)[", iteration, " of ", nThresh, "] Estimating confusion matrix elements given a marker threshold [c=",
+               threshold, "] at and beyownd which a cases' Marker (or risk score) will be predicted as a positive event, and below which",
+               " the case will be predicted as a negative event."), 
+        file=paste0(logPath, "assesslog_",caseStudyName,".txt"), append=T);
+  }
   
   # NOTE: Estimation hereof depends on whether independence is assumed or not amongst rows in the provided data
   if (Grouped_Ind==F) { # Independence amongst all observations

@@ -2,7 +2,7 @@
 # Defining bespoke customs relating to various generic aspects of survival analysis
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
-# SCRIPT AUTHOR(S): Marcel Muller, Dr Arno Botha
+# SCRIPT AUTHOR(S): Marcel Muller, Dr Arno Botha, Bernard Scheepers
 
 # VERSION: 1.0 (July-2023)
 # DESCRIPTION: 
@@ -14,32 +14,45 @@
 
 
 
-# Define functions for the modelling process
-# Spell check
-# Ensures that the variables contained in a vector is indeed in a column.
+# ----------------- 1. Functions related to the modelling process------------------
+
+# --- Function to ensure that the column is indeed part of the given dataset.
+# Input:  [cols], Vector containign the column names to be checked if they exist in the dataset.
+#         [dataset], Dataset to check on if the columns exist.
+# Output: print on whether the columns are in the dataset or which columns are not in the datset.
 colCheck <- function(cols, dataset) {
   # Check if all columns exist in the dataset
   missing_cols <- cols[!(cols %in% colnames(dataset))]
   
-  if (length(missing_cols) == 0) {
+  if (length(missing_cols) == 0) { # All columns are in the dataset.
     paste0("SAFE: All columns are in the dataset")
-  } else {
+  } else { # List columns not in the dataset.
     warning("WARNING: Some columns are not in the dataset.")
     paste0("Columns not in the dataset: ", paste(missing_cols, collapse = ", "))
   }
 }
 
-# Remove variables
-# Used to remove and/or add variable names to a vector.
-vecChange <- function(Vector,Remove=FALSE,Add=FALSE){
-  v <- Vector
-  if (all(Remove != FALSE)) {v <- Vector[!(Vector$vars %in% Remove)]} # Remove values in [Remove]
-  if (all(Add != FALSE)) {v <- rbind(v,Add[!(Add$vars %in% Vector$vars)])} # Add values in [Add]
-  return(v)
+
+
+# --- Function to add and/or remove certain values from a vector
+# Input:  [mat], (2 x n) Matrix on which changes will be made. The first column contains the variable names (vars) and the second their respective variable type (vartypes)
+#         [Remove], Vector containing the entries to be removed.
+# Output:        [m], Updated matrix.
+vecChange <- function(mat,Remove=FALSE,Add=FALSE){
+  m <- mat
+  if (all(Remove != FALSE)) {m <- mat[!(mat$vars %in% Remove)]} # Remove values in [Remove]
+  if (all(Add != FALSE)) {m <- rbind(v,Add[!(Add$vars %in% mat$vars)])} # Add values in [Add]
+  return(m)
 }
 
-# Create Correlation function
-# Used to detect variables that are highly correlated (> 0.6)
+# --- Function to detect significant correlations (abs(cor) > 0.6) between vectors.
+# Input:  [data], Dataset containing the variables in varlist to dertermine correlations.
+#         [varlist], list of variable names to determine correlations.
+#         [corrThresh], the absolute correlation threshold above which correlations are deemed significant.
+#         [method], the method by which correlations are determined.
+#         [Remove], Vector containing the entries to be removed.
+# Output: <graph>  Upper half of correlation matrix.
+#         <print> Text indicating the variable pairs with high correlation.
 corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
   # Compute the correlation matrix
   corrMat <- as.data.table(data) %>% subset(select = varlist) %>% cor(method = method)
@@ -48,7 +61,7 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
   corrplot(corrMat, type = 'upper', addCoef.col = 'black', tl.col = 'black', diag=FALSE,
            tl.srt = 45)
   
-  # Find correlations exceeding the threshold
+  # Find correlation coordinates exceeding the threshold
   corrCoordinates <- which(abs(corrMat) > corrThresh & abs(corrMat) < 1 & upper.tri(corrMat), arr.ind = TRUE)
   
   if(nrow(corrCoordinates) != 0){
@@ -65,21 +78,42 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
   }
 }
 
-# Table concordance statistic of single variable cox ph models
-# Used to compare predictive performance of variables
-concTable <- function(data_train, data_valid, variables) {
-  # Use lapply to efficiently compute concordances for all univariate models
+# --- Function to return the appropriate formula object based on the time definition.
+#         [TimeDef], Time definition on which the cox ph models are based on.
+#         [var], Single variable name
+TimeDef_Form <- function(TimeDef="TFD", vars){
+  # Create formula based on time definition of the dataset.
+  if(TimeDef=="TFD"){# Formula for time to first default time defintion (containing only the fist performance spell).
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                 paste(vars,collapse=" + ")))
+  }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
+                                 paste(vars,collapse=" + ")))
+  }
+}
+
+# --- Function to extract the concordances from a range of models built on a list of variables based on a time definition.
+# Input:  [data_train], Training dataset on which the models are built on.
+#         [data_valid], Validation dataset on which the models' concordance is validated on.
+#         [variables], Vector containing a list of the variables for the models.
+#         [TimeDef], Time definition on which the cox ph models are based on.
+# Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
+concTable <- function(data_train, data_valid, variables, TimeDef="TFD") {
+  # Use lapply to efficiently compute concordances for all models
   results <- lapply(variables, function(var) {
-    formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
+  
+  # Create a formula object based on the time definition
+  formula <- TimeDef_Form(TimeDef,var)
+    
     tryCatch({
-      model <- coxph(formula,id=LoanID, data = data_train)# Fit Cox model
-      c <- concordance(model, newdata=data_valid)
+      model <- coxph(formula,id=PerfSpell_ID, data = data_train)# Fit Cox model
+      c <- concordance(model, newdata=data_valid) # Calculate concordance of the model based on the validation set.
       conc <- as.numeric(c[1])# Extract concordance
       sd <- sqrt(c$var)# Extract concordance variability
       lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
       # Return results as a data.table
       data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat)
-    }, warning = function(w) {
+    }, warning = function(w) { # Create custom error if a certain variable produces a Warning or an Error.
       cat("Warning: ", w$message, " for variable: ", var, "\n")
       stop()
     }, error = function(e) {
@@ -88,38 +122,41 @@ concTable <- function(data_train, data_valid, variables) {
     })
   })
   
-  # Combine all results into a single data.table
+  # Combine all results into a single data.table.
   results <- rbindlist(results)
   
-  # Sort by concordance in descending order
+  # Sort by concordance in descending order.
   setorder(results, -Concordance)
   
+  # Return resulting table.
   return(results)
 }
 
-# Table B statistics of single variable cox ph models
-# Used to compare the goodness of fit of variables
-csTable <- function(data,variables,seedVal=1,numIt=5){
-  
-  # Simulate null distribution if seedVal is not NA
+# --- Function to extract the B-statistic from a range of models built on a list of variables based on a time definition.
+# Input:  [data_train], Training dataset on which the models are built on.
+#         [seedVal], Seed value to ensure results are reproducible.
+#         [numIt], Number of simulations to calculate the B-statistic.
+#         [TimeDef], Time definition on which the cox ph models are based on.
+# Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
+csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5,){
   # Initialize results
   results <- data.frame(Variable = variables, B_Statistic = NA_real_)
   
   # Simulate null distribution if seedVal is not NA
   if (!is.na(seedVal)) {
     set.seed(seedVal, kind = "Mersenne-Twister")
-    #null_distribution <- rexp(nrow(data))
     
     # Vectorized calculation for B statistics
     results$B_Statistic <- sapply(variables, function(var) {
-      formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
+      # Create coxph formula based on the time definition
+      formula <- TimeDef_Form(TimeDef,var)
       tryCatch({
-        model <- coxph(formula, data = data, id=LoanID)  # Fit a univariate Cox model
+        model <- coxph(formula, data = data_train, id=PerfSpell_Key)  # Fit a Cox model
         GoF_CoxSnell_KS(model, data, GraphInd=F)$Stat  # Calculate B statistic
-      }, warning = function(w) {
+      }, warning = function(w) { # Return Warning message for specific variables.
         cat("Warning: ", w$message, " for variable: ", var, "\n")
         NA
-      }, error = function(e) {
+      }, error = function(e) {# Return Error message for specific variables.
         cat("Error: ", e$message, " for variable: ", var, "\n")
         NA
       })
@@ -133,24 +170,23 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
     
   } else {
     # Perform iterative B calculation when seedVal is NA
-    matResults <- matrix(NA, nrow = length(variables), ncol = numIt,
+    # Initialize Results matrix to contain the number of interations
+    Results <- matrix(NA, nrow = length(variables), ncol = numIt,
                          dimnames = list(variables,
                                          paste0("Iteration_", 1:numIt))) %>%
       as.data.table()
     
     for (it in seq_len(numIt)) {
-      #null_distribution <- rexp(nrow(data))
-      
       # Vectorized iteration for B statistics
-      matResults[, it] <- sapply(variables, function(var) {
-        formula <- as.formula(paste0("Surv(Start, End, Default_Ind) ~ ", var))
+      Results[, it] <- sapply(variables, function(var) {
+        formula <- TimeDef_Form(TimeDef,var)# Create coxph formula based on the time definition
         tryCatch({
-          model <- coxph(formula, data = data)
-          GoF_CoxSnell_KS(model, data, GraphInd = FALSE)$Stat
-        }, warning = function(w) {
+          model <- coxph(formula, data = data)# Fit coxph model.
+          GoF_CoxSnell_KS(model, data, GraphInd = FALSE)$Stat# Obtain the B-statistic
+        }, warning = function(w) {# Return Warning message for specific variables.
           cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
           NA
-        }, error = function(e) {
+        }, error = function(e) {# Return Error message for specific variables.
           cat("Error: ", e$message, " for variable: ", var, " in iteration: ", it, "\n")
           NA
         })
@@ -158,15 +194,15 @@ csTable <- function(data,variables,seedVal=1,numIt=5){
     }
     
     # Compute additional statistics for the results matrix
-    colRanges <- matResults[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))]
-    matResults <- rbind(matResults, Range = colRanges, fill=T)
-    matResults[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]
+    colRanges <- Results[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))] # Calculate the Range of B-statistic value for each iteration
+    Results <- rbind(Results, Range = colRanges, fill=T)# Add ranges to the Results matrix
+    Results[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]# Calculate the average B-statistic for each variable
     
-    matResults <- cbind(Variables = c(variables,"Range"),matResults)
-    setorder(matResults,-Average)
+    Results <- cbind(Variables = c(variables,"Range"),Results)# Add a column to the Results matrix to cross reference the variables with their respective B-statistics
+    setorder(Results,-Average)# Arrange matrix according to 
     
     # Return matrix of B statistics
-    return(matResults)
+    return(Results)
   }
 }
 

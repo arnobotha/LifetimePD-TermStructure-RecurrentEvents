@@ -976,3 +976,6 @@ ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
   
   return(data.table(Threhsold=threshold, TPR=sTPR, FPR=sFPR))
 }
+
+# House keeping
+rm(cgd, cgd0, coxExample, dat)

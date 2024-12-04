@@ -34,7 +34,6 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 datCredit_train_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
 ### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
 datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_train_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
 ### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
 # By doing so, we are breaking our own "mould"/pattern. Move these into the appropriate section within script 3c.
 

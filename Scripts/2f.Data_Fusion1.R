@@ -237,7 +237,12 @@ datCredit_real[, TimeInDelinqState := 1:.N, by=list(LoanID, g0_Delinq_Num)]
 cat( (datCredit_real[is.na(TimeInDelinqState), .N] == 0) %?% "SAFE: No missingness detected, [TimeInDelinqState] created successfully.\n" %:%
        "WARNING: Missingness detected, [TimeInDelinqState] compromised.\n")
 
-
+# - Time in delinquency state before defaulting
+# NOTE: Quasi-complete separation may be present with [TimeInPerfSpell] as defaulting event always correspond with a [TimeInPerfSpell]=1, i.e. [g0_Delinq] evolved to 3.
+# Accounts that may have remained in shorter delinquency states may be more prone to defaulting.
+datCredit_real[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=list(LoanID)]
+cat( (datCredit_real[is.na(TimeInDelinqState_Lag_1), .N] == 0) %?% "SAFE: No missingness detected, [TimeInDelinqState_Lag_1] created successfully.\n" %:%
+       "WARNING: Missingness detected, [TimeInDelinqState_Lag_1] compromised.\n")
 
 # --- Delinquency-themed variables at the performance spell-level
 # - Delinquency state number, where each change in g_0 denotes such a "state" that may span several periods during a performance spell

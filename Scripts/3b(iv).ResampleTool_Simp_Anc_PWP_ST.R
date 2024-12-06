@@ -37,7 +37,7 @@
 
 # ------ 1. Preliminaries
 # --- Load in Dataset
-if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWP_ST"), tempPath)
+if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath)
 
 # --- Some feature engineering
 # - Creating a variable for the first observation of a loan (used as stratification variable)
@@ -362,7 +362,7 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
     scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
 # - Save graph
-ggsave(g2, file=paste0(genFigPath, "PWP ST/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g2, file=paste0(genFigPath, "PWP ST/Sample Rep/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 
 # - Cleanup
@@ -418,7 +418,7 @@ dat_anno_perf <- data.table(MAE = rep(0,anno_n*4),
                                           paste0("'TTC-mean '*E(italic(B[t]))*'")), anno_n),
                             x = rep(x_pos,anno_n*4),
                             y = rep(Inf, anno_n*4),
-                            vjust = c(27,28,29,24.2,1,2,3,4),
+                            vjust = c(1,2,3,4,27,28,29,25),
                             hjust=rep(0.5, anno_n*4))
 # - Getting the column names to help compute the MAEs
 colnames <- colnames(port.aggr_perf2)
@@ -468,7 +468,7 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
       scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
 # - Save graph
-ggsave(g4, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_ts_Subsample-", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g4, file=paste0(genFigPath, "PWP ST/Sample Rep/", "ResolutionRates_Perf_ts_Subsample-", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 # - Create graph using only the first facet (conditional on the faceting variable having more than one level)
 if (!is.na(resolPerf_stop2)){

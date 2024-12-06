@@ -85,19 +85,12 @@ datCredit_real$PerfSpellResol_Type_Hist2 %>% table() %>% prop.table()
 # --------- 3. Prepare data according to time definitions
 
 
-# --- 3.1a Time to First Default time definition
-# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
+# --- 3.1 Time to First Default time definition
+# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully
 # would like the validation set to include multiple spells in order to validate certain assumptions.
-
-# Dplyr-actions include in order the following tasks:
-# 1) Rename and adjust start and ending times for survival modelling
-# 2) Subset for performance spells only
-datCredit_TFD <- datCredit_real %>% mutate( Start = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter-1), # Records the start of time interval
-                                            End = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter), # Records the end of time interval
-                                            Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
-                                                                  ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                            filter(!is.na(PerfSpell_Num)) # Filter for only performance spells
-# Sanity check - Should be TRUE
+datCredit_TFD <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
+  mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
+         Default_Ind = DefaultStatus1)
 datCredit_TFD[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
 pack.ffdf(paste0(genPath,"creditdata_final_TFD"), datCredit_TFD)
@@ -105,89 +98,37 @@ pack.ffdf(paste0(genPath,"creditdata_final_TFD"), datCredit_TFD)
 rm(datCredit_TFD); gc()
 
 
-
-# --- 3.1b Time to First Default time definition | Alternate version from AB
-# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
-# would like the validation set to include multiple spells in order to validate certain assumptions.
-
-# - Dplyr-actions include in order the following tasks:
-# 1) Subset for performance spells only
-# 2) Rename and adjust start and ending times for survival modelling
-datCredit_TFD2 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>% 
-  mutate(Start = PerfSpell_Counter-1, End = PerfSpell_Counter,
-         Default_Ind = DefaultStatus1)
-### AB: Using the "_Counter" variety is incorrect since it refers simply to the row index within a spell, i.e.,
-# 1, ..., <Spell_Length>. Instead, one should rather use the "timeInPerfSpell" as the spell period since it 
-# accounts for left-truncated spells, which are quite prevalent in our dataset.
-# We should fix this after the close-out and rerun all subsequent analyses/models downstream from this point.
-# It is an important update and the results should shift on some axis, though will perhaps not change in 
-# distributional shape.
-# Sanity check - Should be TRUE
-datCredit_TFD2[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
-# - Save snapshots to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD2"), datCredit_TFD2)
-# - Remove from memory as an expedient
-rm(datCredit_TFD2); gc()
-
-
-
-# --- 3.1c Time to First Default time definition | Alternate and corrected version from AB
-# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully 
-# would like the validation set to include multiple spells in order to validate certain assumptions.
-
-# - Dplyr-actions include in order the following tasks:
-# 1) Subset for performance spells only
-# 2) Rename and adjust start and ending times for survival modelling
-datCredit_TFD3 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>% 
-  mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
-         Default_Ind = DefaultStatus1)
-datCredit_TFD3[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
-# - Save snapshots to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD3"), datCredit_TFD3)
-# - Remove from memory as an expedient
-rm(datCredit_TFD3); gc()
-
-
-
+# BS: I think for the article we have to ascertain whether the Age_Adj is the best method to capute the timing component.
 # --- 3.2 Anderson-Gill (AG) time definition
-datCredit_AG <- datCredit_real %>% mutate(Start = ifelse(is.na(PerfSpell_Counter),NA,Counter-1), # Records the start of time interval
-                                          End = ifelse(is.na(PerfSpell_Counter),NA,Counter), # Records the end of time interval
-                                          Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
-                                                                ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                          filter(!is.na(PerfSpell_Num)) # Filter for only the performance spells
-# Sanity check - Should be TRUE
-datCredit_AG[is.na(PerfSpell_Num),.N] == 0 # TRUE, field created successfully
+datCredit_AG <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
+  mutate(Start = Age_Adj-1, End = Age_Adj,
+         Default_Ind = DefaultStatus1)
+datCredit_AG[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
 pack.ffdf(paste0(genPath,"creditdata_final_AG"), datCredit_AG)
 # - Remove from memory as an expedient
 rm(datCredit_AG); gc()
 
 
-
+# BS: I think for the article we have to ascertain whether the Age_Adj is the best method to capute the timing component.
 # - 3.3 Prentice-Williams-Peterson (PWP) Total-time  definition
-datCredit_PWPTT <- datCredit_real %>% mutate( Start = ifelse(is.na(PerfSpell_Counter),NA,Counter-1), # Records the start of time interval
-                                              End = ifelse(is.na(PerfSpell_Counter),NA,Counter), # Records the end of time interval
-                                              Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
-                                                                     ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                              filter(!is.na(PerfSpell_Num)) # Filter for only the performance spells
-# Sanity check - Should be TRUE
-datCredit_PWPTT[is.na(PerfSpell_Num),.N] == 0 # TRUE, field created successfully
+datCredit_PWPTT <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
+  mutate(Start = Age_Adj-1, End = Age_Adj,
+         Default_Ind = DefaultStatus1)
+datCredit_PWPTT[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_PWP_TT"), datCredit_PWPTT)
+pack.ffdf(paste0(genPath,"creditdata_final_PWPTT"), datCredit_PWPTT)
 # - Remove from memory as an expedient
 rm(datCredit_PWPTT); gc()
 
 
 # - 3.4 Prentice-Williams-Peterson (PWP) Spell-time definition
-datCredit_PWPST <- datCredit_real %>% mutate( Start = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter-1), # Records the start of time interval
-                                              End = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter), # Records the end of time interval
-                                              Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
-                                                                   ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                              filter(!is.na(PerfSpell_Num)) # Filter for only the performance spells
-# Sanity check - Should be TRUE
-datCredit_PWPST[is.na(PerfSpell_Num),.N] == 0 # TRUE, field created successfully
+datCredit_PWPST <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
+  mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
+         Default_Ind = DefaultStatus1)
+datCredit_PWPST[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_PWP_ST"), datCredit_PWPST)
+pack.ffdf(paste0(genPath,"creditdata_final_PWPST"), datCredit_PWPST)
 # - Remove from memory as an expedient
 rm(datCredit_PWPST); gc()
 

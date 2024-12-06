@@ -138,7 +138,7 @@ concTable <- function(data_train, data_valid, variables, TimeDef="TFD") {
 #         [numIt], Number of simulations to calculate the B-statistic.
 #         [TimeDef], Time definition on which the cox ph models are based on.
 # Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
-csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5,){
+csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5){
   # Initialize results
   results <- data.frame(Variable = variables, B_Statistic = NA_real_)
   

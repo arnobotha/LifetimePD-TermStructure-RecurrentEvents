@@ -369,7 +369,7 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 ###           When these previously discarded performance spells are included, the training set should tend toward the full and validation set.
 
 # - Save graph
-ggsave(g2, file=paste0(genFigPath, "TFD/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g2, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_te_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 # -- Investigate whether the addition of discarded performance spells will improve the representatives of the training set.
 # - Add performance spells that were removed from the training dataset
@@ -445,7 +445,7 @@ inv_anno_perf <- merge(inv_anno_perf, unique(subset(inv_port.aggr_perf, select=c
 ### NOTE: This above code was merely for illustrative purposes and will not be referenced in furhter scripts.
 
 # - Save graph
-ggsave(g3, file=paste0(genFigPath, "TFD/", "ResolutionRates_Perf_te_FULL_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g3, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_te_FULL_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
 
 # - Cleanup
 rm(inv_anno_perf, inv_datGraph, inv_port.aggr_perf, inv_port.aggr_perf2, dat_anno_perf, resolPerf_levels, chosenFont, col.v, label.v, colnames, datGraph_Perf, port.aggr_perf, port.aggr_perf2, maxDate, minDate, Facet_Label_Perf)
@@ -496,7 +496,7 @@ dat_anno_perf <- data.table(MAE = rep(0,anno_n*4),
                                           paste0("'TTC-mean '*E(italic(B[t]))*'")), anno_n),
                             x = rep(x_pos,anno_n*4),
                             y = rep(Inf, anno_n*4),
-                            vjust = c(27,28,29,24.2,1,2,3,4),
+                            vjust = c(1,2,3,4,11,12,13,11),
                             hjust=rep(0.5, anno_n*4))
 # - Getting the column names to help compute the MAEs
 colnames <- colnames(port.aggr_perf2)
@@ -519,7 +519,7 @@ port.aggr_perf[, Facet:=paste0('"', PerfSpell_Resol_Stop, ' (', sprintf("%.2f", 
 dat_anno_perf <- merge(dat_anno_perf, unique(subset(port.aggr_perf, select=c("PerfSpell_Resol_Stop", "Facet"))), by="PerfSpell_Resol_Stop")
 
 # - Graphing parameters
-chosenFont <- "Cambria"; dpi <- 340
+chosenFont <- "Cambria"; dpi <- 200
 col.v <- brewer.pal(9, "Set1")
 label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
              "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_TFD[,.N]/1000))*"k)"),
@@ -546,7 +546,7 @@ label.v <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
       scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
 # - Save graph
-ggsave(g4, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_ts_Subsample-", round(datCredit_smp[,.N]/1000),"k.png"), width=5000/(dpi*2.25), height=4000/(dpi*1.4), dpi=dpi, bg="white")
+ggsave(g4, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_ts_Subsample_Single_Facet-", round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 # - Create graph using only the first facet (conditional on the faceting variable having more than one level)
 if (!is.na(resolPerf_stop2)){
@@ -572,7 +572,7 @@ if (!is.na(resolPerf_stop2)){
   
   # Save graph
   dpi <- 170
-  ggsave(g5, file=paste0(genFigPath, "TFD_ResolutionRates_Perf_ts_Subsample_Single_Facet-", round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+  ggsave(g5, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_ts_Subsample_Single_Facet-", round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 }
 
 # - Cleanup

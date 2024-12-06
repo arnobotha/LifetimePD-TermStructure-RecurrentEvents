@@ -116,16 +116,16 @@ summary(cox_TFD)
 # ------ Prentice-Williams-Peterson (PWP) Total-time definition
 ### AB: Objects not yet created, but space reserved so long for the PWP-model
 # - Initialize variables | AB-variant
-# vecVars_PWP <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
-#                  "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-#                  "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-#                  "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
-#                  "M_Inflation_Growth_6", "M_RealIncome_Growth")
+vecVars_PWP <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",
+                 "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med",
+                 "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3",
+                 "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
+                 "M_Inflation_Growth_6", "M_RealIncome_Growth")
 # 
 # # Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-# cox_PWP <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
-#                                    paste(vecVars_PWP,collapse=" + "))), id=LoanID, datCredit_train_PWP)
+cox_PWP <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                   paste(vecVars_PWP,collapse=" + "))), id=LoanID, datCredit_train_PWP)
 # summary(cox_PWP)
 
 
@@ -246,12 +246,13 @@ pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_36"), objROC
 # - Calculate AUC from given start up to given prediction time in following the CD-approach
 # NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
 # NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-# ptm <- proc.time() #IGNORE: for computation time calculation;
-# objROC1_PWP <- tROC.multi(datGiven=datCredit_valid_PWP, cox=cox_PWP, month_End=12, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
-#                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-#                           graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "PWP/"), numThreads=5)
-# objROC1_PWP$AUC; objROC1_PWP$ROC_graph
-# proc.time() - ptm
+ptm <- proc.time() #IGNORE: for computation time calculation;
+objROC1_PWP <- tROC.multi(datGiven=datCredit_valid_PWPST, cox=cox_PWPST, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
+                          fld_ID="PerfSpell_Key", fld_Event="Default_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                          graphName="DefaultSurvModel-Cox1_Depedendence", genFigPath=paste0(genFigPath, "PWP ST/"), 
+                          genObjPath=genObjPath, caseStudyName=paste0("PWPST_", predictTime), numThreads=6, logPath=genPath)
+objROC1_PWP$AUC; objROC1_PWP$ROC_graph
+proc.time() - ptm
 ### RESULTS: AUC up to t: %, achieved in  secs ( mins)
 
 

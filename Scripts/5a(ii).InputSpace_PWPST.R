@@ -1532,7 +1532,7 @@ concordance(cox_PWPST, newdata=datCredit_valid_PWPST)
 # Concordance= 0.9942 se= 0.0005169
 
 tROC.multi(datCredit_valid_PWPST, cox_PWPST, month_Start=0, month_End=12, sLambda=0.05,
-           estMethod="NN-0/1", numDigits=2,fld_ID="LoanID", fld_Event="Default_Ind",
+           estMethod="NN-0/1", numDigits=2,fld_ID="PerfSpell_Key", fld_Event="Default_Ind",
            eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
            graphName="timedROC-Graph_PWPST",
            genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")

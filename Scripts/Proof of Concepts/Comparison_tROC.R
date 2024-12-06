@@ -40,8 +40,9 @@ summary(kmExample)$table # overall summary statistics
 # -- Calculate various summary statistics
 # - Chosen percentile of survival times, used later as a prediction time, e.g., 75%
 # NOTE: Median would also work, though sample sizes typically dwindle at that point, which can complicate analyses
+survPercentile <- 0.75
 cat(paste0("Kaplan-Meier: Survival time at the xth percentile of the distribution of unique survival times: \n\t",
-           percTimepoint <- min(kmExample$time[kmExample$surv <= 0.75],na.rm=T)))
+           percTimepoint <- min(kmExample$time[kmExample$surv <= survPercentile],na.rm=T)))
 # - Calculate the Truncated Mean (or "Restricted Mean Survival Time" [RMST]) of survival times
 # NOTE: The classical mean survival time is only defined when S(t) can reach 0
 # NOTE2: Calculating RMST involves integrating the KM-curve up to the last (hence truncated) observed unique event time
@@ -70,14 +71,34 @@ chosenFont <- "Cambria"
 # -- Survival probability, S(t)=y
 (gsurv1c_a <- ggsurvplot(kmExample, fun="pct", conf.int=T, legend="none", 
                          break.time.by=round(max(kmExample$time)/8), palette=vCol,
-                         xlab = bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell"),
-                         ylab = bquote(Survival~probability~"["*.(mainEventName)*"]"*~italic(S(t))*": spell-level (Kaplan-Meier)"), 
+                         xlab = bquote(Discrete~time~italic(t)*" (months) in spell: first-spell"),
+                         ylab = bquote(Survival~probability~"["*.(mainEventName)*"]"*~italic(S(t))*": Kaplan-Meier (spell-level)"), 
                          xlim=c(0, max(kmExample$time)+1), surv.median.line = "hv", censor=F, 
                          ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
                          tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
                          cumevents=T, cumevents.title="Cumulative number of events", 
                          cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
                          risk.table.title = "Number in (% of) sample at risk of main event", font.family=chosenFont, fontsize=2.5))
+
+# -- Cumulative event/lifetime probability: ;, , so F(t)=1-S(t)
+gsurv1c_b <- ggsurvplot(kmExample, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
+                         break.time.by=round(max(kmExample$time)/8), palette=vCol,
+                         xlab = bquote(Discrete~time~italic(t)*" (months) in spell: first-spell"),
+                         ylab = bquote(Cumulative~lifetime~distribution~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (spell-level)"),
+                         xlim=c(0, max(kmExample$time)+1), censor=F, 
+                          #surv.median.line = "hv", # Add median line only if the distribution even reaches 50%, otherwise toggle off and rely on custom percentile
+                         ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
+                         tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
+                         cumevents=T, cumevents.title="Cumulative number of events", 
+                         cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
+                         risk.table.title = "Number in (% of) sample at risk of main event", font.family=chosenFont, fontsize=2.5)
+gsurv1c_b$plot <- gsurv1c_b$plot + 
+                # Add Custom percentile line segment for illustrative purposes
+                geom_segment(x = 0, xend=percTimepoint, y=survPercentile, yend = survPercentile, linetype = "dashed", color = vCol[1]) +
+                geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = survPercentile, linetype = "dashed", color = vCol[1]) +
+                annotate("text", x = percTimepoint, y = survPercentile, label = paste0(comma(survPercentile*100), "th Percentile: ", round(percTimepoint, 2), " months"),
+                         hjust = -0.1, color = vCol[1], size = 3, family = chosenFont)
+gsurv1c_b
 
 
 # -- Discrete baseline hazard function: h(t) | Empirical estimation method
@@ -106,7 +127,7 @@ plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
 (gsurv1c_d <- ggplot(haz_dat[Time<=300,], aes(x=Time,y=hazard)) + theme_minimal() +
     geom_line(linetype="solid", colour=vCol2[1]) + geom_point(colour=vCol2[1]) + 
     geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
-    labs(y=bquote(plain(Estimated~hazard*" function ["*.(mainEventName)*"]"*~italic(h(t))*": spell-level (Kaplan-Meier)")), 
+    labs(y=bquote(plain(Estimated~hazard*" function ["*.(mainEventName)*"]"*~italic(h(t))*":  Kaplan-Meier (spell-level)")), 
          x=bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell")) + 
     theme(text=element_text(family=chosenFont),legend.position="bottom") + 
     scale_colour_manual(name="", values=vCol2[2], labels=vlabel) + 
@@ -120,6 +141,8 @@ plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
 # -- Save plots
 dpi <- 150 # need to decrease size for risk tables' text
 ggsave(print(gsurv1c_a,newpage=F), file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_a-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+       width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+ggsave(print(gsurv1c_b,newpage=F), file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_b-", mainEventName,"_CumulEvent-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 dpi <- 180 # reset
 ggsave(gsurv1c_d, file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_d-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),

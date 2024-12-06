@@ -21,18 +21,15 @@
 
 
 
-# --------- 1. Preliminaries
+# --------- 1.1 Preliminaries
 # -- Confirm prepared database is loaded into memory
 if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4a"), tempPath)
 
 
 
+# --------- 1.2 Prepare data according to time definitions
 
-
-# --------- 2. Prepare data according to time definitions
-
-
-# --- 2.1a Time to First Default time definition
+# --- 1.2a Time to First Default time definition
 # NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully
 # would like the validation set to include multiple spells in order to validate certain assumptions.
 # Dplyr-actions include in order the following tasks:
@@ -46,10 +43,7 @@ datCredit_TFD1 <- datCredit_real %>% mutate( Start = ifelse(is.na(PerfSpell_Coun
 # Sanity check - Should be TRUE
 datCredit_TFD1[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 
-
-
-
-# --- 2.1b Time to First Default time definition | Alternate version from AB
+# --- 1.2b Time to First Default time definition | Alternate version from AB
 # NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully
 # would like the validation set to include multiple spells in order to validate certain assumptions.
 # - Dplyr-actions include in order the following tasks:
@@ -67,10 +61,7 @@ datCredit_TFD2 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
 # Sanity check - Should be TRUE
 datCredit_TFD2[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 
-
-
-
-# --- 2.1c Time to First Default time definition | Alternate and corrected version from AB
+# --- 1.3c Time to First Default time definition
 # NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully
 # would like the validation set to include multiple spells in order to validate certain assumptions.
 # - Dplyr-actions include in order the following tasks:
@@ -83,32 +74,57 @@ datCredit_TFD3[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 
 
 
-# --------- 3. Investigate similarities between datasets.
+
+
+# --------- 2. How similar are the 3 data tables?
 # -- Compare similarity between datasets 1) datCredit_TFD1 and 2) datCredit_TFD2.
 all.equal(datCredit_TFD1, datCredit_TFD2) # TRUE
 # datCredit_TFD1 and datCredit_TFD2 are indeed identical and therefore the order of operation did not change final form of table.
 
 # -- Compare similarity between datasets 1) datCredit_TFD1 and 2) datCredit_TFD3.
 all.equal(datCredit_TFD1, datCredit_TFD3) # Not TRUE
-# datCredit_TFD1 and datCredit_TFD2 are not identical and the differences appear to be in the Start column
+# datCredit_TFD1 and datCredit_TFD3 are not identical and the differences appear to be in the Start column.
 
-# - Investigate whether differences are due to truncated loans.
+# --- 2.1 Is TFD1 and TFD3 different due to left-truncated spells?
 all.equal(datCredit_TFD1[PerfSpell_LeftTrunc==0,], datCredit_TFD3[PerfSpell_LeftTrunc==0,]) # TRUE
-# datCredit_TFD1 and datCredit_TFD2 are identical if truncated performance spells are filtered out.
+### RESULTS: datCredit_TFD1 and datCredit_TFD3 are identical if truncated performance spells are filtered out.
+
+# --- 2.2 How different are TFD1 and TFD3?
+all.equal(datCredit_TFD1[,PerfSpell_Key], datCredit_TFD3[,PerfSpell_Key]) # TRUE
+### RESUTLS: The left-trucated spells has no influence on the [PerfSpell_Key].
+
+all.equal(datCredit_TFD1[,Start], datCredit_TFD3[,Start]) # FALSE
+### RESUTLS: The left-trucated spells has an influence on the [PerfSpell_Key].
+
+# -- Investigate distribution of differences
+# Perform distributional analysis on difference in [Start] variables.
+describe(datCredit_TFD3$Start - datCredit_TFD2$Start)
+# Mean of 23.69 with a percentile distribution [0.05, 0.95] of [0; 138]
+
+hist(datCredit_TFD3$Start - datCredit_TFD2$Start, breaks='FD')
+# Extremely skewed distribution with significant extreme values (a maximum of 1216).
+
+# -- Investigate distribution of differences given the loans are left-truncated.
+# Perform distributional analysis on difference in [Start] variables.
+describe(datCredit_TFD3[PerfSpell_LeftTrunc==1, Start] - datCredit_TFD1[PerfSpell_LeftTrunc==1, Start])
+# Mean of 52.34 with a percentile distribution [0.05, 0.95] of [2; 167], with a minimum of 1
+
+hist(datCredit_TFD3[PerfSpell_LeftTrunc==1, Start] - datCredit_TFD1[PerfSpell_LeftTrunc==1, Start], breaks='FD')
+# Skewed distribution with significant extreme values
+
+### CONCLUSION: There is a significant difference between the two time definitions, specifically as they relate to left-truncated performance spells.
+
+# --------- 3. How prevalent is left-truncated performance spells
+datCredit_TFD1[PerfSpell_LeftTrunc==1 & !duplicated(PerfSpell_Key), .N]/datCredit_TFD1[ !duplicated(PerfSpell_Key), .N]
+# 0.373624
+
+### CONCLUSION: Due to the high prevalence of left truncated performance spells, TFD3 should be implemented in favour of TFD1/TFD2.
 
 
 
 
 
-# --------- 3. Determine whether the difference between datCredit_TFD1 and datCredit_TFD2 are significant
-# Build coxph model based on datCredit_TFD1 and fit on random variable but compare base hazard rates.
-cox_TFD1 <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4, id=LoanID, data=datCredit_TFD1)
-
-# Build coxph model based on datCredit_TFD1 and fit on random variable but compare base hazard rates.
-cox_TFD3 <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_SD_4, id=LoanID, data=datCredit_TFD3)
 
 
 
-### AB: Compare the differences among TFD1-3 and establish whether or not these 
-# are significant by building different Cox regression models from them.
-# Method of comparison: time-dependent ROC-analysis.
+

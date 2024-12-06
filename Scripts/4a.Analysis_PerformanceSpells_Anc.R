@@ -27,10 +27,10 @@
 
 # ----------------- 1. Max spell number ---
 # - Confirm prepared datasets are loaded into memory
-if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4"), tempPath)
+if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4a"), tempPath)
 
 # lookup
-lookup <- subset(datCredit_real, LoanID == datCredit_real[PerfSpell_Num == 8 & PerfSpell_Counter == 1, LoanID][1] )
+lookup <- subset(datCredit_real, LoanID == datCredit_real[PerfSpell_Num == 8 & PerfSpell_Counter == 1, LoanID][1])
 
 # - Aggregation to account-level
 # NOTE: Assign max conditionally since there are loans that are forever in default and hence will have no 
@@ -157,7 +157,7 @@ datAggr2[, PerfSpell_Num := paste0("Spell: ", PerfSpell_Num)]
 ggsave(g2, file=paste0(genFigPath, "/FULL SET/Performance Spell Risk Events.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 # House keeping
-rm(datAggr2,censored,g);gc()
+rm(datAggr2,censored,g, datCredit_real);gc()
 
 
 
@@ -165,28 +165,42 @@ rm(datAggr2,censored,g);gc()
 # ----------------- 3. Kaplan-Meier Analysis
 # Investigate the Kaplan-Meier curves to decide on spell groupings
 
-# Create appropriate variables (according to PWP ST to ensure a common origination point)
-datCredit_real <- datCredit_real %>% mutate(Start = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter-1), # Records the start of time interval
-                                            End = ifelse(is.na(PerfSpell_Counter),NA,PerfSpell_Counter), # Records the end of time interval
-                                            Default_Ind = ifelse(!is.na(PerfSpell_Num) & DefaultStatus1==1,1,
-                                                                 ifelse(!is.na(PerfSpell_Num),0,NA))) %>%
-                                      filter(!is.na(PerfSpell_Num));gc()
+# - Perform analysis on the PWP ST time definition - Results are similar to that of AG/PWP TT except for the origin of each graph
+if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath)
 
-# Create a graphing data set for the Kaplan-Meier analysis and without the 9th performance spell since it contains a singel spell that was censored
-datAggr3 <- datCredit_real[PerfSpell_Num!=9,list(Date,LoanID,Start,End,Default_Ind,PerfSpell_Num)]
+# Create a graphing data set for the Kaplan-Meier analysis,
+# 1) Remove the 9th Performance spell since only a single loan reached this point.
+# 2) Remove left-truncated loans since its unclear in which loan they are when the study period started.
+datAggr3 <- datCredit_PWPST[PerfSpell_Num!=9,list(Date,LoanID,Start,End,Default_Ind,PerfSpell_Num)]
 
 # - Aesthetic engineering
 chosenFont <- "Cambria"; dpi <- 200; colPalette <- "BrBG"
-
+# Grouping spells to create a facted graph
+datAggr3[ ,Spell_grp := fifelse(PerfSpell_Num <= 3, "1", fifelse(PerfSpell_Num <= 5, "2", "3"))]
+# Fit survival function for the analysis
 cox <- survfit(Surv(Start, End, Default_Ind) ~ PerfSpell_Num, data = datAggr3);gc()
-(g3 <- ggsurvplot(cox,data=datCredit_real,palette = brewer.pal(8,"Dark2"),
+# Extract median survival times from the survival fit
+medLife <- summary(cox)$table[, "median"]
+median_survival <- data.frame("Spell" = names(medLife),
+                              "Median Life" = medLife,
+                              x = medLife,
+                              y = rep(0,length(medLife)),
+                              label = paste0("Median: ", round(medLife,1)),
+                              Spell_grp=c("1","1","1","2","2","3","3","3"),
+                              vjust=c(0,1,0,1,0,1,0,2))
+
+(g3 <- ggsurvplot(cox,data=datAggr3,palette = brewer.pal(8,"Dark2"),
                   censor=FALSE,ggtheme = theme_minimal() +
-                  theme(text=element_text(family=chosenFont),
-                  plot.title=element_text(hjust=0.5,size=15, face="bold")),
-                 xlab="Time (Months)", legend="bottom",conf.int=TRUE,
-                 legend.title="Performance Spells",
-                 legend.labs=c("Spell 1", "Spell 2","Spell 3", "Spell 4",
-                               "Spell 5","Spell 6","Spell 7", "Spell 8")))
+                  theme(text=element_text(family=chosenFont), strip_text=element_blank(), strip.background = element_blank()),
+                  xlab = "Months", legend="bottom",conf.int=TRUE,
+                  legend.title="Performance Spells",
+                  legend.labs=c("Spell 1", "Spell 2","Spell 3", "Spell 4",
+                               "Spell 5","Spell 6","Spell 7", "Spell 8"),
+                 facet.by="Spell_grp", scales="free_x", surv.median.line = "v") +
+    geom_label(data=median_survival, aes(x = x, y = y,label = label,
+                                        group=Spell_grp),
+               vjust=median_survival$vjust, alpha=0.7) +
+    scale_y_continuous(label = percent_format()))
 # - Create risk table object
 riskTable <- g3$data.survtable
 

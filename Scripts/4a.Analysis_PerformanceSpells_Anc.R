@@ -1,5 +1,7 @@
-# ============================================ GENRIC ANALYSES =========================================
-# High-level exploratory analysis on certain diverse aspects
+# ================================= PERFORMANCE SPELL ANALYSES =========================================
+# Analysis performed on the sample size of different performance spells. The 
+# analysis aids in the decision making about a suitable cut-off point beyond 
+# which all performance spells are grouped together.
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Classifier Diagnostics
 # SCRIPT AUTHOR(S): Dr Arno Botha, Bernard Scheepers

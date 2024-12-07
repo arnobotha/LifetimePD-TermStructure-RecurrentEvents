@@ -29,8 +29,7 @@
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 
 # Subset the data set to select specific columns
-dat <- datCredit_train_TFD %>% subset(select=c(Date, LoanID, PerfSpell_Max_Date, Start, End, Default_Ind, BalanceToTerm))
-dat[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)] # Create an indicator vaiable for detecting the end of a performance spell
+dat <- datCredit_train_TFD %>% subset(select=c(Date, LoanID, PerfSpell_Max_Date, Start, End, Default_Ind, BalanceToTerm, PerfSpell_Exit_Ind))
 
 # Initialize variables
 valid <- dat$PerfSpell_Exit_Ind==1 # Binary vector to index the end observation of each performance spell.

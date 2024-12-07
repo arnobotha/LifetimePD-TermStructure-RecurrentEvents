@@ -411,7 +411,7 @@ ggsave(gg, file=paste0(paste0(genFigPath, "Proof of Concepts/coxExample1-Combine
 
 
 # - cleanup
-suppressWarnings(rm(gsurv1c_a, gsurv1c_d, haz_dat, kmExample, kmExample_survFitSummary, coxExample, coxExample2,
+suppressWarnings(rm(gsurv1c_a, gsurv1c_b, gsurv1c_d, haz_dat, kmExample, kmExample_survFitSummary, coxExample, coxExample2,
                     dat, cgd, cgd0))
   
   

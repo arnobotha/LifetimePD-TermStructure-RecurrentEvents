@@ -41,7 +41,7 @@
 # -- Confirm prepared database is loaded into memory
 if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4a"), tempPath)
 
-Defcol <- c("DefSpell_Num","TimeInDefSpell") # Default variables to remove
+Defcol <- c("DefSpell_Num", "TimeInDefSpell") # Default variables to remove
 ncol <- ncol(datCredit_real)
 datCredit_real[, (Defcol) := NULL]
 
@@ -51,7 +51,7 @@ ncol(datCredit_real) + length(Defcol) == ncol
 
 
 
-# --------- 2. Additional (light) feature engineering
+# --------- 2. Additional (light) feature engineering towards implementing various time definitions
 # - Max date of each performance spell (used as a stratifier)
 datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Max_Date := max(Date, na.rm=T), by=list(PerfSpell_Key)]
 datCredit_real[is.na(PerfSpell_Key), PerfSpell_Max_Date:= NA]
@@ -60,16 +60,8 @@ datCredit_real[is.na(PerfSpell_Key), PerfSpell_Max_Date:= NA]
 datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Min_Date := min(Date, na.rm=T), by=list(PerfSpell_Key)]
 datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
 
-# - Creating a variable for the first observation of a loan (used as stratification variable)
-datCredit_real[, Date_First := Date[1], by=LoanID]
-### AB: This variable would likely be the same as Date_Origination[1]. We can check later, verify, and possibly streamline by
-# using Date_Origination[1] towards more efficient programming, especially when we are considering to publish!
-
 # - Creating an indicator variable variable for when a loan exists a performance spell
 datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
-### AB: I can appreciate the novelty of this variable, well done. However, its naming sucks, so I have changed it
-# across the entire codebase (up to script 5a, at least, since I know you were working on the later ones)
-# to something more descriptive.
 
 # - Creating new spell resolution types
 # Performance spells
@@ -77,7 +69,7 @@ datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_whe
                                                                                   PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
                                                                                   TRUE ~ "Settled & Other"))
 # Checking the proportions of the newly created variable
-datCredit_real$PerfSpellResol_Type_Hist2 %>% table() %>% prop.table()
+describe(datCredit_real$PerfSpellResol_Type_Hist2)
 
 
 
@@ -99,6 +91,7 @@ rm(datCredit_TFD); gc()
 
 
 # BS: I think for the article we have to ascertain whether the Age_Adj is the best method to capute the timing component.
+### AB: If we want to know the "true age" of a loan at any t, then [Age_Adj] is the best we have. [Age] is the base but flawed variable that we corrected into [Age_Adj]
 # --- 3.2 Anderson-Gill (AG) time definition
 datCredit_AG <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = Age_Adj-1, End = Age_Adj,

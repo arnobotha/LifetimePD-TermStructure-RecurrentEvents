@@ -5,7 +5,15 @@
 # for Cox regression modelling.
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Roland Breedt, Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Marcel Muller (MM), Roland Breedt (RB), 
+#                   Bernard Scheepers (BS)
+#
+# DESCRIPTION:
+# This script performs the following high-level tasks:
+#   1) Subsample main dataset into a more manageable but still representative dataset
+#   2) Fuse subsampled set with input space
+#   3) Screen input space against missingness and apply appropriate treatments
+#   4) Perform feature engineering (transforms, ratio-type)
 # ---------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -37,115 +45,136 @@
 
 
 # ------ 1. Preliminaries
-# --- 1.1 Load in Dataset
+
+ptm <- proc.time() # for runtime calculations (ignore)
+
+# - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath)
-
-
-
-
-# ------- 2. Subsampling
-
-
-# --- 2.1 Preliminaries and parameter definitions
+doDescribe <- F # whether to run describe as part of production run or not
 
 # - Field Names and other parameters
-# Required field names
-resolPerf_targetVar <- "Defaulted" # Reference level in the performance spell resolution type (as specified by [resolPerf_start]) for the target variable
-clusVar <- "LoanID"
-clusVar_Perf <- "PerfSpell_Key"
-timeVar <- "Date"
-counter <- "Counter"
-PerfSpell_counter <- "PerfSpell_Counter"
+clusVar <- "LoanID" # for clustered random sampling on subject-level
+timeVar <- "Date" # calendar time variable over which main event is observed & predicted, used in strata analysis
+counter <- "Counter" # subject-level row index variable, used in strata analysis
+# Optional field named (stratification)
+stratifiers <- c("Event_Type") # First variable should be of type "date"
+### NOTE: Assign stratifiers to NA if no stratifiers are desired. Good candidates include: "Event_Type", "LN_TPE", and "HasDefaulted_Ever"
+
+# - Facet specification field names (for graphing purposes of the resolution rates)
+resolType <- "PerfSpellResol_Type_Hist2" # Performance spell resolution types, used in strata analysis
+resolType_Val <- "Defaulted" # Reference value in the performance spell resolution type field [resolType], used in strata analysis
+### NOTE: Set to NA if not interested in creating additional facets for the performance spells using stopping time
+
+# - Subsampling parameters
 smp_size <- 90000 # fixed size of downsampled set in terms of the number of unique performance spells
 cat(smp_size, " is ", sprintf("%.4f", smp_size/length(unique(datCredit_TFD[,get(clusVar)]))*100), "% of all performance spells.")
-smp_frac <- 0.7 # sampling fraction for resampling scheme
-minStrata_size_Perf <- 20 # Minimum size for performance spells
-# Optional field named (stratification)
-stratifiers <- c("Date_First", "Event_Type") # First variable should be of type "date" | Assign "NA" for no stratifiers | Other good stratifier candidates are "Event_Type", "LN_TPE", and HasDefaulted_Ever
-# Facet specification field names (for graphing purposes of the resolution rates)
-resolPerf <- "PerfSpellResol_Type_Hist2" # Field name of performance spell resolution types - first level should be the target event (default)
-resolPerf_stop <- "PerfSpellResol_Type_Hist3" # Field name for performance spell resolution rate; specific for the stopping time cohort | Assign [resolPerf] if not interested in controlling the resolution rate facet for stop dates
-resolPerf_stop2 <- "Defaulted" # Name of the main resolution type (typically default) used to obtain a single facet (this level needs to be within the resolPerf_stop variable) | Set to NA if not interested in creating additional facets for the performance spells using stopping time
-
-# - Implied sampling fraction for the downsampling step
+### RESULTS: 90k constitutes 14% of all loans
+# Implied sampling fraction for the downsampling step
 smp_perc <- smp_size/length(unique(datCredit_TFD[,get(clusVar)]))
 
-# - Minimum strata requirements
-minStrata_size <- 0 # Minimum strata size specified for subsample
+# - Resampling, stratification, and other general parameters
+smp_frac <- 0.7 # sampling fraction for resampling scheme
+minStrata_size <- 0 # Minimum strata size specified for subsample, used in strata analysis
+timeDef_TFD <- T # Special logic during resampling for "TFD". 
+### AB: VERY IMPORTANT: Switch off [timeDef_TFD] when translating this script to other time definition scripts!!
 
 
-# --- 2.2 Subsampling (simple clustered)
-# - Set seed
+
+
+
+
+
+# ------ 2. Clustered subsampling scheme with n-way stratified random sampling
+
+# --- 1. Apply specified subsampling scheme onto data
+
+# - Set seed for sampling 
 set.seed(1, kind="Mersenne-Twister")
-# - Conditional loop for stratifiers
-if (all(is.na(stratifiers))){ # No stratifiers
-  # Get unique loan account IDs from the full dataset
-  dat_keys <- unique(datCredit_TFD[, mget(c(clusVar))])
-  # Use simple random sampling to select the loan IDs that ought to be in the subsampled dataset
-  dat_smp_keys <- dat_keys %>% slice_sample(prop=smp_perc) %>% as.data.table()
-} else { # Stratifiers
-  # - Get unique loan account IDs from the full dataset
-  dat_keys <- unique(datCredit_TFD[, mget(c(clusVar, stratifiers))])
-  # - Use simple random sampling with the stratifiers to select the loan IDs that ought to be in the subsampled dataset
-  dat_smp_keys <- dat_keys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_perc) %>% as.data.table()
-}
-# - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), dat_smp_keys)
 
-# - Obtain the associated loan records as to create the subsampled dataset
-datCredit_smp <- copy(datCredit_TFD[get(clusVar) %in% dat_smp_keys[, get(clusVar),]])
+# - Training Key population
+if (all(is.na(stratifiers))){ # No stratifiers
+  # Get unique subject IDs or keys from the full dataset
+  datKeys <- unique(datCredit_TFD[, mget(c(clusVar))])
+  # Use simple random sampling to select at random some keys from which the training set will be populated 
+  datKeys_sampled <- datKeys %>% slice_sample(prop=smp_perc) %>% as.data.table()
+} else { # Stratifiers
+  # Get unique subject IDs or keys from the full dataset
+  datKeys <- unique(datCredit_TFD[, mget(c(clusVar, stratifiers))])
+  # Use stratified random sampling to select at random some keys from which the training set will be populated 
+  datKeys_sampled <- datKeys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_perc) %>% as.data.table()
+}
+
+# - Obtain the associated loan records in creating the subsampled dataset
+datCredit_smp <- copy(datCredit_TFD[get(clusVar) %in% datKeys_sampled[, get(clusVar),]])
+
+# - Save intermediary snapshots to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), datCredit_smp)
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), datKeys_sampled)
 
 # House keeping
 rm(datCredit_TFD)
 
 
-# --- 2.3 Minimum stratum analysis and subsequent exclusions to ensure adherence to specified threshold
-# - Obtaining the stratum that are below the minimum
+# --- 2. Strata analysis and subsequent exclusions to ensure adherence to specified minimum strata size
 if (all(!is.na(stratifiers))){ # - Conditional loop for strata
   selectionVar_smp <- c(clusVar, timeVar, stratifiers)
+  # - Test for exclusions given violations in the minimum strata size, as provided
   datStrata_smp_min <- datCredit_smp[get(counter)==1, mget(selectionVar_smp)][, list(Freq = .N), by=stratifiers][Freq<minStrata_size,]
-  cat(sum(datStrata_smp_min[,Freq]), "accounts of ", datCredit_smp[get(counter)==1,.N], "(", sprintf("%.4f", sum(datStrata_smp_min[,Freq])/datCredit_smp[get(counter)==1,.N]*100), "%) need to be excluded to ensure a minimum strata size of ", minStrata_size)
+  cat(sum(datStrata_smp_min[,Freq]), "accounts of ", datCredit_smp[get(counter)==1,.N], "(", 
+      sprintf("%.4f", sum(datStrata_smp_min[,Freq])/datCredit_smp[get(counter)==1,.N]*100), 
+      "%) need to be excluded to ensure a minimum strata size of ", minStrata_size)
   
   # - Conditionally applying the exclusions
   if (sum(datStrata_smp_min[,Freq]) > 0){
     # Saving the number of records and the prior probability, in the subsampled dataset, for reporting
     datCredit_smp_old_n <- datCredit_smp[,.N]
-    datCredit_smp_prior <- datCredit_smp[get(timeVar)==timeVar_Perf_Min, get(resolPerf)] %>% table() %>% prop.table(); datCredit_smp_prior <- datCredit_smp_prior[names(datCredit_smp_prior)[names(datCredit_smp_prior) == resolPerf_targetVar]][[1]] # Computing the prior probabilities of the performance spell resolution outcomes
-    # Initiating a vector which will contain the exclusion IDs
-    dat_keys_exc <- NA
+    # Computing the prior probabilities of the performance spell resolution outcomes
+    datCredit_smp_prior <- datCredit_smp[get(timeVar)==timeVar_Perf_Min, get(resolType)] %>% table() %>% prop.table()
+    datCredit_smp_prior <- datCredit_smp_prior[names(datCredit_smp_prior)[names(datCredit_smp_prior) == resolType_Val]][[1]]
     # Looping through the minimum strata dataset and building an exclusion condition (filter) for each row therein
     for (i in 1:datStrata_smp_min[,.N]){
-      class_type <- sapply(datStrata_smp_min[,1:length(stratifiers)], function(x) {class(x[[1]])}) # Getting the type of class of each stratifier (used for building the ith condition)
+      # Getting the type of class of each stratifier (used for building the ith condition)
+      class_type <- sapply(datStrata_smp_min[,1:length(stratifiers)], function(x) {class(x[[1]])}) 
       
       excCond <- datStrata_smp_min[i,1:length(stratifiers)] # Getting the values of the ith minimum strata
       excCond <- data.table(Stratifier = colnames(excCond), # Building a dataset
                             Value = unname(t(excCond)), # Ensure that the column name is Value instead of Value.V1
                             Class = class_type)
-      excCond[, Value.V1 := ifelse(Class %in% c("numeric", "Date"), paste0("as.",Class,"(",'"',Value.V1,'"',")"), paste0('"', Value.V1, '"'))]
+      excCond[, Value.V1 := ifelse(Class %in% c("numeric", "Date"), 
+                                   paste0("as.",Class,"(",'"',Value.V1,'"',")"), paste0('"', Value.V1, '"'))]
       excCond[, Condition := paste0(Stratifier, " == ", Value.V1, " & ")] # Adding an "and" operator to enable multiple conditions
-      excCond2 <- parse(text = paste0(paste0(excCond$Condition, collapse = ""), counter,"==1")) # Compiling the ith condition
-      
-      dat_keys_exc <- c(dat_keys_exc, as.vector(datCredit_smp[eval(excCond2), get(clusVar)]))
+      # Compiling the ith condition
+      excCond2 <- parse(text = paste0(paste0(excCond$Condition, collapse = ""), counter,"==1"))
+      # Add the excluded subject key to our list
+      if (i==1) dat_keys_exc <- as.vector(datCredit_smp[eval(excCond2), get(clusVar)]) # set new list
+      else dat_keys_exc <- c(dat_keys_exc, as.vector(datCredit_smp[eval(excCond2), get(clusVar)]) ) # append to existing list
     }
-    dat_keys_exc <- dat_keys_exc[-1] # Removing the first value (as it is a missing value stemming from the vector's creation)
     
     # Applying the exclusions to the subsampled dataset
     datCredit_smp <- copy(datCredit_smp[!(get(clusVar) %in% dat_keys_exc),])
     
-    cat(datCredit_smp_old_n-datCredit_smp[,.N], " observations removed (", sprintf("%.4f", (datCredit_smp_old_n-datCredit_smp[,.N])/datCredit_smp_old_n*100), "% ) \n",
-        "Prior probability = ", sprintf("%.4f", datCredit_smp_prior*100), "% comapred to ", sprintf("%.4f", (datCredit_smp[get(timeVar)==timeVar_Perf_Min, get(resolPerf)] %>% table() %>% prop.table())[[2]]*100), "%")
+    cat(datCredit_smp_old_n-datCredit_smp[,.N], " observations removed (", 
+        sprintf("%.4f", (datCredit_smp_old_n-datCredit_smp[,.N])/datCredit_smp_old_n*100), "% ) \n",
+        "Prior probability = ", sprintf("%.4f", datCredit_smp_prior*100), "% comapred to ", 
+        sprintf("%.4f", (datCredit_smp[get(timeVar)==timeVar_Perf_Min, get(resolType)] %>% table() %>% prop.table())[[2]]*100), "%")
   }
-  # - Obtaining the stratum that are below the minimum
+  # [SANITY CHECK] Are there still violations in minimum strata sizes?
   datStrata_smp_min <- datCredit_smp[get(counter)==1, mget(selectionVar_smp)][, list(Freq = .N), by=stratifiers][Freq<minStrata_size,]
-  cat(sum(datStrata_smp_min[,Freq]), "accounts of ", datCredit_smp[get(counter)==1,.N], "(", sprintf("%.4f", sum(datStrata_smp_min[,Freq])/datCredit_smp[get(counter)==1,.N]*100), "%) need to be excluded to ensure a minimum strata size of ", minStrata_size)
+  if (NROW(datStrata_smp_min) > 0) cat(sum(datStrata_smp_min[,Freq]), "accounts of ", datCredit_smp[get(counter)==1,.N], "(", 
+                                       sprintf("%.4f", sum(datStrata_smp_min[,Freq])/datCredit_smp[get(counter)==1,.N]*100), 
+                                       "%) need to be excluded to ensure a minimum strata size of ", minStrata_size)
+  # - Cleanup
+  suppressWarnings( rm(datStrata_smp_min, datStrata_smp_min, datCredit_smp_old_n, datCredit_smp_prior, 
+                       dat_keys_exc, class_type, excCond, excCond2))
 }
 
 
 
 
-# ------- 3. Fusing credit dataset with additional input fields
-# - Confirm if the input space data is loaded into memory
+# ------- 3. Fuse the input space with the subsampled prepared dataset
+# - Confirm that required data objects are loaded into memory
 if (!exists('datInput.raw')) unpack.ffdf(paste0(genPath,"creditdata_input1"), tempPath)
+if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), tempPath)
 
 # [SANITY CHECK] Prevalence of overlapping fields in the input space and the main credit dataset
 # Find intersection between fields in input space and those perhaps already in the main credit dataset
@@ -182,7 +211,7 @@ NROW(data_grain_check_merge <- datCredit_smp[, list(Freq = .N), by=list(LoanID, 
 # success, the data grain check is passed
 
 # - Save intermediary snapshot to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1a"), datCredit_smp)
+pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1b"), datCredit_smp)
 # - Clean-up
 rm(datInput.raw, data_grain_check, data_grain_check_merge); gc()
 
@@ -639,43 +668,59 @@ rm(datMV, list_merge_variables, results_missingness, datMV_Check1); gc()
 
 
 
-# ------ 5. Apply a basic cross-validation clustered resampling scheme with possible stratification
+# ------ 5. Apply a basic cross-validation clustered resampling scheme with possible n-way stratification
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), tempPath)
-if (!exists('dat_smp_keys')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), tempPath)
-
-# - Set seed
-set.seed(1, kind="Mersenne-Twister")
+if (!exists('datKeys_sampled')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_keys"), tempPath)
 
 # - Implement the clustered (possibly stratified) resampling scheme by first randomly selecting loan IDs 
 # using the given sampling fraction
+set.seed(1, kind="Mersenne-Twister")
 if (all(!is.na(stratifiers))){ # enforce Stratifiers
-  dat_train_keys <- dat_smp_keys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_frac) %>% as.data.table() 
+  dat_train_keys <- datKeys_sampled %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_frac) %>% as.data.table() 
 } else { # No stratifiers
-  dat_train_keys <- dat_smp_keys %>% slice_sample(prop=smp_frac) %>% as.data.table()
+  dat_train_keys <- datKeys_sampled %>% slice_sample(prop=smp_frac) %>% as.data.table()
 }
 
-# - Extract the entire loan histories into the training set for those randomly select loans IDs,
-# while selecting only the first performing spell (given the model definition)
-# NOTE: the validation set deliberately includes multiple spells to test certain modelling assumptions
-datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]) %>% 
-  subset(PerfSpell_Num == 1)
+# - Extract the entire loan histories into the training set for those randomly select subject IDs
+# Select only the first performing spell (given the model definition), while 
+# the validation set deliberately includes multiple spells to test certain modelling assumptions
+if (timeDef_TFD) {
+  datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]) %>% 
+    subset(PerfSpell_Num == 1)
+} else {
+  datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],])
+}
+
+# - Extract the entire loan histories into the validation set for those remaining subjects
 datCredit_valid_TFD <- copy(datCredit_smp[!(get(clusVar) %in% dat_train_keys[, get(clusVar)]),]);gc()
 
-# - [SANITY CHECK] Reconciling the cardinalities of the training and the validation dataset to the subsampled dataset
-### AB: These sanity checks will always fail for the way in which we resample (i.e., training has specifically only first-time spells)
-# However, I did not want to delete this code-segment, since it will apply for other time definition models
-# check.2 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] # Should be TRUE
-# ifelse(check.2, print('SAFE: Training and validation datasets reconstitue subsampled dataset'),
-#                 print('WARNING: Training and validation datasets do not reconstitue subsampled dataset \n' ))
-# 
-# # - [SANITY CHECK] Checking if all account-specific observations are clustered together
-# check.3 <- length(unique(datCredit_smp$LoanID)) == length(unique(datCredit_train_TFD$LoanID)) + length(unique(datCredit_valid_TFD$LoanID))
-# ifelse(check.3, print('SAFE: All associated loan observations are clustered together in the training and validation datasets; no cross-contamination detected '),
-#                 print('WARNING: Not all associated loan observations are clustered together in the training and validation datasets; cross-contamination may exist \n' ))
+# - [SANITY CHECKS]
+if (timeDef_TFD) {
+  # Can subsample be reconstituted?
+  check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] + datCredit_smp[get(clusVar_Spell) %in% vSpellKeys_MultiSpell,.N] # Should be TRUE
+  # Does training set contain only first-time spells?
+  check.2 <- datCredit_train_TFD[get(spellNum) == 1,.N] == datCredit_train_TFD[,.N] # Should be TRUE
+  # Does validation spell contain spell numbers other than 1?
+  (check.3 <- datCredit_valid_TFD[get(spellNum) != 1,.N] > 0) # Should be TRUE
+} else {
+  # Can subsample be reconstituted?
+  check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N]
+  # Does training set contain only first-time spells?
+  check.2 <- T # Irrelevant for this time definition, so assign default
+  # Does validation spell contain spell numbers other than 1?
+  check.3 <- T # Irrelevant for this time definition, so assign default
+}
+cat((check.1 %?% "SAFE: Training and validation datasets succcessfully reconstitute the subsampled dataset. \n" %:% 
+       'WARNING: Training and validation datasets do not reconstitue the subsampled dataset. \n' ))
+cat((check.2 %?% paste0("SAFE: Spells in the training dataset are selected as desired; First-spells only? ", timeDef_TFD, ".\n" ) %:%
+       paste0("WARNING: Spells in the training dataset are not selected as desired; First-spells only? ", timeDef_TFD, ".\n" )))
+cat((check.3 %?% paste0("SAFE: Spells in the validation dataset are selected as desired; Multi-spells? ", check.3, ".\n" ) %:%
+       paste0("WARNING: Spells in the validation dataset are not selected as desired; Multi-spells? ", check.3, ".\n" )))
 
 # - Clean up
-suppressWarnings(rm(smp_perc, dat_keys, dat_smp_keys, dat_train_keys, check.2, check.3, datCredit_smp_old_n, datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp))
+suppressWarnings(rm(smp_perc, datKeys, datKeys_sampled, dat_train_keys, check.2, check.3, datCredit_smp_old_n, 
+                    datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp))
 
 
 # --- 5.2 Saving the cross-validation scheme

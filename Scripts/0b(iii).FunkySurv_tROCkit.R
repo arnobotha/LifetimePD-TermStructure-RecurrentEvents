@@ -4,7 +4,7 @@
 # the discrimination power (prediction accuracy) of a given Cox regression model
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers, Dr Arno Botha
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Bernard Scheepers (BS)
 # VERSION: 1.0 (November-2024)
 # ================================================================================
 

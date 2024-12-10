@@ -67,7 +67,7 @@ test <- subset(datCredit_real, ExclusionID==0,
                         "HasWOff", "HasSettle", "HasRepaid", "ExclusionID", "TreatmentID"))
 
 # - Find preliminary t_z points as the start of a TZB-regime, if found
-test[, ZeroBal_Start := TruEnd_inner(vecGive=Balance, thres=currThresh, retType="t_z", 
+test[, ZeroBal_Start := TruEnd_inner(vecGiven=Balance, thres=currThresh, retType="t_z", 
                                      minLength=TZB_length, nonTZB_Val=0), by=list(LoanID)]
 # - Indicate affected accounts for easier traversal
 test[, HasTrailingZeroBalances := ifelse(ZeroBal_Start > 0, TRUE, FALSE),

@@ -61,15 +61,22 @@ datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Min_Date := min(Date, na.rm=T), 
 datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
 
 # - Creating an indicator variable variable for when a loan exists a performance spell
-datCredit_real[,PerfSpell_Exit_Ind := with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))]
+datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
+#datCredit_real[,PerfSpell_Exit_Ind2 := with(datCredit_real, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))]
+#all.equal(datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind], datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind2])
+### RESULTS: TRUE
 
-# - Creating new spell resolution types
+# - Creating new spell resolution types & relocate 
 # Performance spells
 datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
                                                                                   PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
-                                                                                  TRUE ~ "Settled & Other"))
-# Checking the proportions of the newly created variable
+                                                                                  TRUE ~ "Settled & Other")) %>%
+  relocate(PerfSpell_Exit_Ind, PerfSpell_Max_Date, PerfSpell_Min_Date,  .after=PerfSpellResol_Type_Hist)
+
+# - Checking the proportions of the newly created variable
 describe(datCredit_real$PerfSpellResol_Type_Hist2)
+#check <- subset(datCredit_real, LoanID %in% unique(datCredit_real[PerfSpell_Num > 2 & PerfSpell_Age == 12, LoanID])[1])
+#check2 <- subset(datCredit_real, LoanID %in% unique(datCredit_real[PerfSpell_Exit_Ind != PerfSpell_Exit_Ind2, LoanID])[1])
 
 
 

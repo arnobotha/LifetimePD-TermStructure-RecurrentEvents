@@ -68,7 +68,7 @@ resolType_Val <- "Defaulted" # Reference value in the performance spell resoluti
 # - Subsampling parameters
 smp_size <- 90000 # fixed size of downsampled set in terms of the number of unique Loans
 cat(smp_size, " is ", sprintf("%.4f", smp_size/length(unique(datCredit_TFD[,get(clusVar)]))*100), "% of all performance spells.")
-### RESULTS: 90k constitutes 83% of all loans
+### RESULTS: 90k constitutes 14% of all loans
 # Implied sampling fraction for the downsampling step
 smp_perc <- smp_size/length(unique(datCredit_TFD[,get(clusVar)]))
 
@@ -461,7 +461,7 @@ datCredit_smp <- merge(datCredit_smp, datInflation, all.x=T, by="Date")
 # [SANITY CHECK] Are inflation factors missing?
 cat((anyNA(datCredit_smp$Inf_Factor)) %?% paste0('WARNING: Inflation factor(s) is(are) missing for ', unique(datCredit_smp[is.na(Inf_Factor),Date]), '. \n') %:%
       'SAFE: Inflation factors created successfully. \n')
-### RESULTS: [Inf_Factor] variables  missing for 2022-12-31.
+### RESULTS: [Inf_Factor] variables created successfully without any missingness
 
 # - Deflate the relevant variables using the pre-calculated inflation factors
 datCredit_smp[, Principal_Real := Principal*Inf_Factor]
@@ -475,7 +475,7 @@ cat( (all(anyNA(datCredit_smp$Principal_Real), anyNA(datCredit_smp$Balance_Real)
 if (doDescribe) describe(datCredit_smp$Principal_Real); hist(datCredit_smp$Principal_Real[datCredit_smp$Principal_Real<5000000], breaks="FD")
 if (doDescribe) describe(datCredit_smp$Balance_Real); hist(datCredit_smp$Balance_Real[datCredit_smp$Balance_Real< 5000000], breaks="FD")
 if (doDescribe) describe(datCredit_smp$Instalment_Real); hist(datCredit_smp$Instalment_Real[datCredit_smp$Instalment_Real<25000], breaks="FD")
-### RESULTS:  Some values of [Principal_Real], [Balance_Real], and/or [Instalment_Real] not created successfully, refer to line 464.
+### RESULTS: Variables created successfully without any missingness
 # [Principal_Real]# Highly right-skewed distribution, with mean of 8.95m vs median of 7.9m
 #                 bounded by [127k, 2.25m] for 5%-95% percentiles; severe outliers to the right: 95.6m
 # [Balance_Real]: Highly right-skewed distribution, with mean of 6.89m vs median of 5.93m

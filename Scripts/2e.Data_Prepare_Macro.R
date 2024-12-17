@@ -154,7 +154,7 @@ macro_data[, `:=`(rbqn_rb1419w = NULL, HPI_Level_EOP = NULL, HPI_Level_SA = NULL
 # --------- 3. Missing Value Treatments & Scaling
 # Subset only relevant periods (and fields), apply missing value treatments, and scale domains
 
-# --- a. Subsetting
+# --- a. Subsetting historic values
 
 # - subet only relevant macroeconomic variables (chosen by discretion) from historic data (exclude forecasts) beyond a certain point
 data.start <- "1980-01-01" # other (tested) options include 1980, 1999, 2005, 2010
@@ -193,6 +193,45 @@ cat( check3 %?% 'SAFE: Interpolation successful with no residual missingness whe
 
 
 
+# --- c. Subsetting historic and forecast values
+
+# - subet only relevant macroeconomic variables (chosen by discretion) beyond a certain point
+data.start <- "1980-01-01" # other (tested) options include 1980, 1999, 2005, 2010
+macro_data_fcast <- subset(macro_data, Date_T >= data.start)[, list(Key, Period, Period_Qtr, Date_T, 
+                                                                                        Inflation = Inflation_Growth_YoY,
+                                                                                        Repo_Rate = Repo_rate_level_eop,
+                                                                                        HousePriceIndex_Rate = HPI_Growth_Yoy_perc,
+                                                                                        Employment_Rate = Employment_Growth_YoY,
+                                                                                        DebtServiceCosts_Rate = Household_DSC_Level_income,
+                                                                                        DebtToIncome_Rate = Household_debt_Level_income,
+                                                                                        RealGDP_Rate = RealGDP_Growth_yoy,
+                                                                                        NominalGDP_Rate = Nominal_GDP_Growth_yoy,
+                                                                                        RealIncome_Rate = Real_income_Growth_YoY,
+                                                                                        NominalIncome_Rate = Nominal_income_Growth_yoy,
+                                                                                        Consumption_Rate = Consumption_Growth_yoy,
+                                                                                        Durables_Rate = Durables_Growth_yoy)]
+
+# --- d. Missing value treatments on forecast data
+
+# - quickly investigate any missings by conducting high-level distribution analysis 
+describe(macro_data_fcast[, list(Inflation, Repo_Rate, HousePriceIndex_Rate, Employment_Rate, DebtServiceCosts_Rate, DebtToIncome_Rate, RealGDP_Rate,
+                                NominalGDP_Rate, RealIncome_Rate, NominalIncome_Rate, Consumption_Rate, Durables_Rate)])
+# -- Results: Some series have missing values (not previously treated during quarterly-monthly fusion)
+
+# - Interpolate all remaining macroeconomic variables as a failsafe against missing values in some months
+# uses custom interpolation function "interPol()" defined in 0.Setup
+macro_data_fcast[, Inflation := interPol(Inflation)]
+macro_data_fcast[, Repo_Rate := interPol(Repo_Rate)]
+macro_data_fcast[, HousePriceIndex_Rate := interPol(HousePriceIndex_Rate)]
+
+# - check success of treatment
+check3 <- !any(is.na(macro_data_fcast[, list(Inflation, Repo_Rate, HousePriceIndex_Rate, Employment_Rate, DebtServiceCosts_Rate, DebtToIncome_Rate, RealGDP_Rate,
+                                            NominalGDP_Rate, RealIncome_Rate, NominalIncome_Rate, Consumption_Rate, Durables_Rate)]))
+# Treatment worked as expected (FALSE). No more missing values.
+cat( check3 %?% 'SAFE: Interpolation successful with no residual missingness where relevant.\n' %:% 'WARNING: Residual missingness detected, treatment failed.\n')
+
+
+
 
 
 # --------- 4. Subsetting
@@ -215,33 +254,28 @@ datMV <- macro_data_hist[,list(Date=as.Date(Date_T, format="%Y-%m-%d"),
                                         M_RealGDP_Growth = round(RealGDP_Rate/100,digits=4),
                                         M_RealIncome_Growth = round(RealIncome_Rate/100,digits=4))]
 
+# - Subsample monthly (historicaal + forecast) macroeconomic information with some light data preparation
+datMV_fcast <- macro_data_fcast[,list(Date=as.Date(Date_T, format="%Y-%m-%d"),
+                               M_Repo_Rate = Repo_Rate/100, 
+                               M_Inflation_Growth = round(Inflation/100,digits=4),
+                               M_DTI_Growth = round(DebtToIncome_Rate/100,digits=4),
+                               M_Emp_Growth = round(Employment_Rate/100,digits=4),
+                               M_RealGDP_Growth = round(RealGDP_Rate/100,digits=4),
+                               M_RealIncome_Growth = round(RealIncome_Rate/100,digits=4))]
+
 
 
 
 
 # ------ 5. General cleanup & checks
 
-### NOTE: 2022-12-30 data is missing from datMV
-# - Fill up missing values with the previous value
-blank_row <- as.list(rep(0, ncol(datMV)))
-blank_row[[1]] <- as.Date("2022-12-31")
-datMV <- rbind(datMV, blank_row) # Append a blank row to datMV
-
-# Safety Check
-all(datMV[nrow(datMV),2:ncol(datMV)] == 0)# Should be TRUE
-
-# Impute last column with the lagged value
-datMV[nrow(datMV), (names(datMV)[2:ncol(datMV)]) := datMV[nrow(datMV) - 1, 2:ncol(datMV)]] # Fill up blank row with previous row's values
-
 # Safety Check
 all(datMV[nrow(datMV),2:ncol(datMV)] == datMV[nrow(datMV)-1,2:ncol(datMV)])# Should be TRUE
 
-# Clean up
-rm(blank_row)
-
 # - Clean-up
-rm(macro_data, macro_data_hist, macro_data_m, macro_data_q)
+rm(macro_data, macro_data_fcast, macro_data_hist, macro_data_m, macro_data_q)
 
 # - Save to disk (zip) for quick disk-based retrieval later
 pack.ffdf(paste0(genPath, "datMV"), datMV); gc()
+pack.ffdf(paste0(genPath, "datMV_fcast"), datMV_fcast); gc()
 proc.time() - ptm # IGNORE: elapsed runtime

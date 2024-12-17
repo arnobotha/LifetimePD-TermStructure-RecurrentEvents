@@ -112,7 +112,7 @@ datCredit_real <- subset(datCredit_real, select = -c(ExclusionID))
 # - Remove fields that will not likely be used in the eventual analysis/modelling of default risk, purely to save memory
 names(datCredit_real)
 datCredit_real <- subset(datCredit_real, 
-                         select = -c(Age, AccountStatus,
+                         select = -c(Age, AccountStatus, DelinqState_g0,
                                      # The following fields are kept simply for diagnostic purposes (script 2g)
                                      #DefaultStatus1, DefSpell_Num, TimeInDefSpell, TreatmentID, 
                                      # The following fields are kept for Markov-type modelling

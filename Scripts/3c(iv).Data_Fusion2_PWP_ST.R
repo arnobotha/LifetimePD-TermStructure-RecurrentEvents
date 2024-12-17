@@ -68,7 +68,7 @@ resolType_Val <- "Defaulted" # Reference value in the performance spell resoluti
 # - Subsampling parameters
 smp_size <- 90000 # fixed size of downsampled set in terms of the number of unique Loans
 cat(smp_size, " is ", sprintf("%.4f", smp_size/length(unique(datCredit_PWPST[,get(clusVar)]))*100), "% of all performance spells.")
-### RESULTS: 90k constitutes 83% of all loans
+### RESULTS: 90k constitutes 14% of all loans
 # Implied sampling fraction for the downsampling step
 smp_perc <- smp_size/length(unique(datCredit_PWPST[,get(clusVar)]))
 

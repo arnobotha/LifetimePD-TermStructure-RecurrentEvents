@@ -165,7 +165,8 @@ rm(datAggr2, censored, g2, datCredit_real, label);gc()
 
 
 
-# ----------------- 2. Failure time histogram & densities per resolution type
+
+# ----------------- 3. Failure time histogram & densities per resolution type
 
 
 # ------Preliminaries
@@ -178,16 +179,16 @@ datSurv <- subset(datCredit_real, PerfSpell_Counter==1 & PerfSpell_Age < 500,
 datSurv[,Resol_Type := case_when(PerfSpellResol_Type_Hist == "Defaulted" ~ "a_Default",
                                  PerfSpellResol_Type_Hist == "Censored" ~ "b_Right-censored",
                                  PerfSpellResol_Type_Hist %in% c("Settled", "Paid-up", "Written-off") ~ "c_Competing_risk")]
-# [SANITY CHECK] Proportions
+# [SANITY CHECK] Frequency analysis
 datSurv$PerfSpellResol_Type_Hist %>% table() %>% prop.table()
 (Resol_Type.props <- datSurv$Resol_Type %>% table() %>% prop.table())
 
-# - Dataset containing only the competing risks, where the type of competing risk is shown by Resol_Type2
+# - Create dataset containing only the competing risks, where the type of competing risk is shown by Resol_Type2
 datSurv2 <- datSurv %>% subset(PerfSpellResol_Type_Hist%in%c("Settled", "Paid-up", "Written-off"))
 datSurv2[, Resol_Type2 := case_when(PerfSpellResol_Type_Hist=="Settled" ~ "a_Settlement",
                                     PerfSpellResol_Type_Hist=="Paid-up" ~ "b_Paid-up",
                                     TRUE ~ "c_Written-off-Other")]
-# - Small check
+# [SANITY CHECK] Frequency analysis
 datSurv$PerfSpellResol_Type_Hist %>% table() %>% prop.table()
 (Resol_Type2.props <- datSurv2$Resol_Type2 %>% table() %>% prop.table())
 
@@ -254,3 +255,91 @@ ymax <- max(ggplot_build(g1_Densities_Resol_Type)$layout$panel_params[[1]]$y.ran
 
 # - Save plot
 ggsave(plot.full, file=paste0(genFigPath,"FULL SET/Default-FailureTime-Densities.png"),width=1350/dpi, height=1000/dpi,dpi=dpi, bg="white")
+
+# - Clean-up
+rm(datSurv, datSurv2, g1_Densities_Resol_Type, g2_Densities_Resol_Type2, plot.full)
+
+
+
+
+
+# ----------------- 3. Extent of tied events: Proportion tied relative to total event time frequencies
+describe(datCredit_real$PerfSpellResol_Type_Hist)
+
+# - Subset performance spell-level observations towards calculating tied event times
+datSpells <- subset(datCredit_real, PerfSpell_Counter==1 & PerfSpell_Age <= 300,
+                  select=c("LoanID","PerfSpell_Key","PerfSpell_Age", "PerfSpellResol_Type_Hist", "PerfSpell_Num", "TimeInPerfSpell")); gc()
+
+# - Group competing risks together in Resol_Type
+datSpells[,Resol_Type := case_when(PerfSpellResol_Type_Hist == "Defaulted" ~ "a_Default",
+                                 PerfSpellResol_Type_Hist == "Censored" ~ "b_Right-censored",
+                                 PerfSpellResol_Type_Hist %in% c("Settled", "Paid-up", "Written-off") ~ "c_Competing_risk")]
+
+# - Apply Latent Risks assumption; competing risks are 'right-censored'
+datSpells[,Resol_Type_LR := case_when(PerfSpellResol_Type_Hist == "Defaulted" ~ "a_Default",
+                                      TRUE ~ "b_Right-censored")]
+
+# - Aggregate to spell age level and count number of tied events
+datAggr <- datSpells[, list(Freq = .N), by=list(PerfSpell_Age, Resol_Type_LR)] %>% setkey(PerfSpell_Age, Resol_Type_LR)
+
+# - Convert to percentage of spells
+datAggr[, Freq_Sum := sum(Freq), by=list(Resol_Type_LR)]
+datAggr[, Freq_Perc := Freq/Freq_Sum, by=list(Resol_Type_LR)]
+# [SANITY CHECK] Sum to 1?
+sum(datAggr[Resol_Type_LR=="a_Default", Freq_Perc]) == 1
+### RESULTS: Yes
+
+# - Aesthetic engineering
+(Resol_Type_LR.props <- datSpells$Resol_Type_LR %>% table() %>% prop.table()) # get proportions of data
+# Given expected number of 1 per event time, calculate the related proportion
+sumTimeFreqs_a <- unique(datAggr[Resol_Type_LR=="a_Default", Freq_Sum])
+sumTimeFreqs_b <-unique(datAggr[Resol_Type_LR=="b_Right-censored", Freq_Sum])
+expTied_a <-  1/sumTimeFreqs_a
+expTied_b <- 1/sumTimeFreqs_b
+unTied_a <- unique(datAggr[Resol_Type_LR=="a_Default" & Freq == 0, .N])
+unTied_b <-unique(datAggr[Resol_Type_LR=="b_Right-censored" & Freq == 0, .N])
+# Add as separate records to graphing dataset
+datAggr <- rbind(datAggr,
+                 data.table(PerfSpell_Age = unique(datAggr$PerfSpell_Age),
+                            Resol_Type_LR = "c_Default-Exp", Freq = 1, 
+                            Freq_Sum = sumTimeFreqs_a, Freq_Perc = expTied_a),
+                 data.table(PerfSpell_Age = unique(datAggr$PerfSpell_Age),
+                            Resol_Type_LR = "d_Right-censored-Exp", Freq = 1, 
+                            Freq_Sum = sumTimeFreqs_b, Freq_Perc = expTied_b))
+
+# - Graphing Parameters
+chosenFont <- "Cambria"; dpi <- 170
+vCol <- brewer.pal(10, "Paired")[c(10,8, 9, 7)]
+vLabels <- c("a_Default"=paste0("Default (", round(Resol_Type_LR.props[1]*100, digits=1), "%)"), # Need to round to the first decimal place to ensure that the prior add up to one
+             "b_Right-censored"=paste0("Right-censored & competing risks (", round(Resol_Type_LR.props[2]*100, digits=1), "%)"),
+             "c_Default-Exp"= paste0("Default: # Expected ties (", percent(expTied_a, accuracy=0.0001) ,")"),
+             "d_Right-censored-Exp" = paste0("Right-censored: # Expected ties (", percent(expTied_b, accuracy=0.0001), ")"))
+
+# - Create graph
+(g1 <- ggplot(datAggr, aes(x=PerfSpell_Age, y=Freq, group=Resol_Type_LR)) + theme_minimal() +
+  labs(y="Total event time frequencies", 
+       x=bquote("Unique performing spell ages (months) / ordered event times "*~italic(t[ij]))) + 
+  theme(text=element_text(family=chosenFont),legend.position="inside", 
+        legend.position.inside = c(0.65,0.6), 
+        strip.background=element_rect(fill="snow2", colour="snow2"),
+        strip.text = element_text(size=8, colour="gray50"), strip.text.y.right = element_text(angle=90)) + 
+  # Main graphs
+  geom_line(aes(colour=Resol_Type_LR, linetype=Resol_Type_LR), linewidth=0.5) + 
+  geom_point(aes(colour=Resol_Type_LR, shape=Resol_Type_LR), size=1) + 
+  #geom_hline(aes(yintercept=Exp_Freq_Perc, colour=Resol_Type_LR), linewidth=0.25) + 
+  annotate(geom="text", x=75, y=max(datAggr$Freq, na.rm=T)*0.02, 
+           label=paste("Maximum expected # of tied events: ", 1),
+           family=chosenFont, size=3.5) + 
+  # Facets and scales
+  scale_colour_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=vCol, labels=vLabels) + 
+  scale_linetype_discrete(name=bquote("Resolution Type"*~italic(R[ij])), labels=vLabels) + 
+  scale_shape_discrete(name=bquote("Resolution Type"*~italic(R[ij])), labels=vLabels) + 
+  scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+  scale_x_continuous(breaks=breaks_pretty(), label=comma) )
+
+# - Save plot
+ggsave(g1, file=paste0(genFigPath,"FULL SET/TiedEvents_Extent.png"),width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+
+# - Cleanup
+  
+

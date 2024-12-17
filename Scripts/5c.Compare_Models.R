@@ -66,9 +66,7 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), tempPath);gc()
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
 
-datCredit_train_TFD$Removed <- with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
-datCredit_valid_TFD$Removed <- with(datCredit_valid_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
-
+### BS: Move to 3c
 datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 datCredit_train_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
@@ -84,51 +82,87 @@ km_TFD <- survfit(Surv(Start, End, Default_Ind == 1, type = "counting") ~ 1,
                   id = PerfSpell_Key, data = datCredit_train_TFD)
 haz_dat <- data.table(Time = km_TFD$time, Actual_Hazard = km_TFD$n.event / km_TFD$n.risk,
                       Surv_KM = km_TFD$surv) # Actual hazard
+describe(dat$Actual_Hazard); hist(dat$Actual_Hazard, breaks="FD")
+
 haz_dat[, Actual_Hazard_Spline := spline_estimation(Time, Actual_Hazard, 10, 3)] # Actual hazard spline
+describe(dat$Actual_Hazard_Spline); hist(dat$Actual_Hazard_Spline, breaks="FD")
+
 haz_dat[, Date := seq(as.Date(min(datCredit_train_TFD$Date)), by="month", length.out=.N)]
 
 # Define cohort and filter data
-Cohort <- "2009-11-30"
-PerfSpell_Cohort <- datCredit_valid_TFD[Date == Cohort & Start == 0, PerfSpell_Key]
+Cohort <- "2007-11-30"
+PerfSpell_Cohort <- datCredit_valid_TFD[Date == as.Date(Cohort) & Start == 0, PerfSpell_Key]
 dat <- datCredit_valid_TFD[PerfSpell_Key %in% PerfSpell_Cohort]
-dat <- merge(dat,haz_dat,by="Date")
+dat <- merge(dat,haz_dat,by.x="End", by.y="Time", all.x=T)
+
+check1 <- subset(dat, PerfSpell_Key %in% unique(dat[,PerfSpell_Key])[2])
+datCredit_valid_TFD[PerfSpell_Counter==1,.N]
+
+datCredit_valid_TFD[Start==0,.N]
+dat[Start==0,.N]
+
+datCredit_valid_TFD[Start==0 & Date==as.Date(Cohort),.N]
+
+# Score data using models
 dat[, Risk_Score := predict(cox_TFD, newdata = dat, type = "risk", id=PerfSpell_Key)]
 dat[, Predicted_Hazard := Actual_Hazard_Spline * Risk_Score]
-dat[, Predicted_cumHazard := cumsum(Predicted_Hazard), by=PerfSpell_Key]
+#describe(dat$Predicted_Hazard); hist(dat[Predicted_Hazard <= 0.03,Predicted_Hazard],breaks="FD")
+
+#dat[, Predicted_cumHazard := cumsum(Predicted_Hazard), by=PerfSpell_Key]
 #dat[, Predicted_SurvProb := round(exp(-Predicted_cumHazard),10)]
 dat[, Predicted_SurvProb := Surv_KM^Risk_Score]
+#describe(dat$Predicted_SurvProb); hist(dat$Predicted_SurvProb, breaks="FD")
+#plot(dat$Predicted_SurvProb)
+
 dat[, Predicted_SurvProb_1 := shift(Predicted_SurvProb, n=1, fill=1), by=PerfSpell_Key]
-dat[, DefProb := Actual_Hazard*Predicted_SurvProb_1]
-dat[, DefProb_Spline := spline_estimation(Time, DefProb, 10, 3)]
+dat[, DefProb := Actual_Hazard_Spline*Predicted_SurvProb_1]
+dat[, DefProb_Spline := spline_estimation(End, DefProb, 5, 3)]
+#describe(dat$DefProb); hist(dat$DefProb, breaks="FD")
+
+dat[, DefActual := Actual_Hazard*shift(Surv_KM,n=1,fill=1)]
+dat[, DefActual_Spline := spline_estimation(End, DefActual, 10, 3)]
+#describe(dat$DefActual); hist(dat$DefActual, breaks="FD")
+
 #dat[, Actual_SurvProb := exp(-Actual_cumHazard)]
 dat[, Survival_Prob := exp(-predict(cox_TFD, newdata=dat, type="expected", id=PerfSpel_Key))]
 dat[, Default_Prob := Actual_Hazard_Spline*Survival_Prob]
-dat[, Predicted_Hazard_Spline := spline_estimation(Time, Predicted_Hazard, 10, 3)]
+dat[, Predicted_Hazard_Spline := spline_estimation(End, Predicted_Hazard, 10, 3)]
 
 # Graphing dataset
-datShow <- dat[, list(Time, End, PerfSpell_Key, Actual_Hazard, Actual_Hazard_Spline,
-                      Predicted_Hazard, Predicted_cumHazard, Predicted_SurvProb,
-                      Predicted_SurvProb_1, DefProb, DefProb_Spline, Risk_Score, Predicted_Hazard,
-                      Predicted_Hazard_Spline,Survival_Prob, Default_Prob)]
-datAggr <- rbind(datShow[,.(End, "Hazard"=DefProb, "Spline"=DefProb_Spline,Type="Predicted")], datShow[,.(End, "Hazard"=Actual_Hazard, "Spline"=Actual_Hazard_Spline, Type="Actual")])
+datShow <- dat[, list(End, PerfSpell_Key, Actual_Hazard, Actual_Hazard_Spline,
+                      Predicted_Hazard, Predicted_SurvProb,
+                      Predicted_SurvProb_1, DefProb, DefProb_Spline, DefActual, DefActual_Spline, Risk_Score, Predicted_Hazard,
+                      Survival_Prob, Default_Prob)]
+Spline_MAE <- mean(abs(dat$DefActual_Spline - dat$DefProb_Spline), na.rm=T)
+datAggr <- rbind(datShow[,.(End, "Probability"=DefProb, "Spline"=DefProb_Spline,
+                            Type="B_Predicted")], datShow[,.(End, "Probability"=DefActual,
+                                                           "Spline"=DefActual_Spline,
+                                                           Type="A_Actual")])
+datAggr[, ColourVar1 := paste0(Type, "_Line")]
+datAggr[, ColourVar2 := paste0(Type, "_Point")]
 
 # -- Graphing parameters
 vCol_Point <- brewer.pal(8, "Pastel1")[c(1,2)]
 vCol_Line <- brewer.pal(8, "Set1")[c(1,2)]
 mainEventName <- "Default"
 chosenFont <- "Cambria"
-vLabel <- c("Actual Hazard", "Actual Hazard Cubic Spline")
+vLabel <- c("Actual Probability", "Actual Probability Cubic Spline")
+vLabel2 <- c("A_Actual_Line"="Spline: Actual", "B_Predicted_Line"="Spline: Scored",
+             "A_Actual_Point"="Case: Actual", "B_Predicted_Point"="Case: Scored")
+vValues <- c("A_Actual_Line"=vCol_Line[1], "B_Predicted_Line"=vCol_Line[2],
+             "A_Actual_Point"=vCol_Point[1], "B_Predicted_Point"=vCol_Point[2])
+ann <- bquote(plain("Spline "*~italic(MAE)*": "*percent(Spline_MAE)))
 
 # - Graph object for shorter time, informed by previous graphs
 (Term_Structure_TFD <- ggplot(datAggr, aes(x=End, group=Type)) + theme_minimal() +
-                      geom_point(aes(y=Hazard, color=paste(Type, "Point"))) + 
-                      geom_line(aes(y=Spline, color=paste(Type, "Line")),
+                      geom_point(aes(y=Probability, color=ColourVar2)) + 
+                      geom_line(aes(y=Spline, color=ColourVar1),
                                 linetype="solid") +
                       labs(y=bquote(plain(~italic(P(T~"="~t~"|"~T>=t-1))*" ["*.(mainEventName)*"]: Term Structure")), 
                            x=bquote(plain(Discrete~time~italic(t)*" (months) in spell starting "*.(Cohort)))) + 
+                      annotate("text", x=80, y=0.004, family=chosenFont, label=paste0("Spline MAE: ", sprintf("%.2f", Spline_MAE*100), "%")) + 
                       theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-                      scale_color_manual(name = "",values = c("Actual Point" = paste0(vCol_Point[1]), "Actual Line" = paste0(vCol_Line[1]),
-                      "Predicted Point" = paste0(vCol_Point[2]), "Predicted Line" = paste0(vCol_Line[2]))) +
+                      scale_color_manual(name = "",values = vValues, labels=vLabel2) +
                       scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
                       scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
 dpi <- 180 # reset
@@ -140,52 +174,86 @@ km_PWPST <- survfit(Surv(Start, End, Default_Ind == 1, type = "counting") ~ 1,
                   id = PerfSpell_Key, data = datCredit_train_PWPST)
 haz_dat <- data.table(Time = km_PWPST$time, Actual_Hazard = km_PWPST$n.event / km_PWPST$n.risk,
                       Surv_KM = km_PWPST$surv) # Actual hazard
+describe(dat$Actual_Hazard); hist(dat$Actual_Hazard, breaks="FD")
+
 haz_dat[, Actual_Hazard_Spline := spline_estimation(Time, Actual_Hazard, 10, 3)] # Actual hazard spline
+describe(dat$Actual_Hazard_Spline); hist(dat$Actual_Hazard_Spline, breaks="FD")
+
 haz_dat[, Date := seq(as.Date(min(datCredit_train_PWPST$Date)), by="month", length.out=.N)]
 
 # Define cohort and filter data
-# Define cohort and filter data
-Cohort <- "2009-11-30"
-PerfSpell_Cohort <- datCredit_valid_PWPST[Date == Cohort & Start == 0, PerfSpell_Key]
+Cohort <- "2007-11-30"
+PerfSpell_Cohort <- datCredit_valid_PWPST[Date == as.Date(Cohort) & Start == 0, PerfSpell_Key]
 dat <- datCredit_valid_PWPST[PerfSpell_Key %in% PerfSpell_Cohort]
-dat <- merge(dat,haz_dat,by="Date")
+dat <- merge(dat,haz_dat,by.x="End", by.y="Time", all.x=T)
+
+check1 <- subset(dat, PerfSpell_Key %in% unique(dat[,PerfSpell_Key])[2])
+datCredit_valid_PWPST[PerfSpell_Counter==1,.N]
+
+datCredit_valid_PWPST[Start==0,.N]
+dat[Start==0,.N]
+
+datCredit_valid_PWPST[Start==0 & Date==as.Date(Cohort),.N]
+
+# Score data using models
 dat[, Risk_Score := predict(cox_PWPST, newdata = dat, type = "risk", id=PerfSpell_Key)]
 dat[, Predicted_Hazard := Actual_Hazard_Spline * Risk_Score]
-dat[, Predicted_cumHazard := cumsum(Predicted_Hazard), by=PerfSpell_Key]
+#describe(dat$Predicted_Hazard); hist(dat[Predicted_Hazard <= 0.03,Predicted_Hazard],breaks="FD")
+
+#dat[, Predicted_cumHazard := cumsum(Predicted_Hazard), by=PerfSpell_Key]
 #dat[, Predicted_SurvProb := round(exp(-Predicted_cumHazard),10)]
 dat[, Predicted_SurvProb := Surv_KM^Risk_Score]
+#describe(dat$Predicted_SurvProb); hist(dat$Predicted_SurvProb, breaks="FD")
+#plot(dat$Predicted_SurvProb)
+
 dat[, Predicted_SurvProb_1 := shift(Predicted_SurvProb, n=1, fill=1), by=PerfSpell_Key]
-dat[, DefProb := Actual_Hazard*Predicted_SurvProb_1]
-dat[, DefProb_Spline := spline_estimation(Time, DefProb, 10, 3)]
+dat[, DefProb := Actual_Hazard_Spline*Predicted_SurvProb_1]
+dat[, DefProb_Spline := spline_estimation(End, DefProb, 10, 3)]
+#describe(dat$DefProb); hist(dat$DefProb, breaks="FD")
+
+dat[, DefActual := Actual_Hazard*shift(Surv_KM,n=1,fill=1)]
+dat[, DefActual_Spline := spline_estimation(End, DefActual, 10, 3)]
+#describe(dat$DefActual); hist(dat$DefActual, breaks="FD")
+
 #dat[, Actual_SurvProb := exp(-Actual_cumHazard)]
-dat[, Survival_Prob := exp(-predict(cox_TFD, newdata=dat, type="expected", id=PerfSpel_Key))]
-dat[, Default_Prob := Actual_Hazard_Spline*Survival_Prob]
-dat[, Predicted_Hazard_Spline := spline_estimation(Time, Predicted_Hazard, 10, 3)]
+#dat[, Survival_Prob := exp(-predict(cox_PWPST, newdata=dat, type="expected", id=PerfSpel_Key))]
+#dat[, Default_Prob := Actual_Hazard_Spline*Survival_Prob]
+#dat[, Predicted_Hazard_Spline := spline_estimation(End, Predicted_Hazard, 10, 3)]
 
 # Graphing dataset
-datShow <- dat[, list(Time, End, PerfSpell_Key, Actual_Hazard, Actual_Hazard_Spline,
-                      Predicted_Hazard, Predicted_cumHazard, Predicted_SurvProb,
-                      Predicted_SurvProb_1, DefProb, DefProb_Spline, Risk_Score, Predicted_Hazard,
-                      Predicted_Hazard_Spline,Survival_Prob, Default_Prob)]
-datAggr <- rbind(datShow[,.(End, "Hazard"=DefProb, "Spline"=DefProb_Spline,Type="Predicted")], datShow[,.(End, "Hazard"=Actual_Hazard, "Spline"=Actual_Hazard_Spline, Type="Actual")])
+datShow <- dat[, list(End, PerfSpell_Key, Actual_Hazard, Actual_Hazard_Spline,
+                      Predicted_Hazard, Predicted_SurvProb,
+                      Predicted_SurvProb_1, DefProb, DefProb_Spline, DefActual, DefActual_Spline, Risk_Score, Predicted_Hazard)]
+Spline_MAE <- mean(abs(dat$DefActual_Spline - dat$DefProb_Spline), na.rm=T)
+datAggr <- rbind(datShow[,.(End, "Probability"=DefProb, "Spline"=DefProb_Spline,
+                            Type="B_Predicted")], datShow[,.(End, "Probability"=DefActual,
+                                                             "Spline"=DefActual_Spline,
+                                                             Type="A_Actual")])
+datAggr[, ColourVar1 := paste0(Type, "_Line")]
+datAggr[, ColourVar2 := paste0(Type, "_Point")]
 
 # -- Graphing parameters
 vCol_Point <- brewer.pal(8, "Pastel1")[c(1,2)]
 vCol_Line <- brewer.pal(8, "Set1")[c(1,2)]
 mainEventName <- "Default"
 chosenFont <- "Cambria"
-vLabel <- c("Actual Hazard", "Actual Hazard Cubic Spline")
+vLabel <- c("Actual Probability", "Actual Probability Cubic Spline")
+vLabel2 <- c("A_Actual_Line"="Spline: Actual", "B_Predicted_Line"="Spline: Scored",
+             "A_Actual_Point"="Case: Actual", "B_Predicted_Point"="Case: Scored")
+vValues <- c("A_Actual_Line"=vCol_Line[1], "B_Predicted_Line"=vCol_Line[2],
+             "A_Actual_Point"=vCol_Point[1], "B_Predicted_Point"=vCol_Point[2])
+ann <- bquote(plain("Spline "*~italic(MAE)*": "*percent(Spline_MAE)))
 
 # - Graph object for shorter time, informed by previous graphs
 (Term_Structure_PWPST <- ggplot(datAggr, aes(x=End, group=Type)) + theme_minimal() +
-    geom_point(aes(y=Hazard, color=paste(Type, "Point"))) + 
-    geom_line(aes(y=Spline, color=paste(Type, "Line")),
+    geom_point(aes(y=Probability, color=ColourVar2)) + 
+    geom_line(aes(y=Spline, color=ColourVar1),
               linetype="solid") +
     labs(y=bquote(plain(~italic(P(T~"="~t~"|"~T>=t-1))*" ["*.(mainEventName)*"]: Term Structure")), 
          x=bquote(plain(Discrete~time~italic(t)*" (months) in spell starting "*.(Cohort)))) + 
+    annotate("text", x=80, y=0.004, family=chosenFont, label=paste0("Spline MAE: ", sprintf("%.2f", Spline_MAE*100), "%")) + 
     theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-    scale_color_manual(name = "",values = c("Actual Point" = paste0(vCol_Point[1]), "Actual Line" = paste0(vCol_Line[1]),
-                                            "Predicted Point" = paste0(vCol_Point[2]), "Predicted Line" = paste0(vCol_Line[2]))) +
+    scale_color_manual(name = "",values = vValues, labels=vLabel2) +
     scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
     scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
 dpi <- 180 # reset

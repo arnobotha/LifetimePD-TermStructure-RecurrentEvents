@@ -223,7 +223,7 @@ spline_estimation <- function(times, hazard, nknots, degree) {
   )
   
   # Ordinary Least Squares: Compute the parameter estimates
-  coef <- solvet(crossprod(matT)) %*% crossprod(matT, hazard)  # More efficient than t(T) %*% T and t(T) %*% y
+  coef <- solvet(crossprod(matT), tol=1e-15) %*% crossprod(matT, hazard)  # More efficient than t(T) %*% T and t(T) %*% y
   
   # Polynomial terms: ∑_{j=0}^{d} α_j * t^j
   poly_terms <- sapply(0:degree, function(j) coef[j + 1] * times^j)

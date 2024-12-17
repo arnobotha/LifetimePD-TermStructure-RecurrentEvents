@@ -341,5 +341,5 @@ vLabels <- c("a_Default"=paste0("Default (", round(Resol_Type_LR.props[1]*100, d
 ggsave(g1, file=paste0(genFigPath,"FULL SET/TiedEvents_Extent.png"),width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 # - Cleanup
+rm(datAggr, datSpells, g1)
   
-

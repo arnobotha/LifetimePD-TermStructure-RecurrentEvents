@@ -221,6 +221,24 @@ datMV <- macro_data_hist[,list(Date=as.Date(Date_T, format="%Y-%m-%d"),
 
 # ------ 5. General cleanup & checks
 
+### NOTE: 2022-12-30 data is missing from datMV
+# - Fill up missing values with the previous value
+blank_row <- as.list(rep(0, ncol(datMV)))
+blank_row[[1]] <- as.Date("2022-12-31")
+datMV <- rbind(datMV, blank_row) # Append a blank row to datMV
+
+# Safety Check
+all(datMV[nrow(datMV),2:ncol(datMV)] == 0)# Should be TRUE
+
+# Impute last column with the lagged value
+datMV[nrow(datMV), (names(datMV)[2:ncol(datMV)]) := datMV[nrow(datMV) - 1, 2:ncol(datMV)]] # Fill up blank row with previous row's values
+
+# Safety Check
+all(datMV[nrow(datMV),2:ncol(datMV)] == datMV[nrow(datMV)-1,2:ncol(datMV)])# Should be TRUE
+
+# Clean up
+rm(blank_row)
+
 # - Clean-up
 rm(macro_data, macro_data_hist, macro_data_m, macro_data_q)
 

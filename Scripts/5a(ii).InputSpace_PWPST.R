@@ -28,16 +28,14 @@
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
 if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), tempPath);gc()
 
+# BS: will work these changes into script c once master's is done.
+
 ### HOMEWORK: Create [Removed], [slc_acct_roll_ever_24_imputed_med_f]
 datCredit_train_PWPST[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
 datCredit_train_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_train_PWPST[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
 
 datCredit_valid_PWPST[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
 datCredit_valid_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_PWPST[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
-
-datCredit_train_PWPST[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
 
 # Define functions for the analysis
 # Spell check
@@ -1488,10 +1486,63 @@ vars <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1
           "InstalmentToBalance_Aggr_Prop", "Undrawn_Amt", "LN_TPE", "AgeToTerm",
           "NewLoans_Aggr_Prop", "M_DTI_Growth","M_Inflation_Growth",
           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+
+vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
+           "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
+           "InterestRate_Nom", "M_Repo_Rate", "M_Repo_Rate_9", 
+           "InstalmentToBalance_Aggr_Prop", "LN_TPE", "AgeToTerm",
+           "NewLoans_Aggr_Prop", "M_DTI_Growth","M_Inflation_Growth",
+           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+
+# Test Goodness of fit
+csTable_PWPST <- csTable(datCredit_train_PWPST,vars2,TimeDef="PWP_ST")
+#                             Variable B_Statistic
+# 11                            LN_TPE      0.6854
+# 6  slc_acct_pre_lim_perc_imputed_med      0.6835
+# 9                      M_Repo_Rate_9      0.6834
+# 10     InstalmentToBalance_Aggr_Prop      0.6833
+# 17               M_RealIncome_Growth      0.6833
+# 8                        M_Repo_Rate      0.6832
+# 16              M_Inflation_Growth_6      0.6825
+# 12                         AgeToTerm      0.6822
+# 7                   InterestRate_Nom      0.6817
+# 13                NewLoans_Aggr_Prop      0.6817
+# 14                      M_DTI_Growth      0.6816
+# 2                            Arrears      0.6815
+# 15                M_Inflation_Growth      0.6807
+# 3                      g0_Delinq_Ave      0.6800
+# 5      slc_acct_arr_dir_3_Change_Ind      0.6797
+# 4            TimeInDelinqState_Lag_1      0.6713
+# 1                     g0_Delinq_SD_4      0.6468
+
+# Test accuracy
+concTable_PWPST <- concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars2, TimeDef="PWP_ST")
+#                             Variable Concordance           SD LR_Statistic
+# 1:                    g0_Delinq_SD_4   0.9929890 0.0004440688       109216
+# 2:                           Arrears   0.9301293 0.0015083583         9288
+# 3:           TimeInDelinqState_Lag_1   0.9163394 0.0026692102        39902
+# 4:     slc_acct_arr_dir_3_Change_Ind   0.9045385 0.0015469709        39628
+# 5: slc_acct_pre_lim_perc_imputed_med   0.7369588 0.0025027221        10239
+# 6:                  InterestRate_Nom   0.7213484 0.0039525630         5506
+# 7:                     g0_Delinq_Ave   0.7151798 0.0038156470         5652
+# 8:                      M_DTI_Growth   0.7128062 0.0038242592         5623
+# 9:                     M_Repo_Rate_9   0.7114630 0.0039792989         5390
+# 10:              M_Inflation_Growth_6   0.7065827 0.0040608535         5300
+# 11:                       M_Repo_Rate   0.7036419 0.0041361893         5025
+# 12:                M_Inflation_Growth   0.7003644 0.0041659212         4906
+# 13:     InstalmentToBalance_Aggr_Prop   0.6923587 0.0043362701         4612
+# 14:                NewLoans_Aggr_Prop   0.6600105 0.0047112105         4360
+# 15:               M_RealIncome_Growth   0.6458617 0.0045948006         4078
+# 16:                            LN_TPE   0.6450998 0.0036884899         4212
+# 17:                         AgeToTerm   0.6307607 0.0038752408         4163
+
+# Create table object
+Table_PWPST <- left_join(csTable_PWPST$Table,concTable_PWPST,by="Variable")
+
 # 
 # Build model based on variables
-cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
-                               paste(vars,collapse=" + "))), id=PerfSpell_Key,
+cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Grp + ",
+                               paste(vars2,collapse=" + "))), id=PerfSpell_Key,
                    datCredit_train_PWPST)
 c <- coefficients(cox_PWPST)
 c <- data.table(Variable=names(c),Coefficient=c)
@@ -1535,7 +1586,10 @@ tROC.multi(datCredit_valid_PWPST, cox_PWPST, month_Start=0, month_End=12, sLambd
            estMethod="NN-0/1", numDigits=2,fld_ID="PerfSpell_Key", fld_Event="Default_Ind",
            eventVal=1, fld_StartTime="Start", fld_EndTime="End",Graph=TRUE,
            graphName="timedROC-Graph_PWPST",
-           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/TFD/tdROC/")
+           genFigPath="C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/PWPST/tdROC/")
 
 
 ### RESULTS: Accuracy for the model seems to be a bit high.
+
+pack.ffdf(paste0(genObjPath,"PWPST_Univariate_Models"), Table_PWPST)
+pack.ffdf(paste0(genObjPath,"PWPST_Cox_Model"), cox_PWPST)

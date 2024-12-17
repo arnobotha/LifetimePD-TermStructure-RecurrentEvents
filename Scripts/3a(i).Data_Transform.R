@@ -61,7 +61,7 @@ datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Min_Date := min(Date, na.rm=T), 
 datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
 
 # - Creating an indicator variable variable for when a loan exists a performance spell
-datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
+datCredit_real[,PerfSpell_Exit_Ind := with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))]
 
 # - Creating new spell resolution types
 # Performance spells

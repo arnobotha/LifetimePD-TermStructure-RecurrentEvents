@@ -68,7 +68,7 @@ resolType_Val <- "Defaulted" # Reference value in the performance spell resoluti
 # - Subsampling parameters
 smp_size <- 90000 # fixed size of downsampled set in terms of the number of unique Loans
 cat(smp_size, " is ", sprintf("%.4f", smp_size/length(unique(datCredit_TFD[,get(clusVar)]))*100), "% of all performance spells.")
-### RESULTS: 90k constitutes 14% of all loans
+### RESULTS: 90k constitutes 83% of all loans
 # Implied sampling fraction for the downsampling step
 smp_perc <- smp_size/length(unique(datCredit_TFD[,get(clusVar)]))
 
@@ -461,7 +461,7 @@ datCredit_smp <- merge(datCredit_smp, datInflation, all.x=T, by="Date")
 # [SANITY CHECK] Are inflation factors missing?
 cat((anyNA(datCredit_smp$Inf_Factor)) %?% paste0('WARNING: Inflation factor(s) is(are) missing for ', unique(datCredit_smp[is.na(Inf_Factor),Date]), '. \n') %:%
       'SAFE: Inflation factors created successfully. \n')
-### RESULTS: [Inf_Factor] variables created successfully without any missingness
+### RESULTS: [Inf_Factor] variables  missing for 2022-12-31.
 
 # - Deflate the relevant variables using the pre-calculated inflation factors
 datCredit_smp[, Principal_Real := Principal*Inf_Factor]
@@ -475,7 +475,7 @@ cat( (all(anyNA(datCredit_smp$Principal_Real), anyNA(datCredit_smp$Balance_Real)
 if (doDescribe) describe(datCredit_smp$Principal_Real); hist(datCredit_smp$Principal_Real[datCredit_smp$Principal_Real<5000000], breaks="FD")
 if (doDescribe) describe(datCredit_smp$Balance_Real); hist(datCredit_smp$Balance_Real[datCredit_smp$Balance_Real< 5000000], breaks="FD")
 if (doDescribe) describe(datCredit_smp$Instalment_Real); hist(datCredit_smp$Instalment_Real[datCredit_smp$Instalment_Real<25000], breaks="FD")
-### RESULTS: Variables created successfully without any missingness
+### RESULTS:  Some values of [Principal_Real], [Balance_Real], and/or [Instalment_Real] not created successfully, refer to line 464.
 # [Principal_Real]# Highly right-skewed distribution, with mean of 8.95m vs median of 7.9m
 #                 bounded by [127k, 2.25m] for 5%-95% percentiles; severe outliers to the right: 95.6m
 # [Balance_Real]: Highly right-skewed distribution, with mean of 6.89m vs median of 5.93m
@@ -759,8 +759,10 @@ if (all(!is.na(stratifiers))){ # enforce Stratifiers
 # Select only the first performing spell (given the model definition), while 
 # the validation set deliberately includes multiple spells to test certain modelling assumptions
 if (timeDef_TFD) {
-  datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]) %>% 
-    subset(PerfSpell_Num == 1)
+  datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],])
+  vLoanKeys_MultiSpell <- datCredit_train_TFD %>% subset(PerfSpell_Num != 1,
+                                                         c(get(clusVar), get(timeVar)))
+  datCredit_train_TFD <- datCredit_train_TFD %>% subset(PerfSpell_Num == 1)
 } else {
   datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],])
 }
@@ -771,11 +773,11 @@ datCredit_valid_TFD <- copy(datCredit_smp[!(get(clusVar) %in% dat_train_keys[, g
 # - [SANITY CHECKS]
 if (timeDef_TFD) {
   # Can subsample be reconstituted?
-  check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] + datCredit_smp[get(clusVar_Spell) %in% vSpellKeys_MultiSpell,.N] # Should be TRUE
+  check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N] + vLoanKeys_MultiSpell[,.N]# Should be TRUE
   # Does training set contain only first-time spells?
-  check.2 <- datCredit_train_TFD[get(spellNum) == 1,.N] == datCredit_train_TFD[,.N] # Should be TRUE
+  check.2 <- datCredit_train_TFD[PerfSpell_Num == 1,.N] == datCredit_train_TFD[,.N] # Should be TRUE
   # Does validation spell contain spell numbers other than 1?
-  (check.3 <- datCredit_valid_TFD[get(spellNum) != 1,.N] > 0) # Should be TRUE
+  (check.3 <- datCredit_valid_TFD[PerfSpell_Num != 1,.N] > 0) # Should be TRUE
 } else {
   # Can subsample be reconstituted?
   check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N]
@@ -793,7 +795,7 @@ cat((check.3 %?% paste0("SAFE: Spells in the validation dataset are selected as 
 
 # - Clean up
 suppressWarnings(rm(smp_perc, datKeys, datKeys_sampled, dat_train_keys, check.2, check.3, datCredit_smp_old_n, 
-                    datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp))
+                    datCredit_smp_prior, dat_keys_exc, class_type, excCond, excCond2, datCredit_smp, vLoanKeys_MultiSpell))
 
 
 # --- 5.2 Saving the cross-validation scheme

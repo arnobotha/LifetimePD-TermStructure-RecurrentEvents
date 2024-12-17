@@ -41,7 +41,7 @@ colCheck <- function(cols, dataset) {
 vecChange <- function(mat,Remove=FALSE,Add=FALSE){
   m <- mat
   if (all(Remove != FALSE)) {m <- mat[!(mat$vars %in% Remove)]} # Remove values in [Remove]
-  if (all(Add != FALSE)) {m <- rbind(v,Add[!(Add$vars %in% mat$vars)])} # Add values in [Add]
+  if (all(Add != FALSE)) {m <- rbind(m,Add[!(Add$vars %in% mat$vars)])} # Add values in [Add]
   return(m)
 }
 
@@ -87,7 +87,7 @@ TimeDef_Form <- function(TimeDef="TFD", vars){
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                                  paste(vars,collapse=" + ")))
   }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
-    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Grp + ",
                                  paste(vars,collapse=" + ")))
   }
 }
@@ -106,7 +106,7 @@ concTable <- function(data_train, data_valid, variables, TimeDef="TFD") {
   formula <- TimeDef_Form(TimeDef,var)
     
     tryCatch({
-      model <- coxph(formula,id=PerfSpell_ID, data = data_train)# Fit Cox model
+      model <- coxph(formula,id=PerfSpell_Key, data = data_train)# Fit Cox model
       c <- concordance(model, newdata=data_valid) # Calculate concordance of the model based on the validation set.
       conc <- as.numeric(c[1])# Extract concordance
       sd <- sqrt(c$var)# Extract concordance variability
@@ -152,7 +152,7 @@ csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5){
       formula <- TimeDef_Form(TimeDef,var)
       tryCatch({
         model <- coxph(formula, data = data_train, id=PerfSpell_Key)  # Fit a Cox model
-        GoF_CoxSnell_KS(model, data, GraphInd=F)$Stat  # Calculate B statistic
+        GoF_CoxSnell_KS(model, data_train, GraphInd=F)$Stat  # Calculate B statistic
       }, warning = function(w) { # Return Warning message for specific variables.
         cat("Warning: ", w$message, " for variable: ", var, "\n")
         NA
@@ -174,15 +174,15 @@ csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5){
     Results <- matrix(NA, nrow = length(variables), ncol = numIt,
                          dimnames = list(variables,
                                          paste0("Iteration_", 1:numIt))) %>%
-      as.data.table()
+                          as.data.table()
     
     for (it in seq_len(numIt)) {
       # Vectorized iteration for B statistics
       Results[, it] <- sapply(variables, function(var) {
         formula <- TimeDef_Form(TimeDef,var)# Create coxph formula based on the time definition
         tryCatch({
-          model <- coxph(formula, data = data)# Fit coxph model.
-          GoF_CoxSnell_KS(model, data, GraphInd = FALSE)$Stat# Obtain the B-statistic
+          model <- coxph(formula, data = data_train)# Fit coxph model.
+          GoF_CoxSnell_KS(model, data_train, GraphInd = FALSE)$Stat# Obtain the B-statistic
         }, warning = function(w) {# Return Warning message for specific variables.
           cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
           NA
@@ -207,6 +207,37 @@ csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5){
 }
 
 
+# HW BS: Comment better the spline function
+# -- Cubic spline function
+spline_estimation <- function(times, hazard, nknots, degree) {
+  n <- length(times)  # Number of observations
+  
+  # Calculate quantiles for knot placement
+  qtiles <- (1:nknots + 1) / (nknots + 2)  # Generate nknots evenly spaced quantiles
+  knots <- quantile(times, probs = qtiles, na.rm = TRUE)
+  
+  # Construct the T matrix efficiently
+  matT <- cbind(
+    sapply(0:degree, function(j) times^j),                           # Polynomial terms
+    sapply(knots, function(k) pmax(0, (times - k)^degree))           # Truncated power basis
+  )
+  
+  # Ordinary Least Squares: Compute the parameter estimates
+  coef <- solvet(crossprod(matT)) %*% crossprod(matT, hazard)  # More efficient than t(T) %*% T and t(T) %*% y
+  
+  # Polynomial terms: ∑_{j=0}^{d} α_j * t^j
+  poly_terms <- sapply(0:degree, function(j) coef[j + 1] * times^j)
+  
+  # Truncated power basis terms: ∑_{p=1}^{r} α_{p+d} * (t - K_p)^d_+
+  truncated_terms <- sapply(1:nknots, function(p) {
+    coef[1 + degree + p] * pmax(0, (times - knots[p])^degree)
+  })
+  
+  # Combine polynomial and truncated power terms
+  y <- rowSums(poly_terms) + rowSums(truncated_terms)
+  y <- pmax(y,0)
+  return(y)
+}
 
 
 

@@ -88,13 +88,13 @@ rm(datAggr,datAggr2,lookup,g1);gc()
 # Create temporary dataset for graphing that excludes the last month's data. A large proportion of loans are censored in the last month and would then distort the graphs.
 datAggr2 <- datCredit_real %>% subset(!is.na(PerfSpell_Key) & Date != as.Date("2022-12-31"),
                                       select=c("Date","LoanID","PerfSpell_Key","PerfSpell_Num",
-                                               "DefaultStatus1","PerfSpell_Censored", "WOff_Ind",
-                                               "EarlySettle_Ind"))
+                                               "DefaultStatus1","PerfSpell_Censored","Event_Type"))
 
 # Create a new variable to indicate the risk event that occurred.
 datAggr2 <- datAggr2[,RiskEvent := 
                        ifelse(DefaultStatus1 == 1 & !is.na(PerfSpell_Key),"Defaulted",
-                              ifelse(WOff_Ind == 1 | EarlySettle_Ind == 1,"Competed",
+                              ifelse(PerfSpell_Censored==1 & 
+                                       Event_Type %in% c("SETTLE","WOFF"),"Competed",
                                      ifelse(PerfSpell_Censored==1, "Censored",NA)))]
 
 # Calculate the number of risk events that occurred for each spell.
@@ -128,7 +128,7 @@ label <- pivot_wider(unique(datAggr2[,list(PerfSpell_Num,RiskEvent,RiskEventPerc
                      names_from=RiskEvent, values_from=RiskEventPerc) %>%
           replace_na(list(Competed  = 0, Defaulted  = 0, Censored = 0)) %>%
           mutate(Label:=paste0("Defaulted: ",percent(Defaulted,accuracy=0.1),
-                               ", Competed: ",percent(Competed,accuracy=0.1),
+                               ", Competed: ", percent(Competed,accuracy=0.1),
                                ", Censored: ", percent(Censored,accuracy=0.1))) %>%
           subset(select=c(PerfSpell_Num,Label))
 datAggr2 <- merge(datAggr2,label,by="PerfSpell_Num")
@@ -159,166 +159,6 @@ datAggr2[, PerfSpell_Num := paste0("Spell: ", PerfSpell_Num)]
 ggsave(g2, file=paste0(genFigPath, "/FULL SET/Performance Spell Risk Events.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 # House keeping
-rm(datAggr2,censored,g, datCredit_real);gc()
+rm(datAggr2, censored, g2, datCredit_real, label);gc()
 
-
-
-
-# ----------------- 3. Kaplan-Meier Analysis
-# Investigate the Kaplan-Meier curves to decide on spell groupings
-
-# - Perform analysis on the PWP ST time definition - Results are similar to that of AG/PWP TT except for the origin of each graph
-if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath)
-
-# Create a graphing data set for the Kaplan-Meier analysis,
-# 1) Remove the 9th Performance spell since only a single loan reached this point.
-# 2) Remove left-truncated loans since its unclear in which loan they are when the study period started.
-datAggr3 <- datCredit_PWPST[PerfSpell_Num!=9,list(Date,LoanID,Start,End,Default_Ind,PerfSpell_Num)]
-
-# - Aesthetic engineering
-chosenFont <- "Cambria"; dpi <- 200; colPalette <- "BrBG"
-# Grouping spells to create a facted graph
-datAggr3[ ,Spell_grp := fifelse(PerfSpell_Num <= 3, "1", fifelse(PerfSpell_Num <= 5, "2", "3"))]
-# Fit survival function for the analysis
-cox <- survfit(Surv(Start, End, Default_Ind) ~ PerfSpell_Num, data = datAggr3);gc()
-# Extract median survival times from the survival fit
-medLife <- summary(cox)$table[, "median"]
-median_survival <- data.frame("Spell" = names(medLife),
-                              "Median Life" = medLife,
-                              x = medLife,
-                              y = rep(0,length(medLife)),
-                              label = paste0("Median: ", round(medLife,1)),
-                              Spell_grp=c("1","1","1","2","2","3","3","3"),
-                              vjust=c(0,1,0,1,0,1,0,2))
-
-(g3 <- ggsurvplot(cox,data=datAggr3,palette = brewer.pal(8,"Dark2"),
-                  censor=FALSE,ggtheme = theme_minimal() +
-                  theme(text=element_text(family=chosenFont), strip_text=element_blank(), strip.background = element_blank()),
-                  xlab = "Months", legend="bottom",conf.int=TRUE,
-                  legend.title="Performance Spells",
-                  legend.labs=c("Spell 1", "Spell 2","Spell 3", "Spell 4",
-                               "Spell 5","Spell 6","Spell 7", "Spell 8"),
-                 facet.by="Spell_grp", scales="free_x", surv.median.line = "v") +
-    geom_label(data=median_survival, aes(x = x, y = y,label = label,
-                                        group=Spell_grp),
-               vjust=median_survival$vjust, alpha=0.7) +
-    scale_y_continuous(label = percent_format()))
-# - Create risk table object
-riskTable <- g3$data.survtable
-
-# - Save graph and object
-ggsave(g3$plot, file=paste0(genFigPath, "FULL SET/Kaplan-Meier Analysis.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-pack.ffdf(paste0(genObjPath,"Kaplan-MeierAnalysis_RiskTable"), riskTable)
-
-# - House keeping
-rm(cox, datAggr3, g3, riskTable)
-
-
-
-
-# ----------------- 4. Baseline hazard rates for different performance spells
-# Display the baseline hazard rate for different performance spells
-
-describe(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Num])
-hist(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Num])
-### RESULTS: Mean of 1.127 performance spell numbers; 1 spell: 91.1%, 2 spells: 6.3%, 3 spells: 1.7%, 4 spells: .6%, 5 spells: .2%, 6+ spells .1%.
-
-# Attempt to group performance spells greater than 4 together
-# Create variable containing the grouping
-datCredit_real[,PerfSpell_Group_5 := ifelse(PerfSpell_Num < 5, PerfSpell_Num, 5)]
-describe(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Group_5])
-hist(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Group_5])
-### RESULTS: Mean of 1.126 performance spell numbers; 1 spell: 91.1%, 2 spells: 6.3%, 3 spells: 1.7%, 4 spells: .6%. and 5 spells: .3%.
-### RESULTS: Negligible change in the mean value 
-
-basehaz <- basehaz(coxph(Surv(Start,End,Default_Ind)~1,datCredit_real[PerfSpell_Num == 1])) %>%
-  data.table() %>% subset(select=c("time","hazard"))
-colnames(basehaz) <- c("Time","cumHazard_1")
-for (i in 2:5){
-  temp_basehaz <- basehaz(coxph(Surv(Start,End,Default_Ind)~1,
-                                datCredit_real[PerfSpell_Group_5 == i])) %>%
-    data.table()
-  colnames(temp_basehaz) <- c(paste0("cumHazard_",i),"Time")
-  basehaz <- left_join(basehaz,temp_basehaz,by="Time");gc()
-};
-
-# - House keeping
-rm(temp_basehaz); gc()
-
-# - Aesthetic engineering
-chosenFont <- "Cambria"; dpi <- 200; colPalette <- "BrBG"
-cols1 <- c("cumHazard_1","cumHazard_2","cumHazard_3","cumHazard_4", "cumHazard_5")
-datAggr4 <- basehaz[,c("Time",..cols1)]
-datAggr4 <- pivot_longer(datAggr4,cols=all_of(cols1), names_to="Type",values_to="cumHazard")
-
-
-# - Graph
-(g4 <- ggplot(datAggr4, aes(x = Time, y = cumHazard, color = Type)) + 
-    theme_minimal() +
-    theme(text = element_text(family = chosenFont),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
-          legend.position=c(0.15,0.8), legend.background=element_rect(fill="snow2"),
-          strip.text=element_text(size=8, colour="black")) +
-    labs(y = "Cumulative Baseline Hazard Rate (5+ Grouping)",
-         x = "Time (months)") + 
-    geom_line(size = 1) +
-    scale_color_manual(values = brewer.pal(5, "Set1"), name="Performance Spell",
-                       labels=c("Spell 1", "Spell 2", "Spell 3", "Spell 4", "Spell 5+")))  # Use Set1 palette for color
-
-
-# - Save graph
-ggsave(g4, file=paste0(genFigPath, paste0("FULL SET/Cumulative Baseline Hazards (5+).png")), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-
-# - House keeping
-rm(basehaz, datAggr4, g4)
-
-# Attempt to group performance spells greater than 3 together
-# Create variable containing the grouping
-datCredit_real[,PerfSpell_Group_4 := ifelse(PerfSpell_Num < 4, PerfSpell_Num, 4)]
-describe(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Group_4])
-hist(datCredit_real[DefaultStatus1 == 1 & !is.na(PerfSpell_Num) | PerfSpell_Censored == 1,PerfSpell_Group_5])
-### RESULTS: Mean of 1.123 performance spell numbers; 1 spell: 91.1%, 2 spells: 6.3%, 3 spells: 1.7%, 4 spells: .9%
-### RESULTS: Minor change in the mean value 
-
-basehaz <- basehaz(coxph(Surv(Start,End,Default_Ind)~1,datCredit_real[PerfSpell_Num == 1])) %>%
-  data.table() %>% subset(select=c("time","hazard"))
-colnames(basehaz) <- c("Time","cumHazard_1")
-for (i in 2:4){
-  temp_basehaz <- basehaz(coxph(Surv(Start,End,Default_Ind)~1,
-                                datCredit_real[PerfSpell_Group_5 == i])) %>%
-    data.table()
-  colnames(temp_basehaz) <- c(paste0("cumHazard_",i),"Time")
-  basehaz <- left_join(basehaz,temp_basehaz,by="Time");gc()
-};
-
-# - House keeping
-rm(temp_basehaz); gc()
-
-# - Aesthetic engineering
-chosenFont <- "Cambria"; dpi <- 200; colPalette <- "BrBG"
-cols1 <- c("cumHazard_1","cumHazard_2","cumHazard_3","cumHazard_4")
-datAggr5 <- basehaz[,c("Time",..cols1)]
-datAggr5 <- pivot_longer(datAggr5,cols=all_of(cols1), names_to="Type",values_to="cumHazard")
-
-
-# - Graph
-(g5 <- ggplot(datAggr5, aes(x = Time, y = cumHazard, color = Type)) + 
-    theme_minimal() +
-    theme(text = element_text(family = chosenFont),
-          axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
-          legend.position=c(0.15,0.8), legend.background=element_rect(fill="snow2"),
-          strip.text=element_text(size=8, colour="black")) +
-    labs(y = "Cumulative Baseline Hazard Rate (4+ Grouping)",
-         x = "Time (months)") + 
-    geom_line(size = 1) +
-    scale_color_manual(values = brewer.pal(5, "Set1"), name="Performance Spell",
-                       labels=c("Spell 1", "Spell 2", "Spell 3", "Spell 4+")))  # Use Set1 palette for color
-
-
-# - Save graph
-ggsave(g5, file=paste0(genFigPath, paste0("FULL SET/Cumulative Baseline Hazards (4+).png")), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-
-# - House keeping
-rm(basehaz, datAggr5, g5)
+### CONCLUSION: Group all spells greater than 4 together

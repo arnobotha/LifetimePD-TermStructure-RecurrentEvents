@@ -30,30 +30,47 @@
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
 
-### HOMEWORK: Create [Removed], [slc_acct_roll_ever_24_imputed_med_f]
-datCredit_train_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
-### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
+# BS: will work these changes into script c once master's is done.
+
+# BS: Detected a problem with [PerfSpell_Exit_Ind] where some loans never leave state (although they do) (Problem lies with PerfSpell_Max_Date)
+datCredit_train_TFD[PerfSpell_Exit_Ind==1,.N]
+# 62132
+datCredit_train_TFD[!duplicated(PerfSpell_Key),.N]
+# 62723
+
+# ### HOMEWORK: Create [Removed]
+datCredit_train_TFD$Removed <- with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
+datCredit_valid_TFD$Removed <- with(datCredit_valid_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
+
+datCredit_train_TFD[Removed==1,.N]
+# 62723
+
+### HOMEWORK: Create [slc_acct_arr_dir_3_Change_Ind]
 datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
-# By doing so, we are breaking our own "mould"/pattern. Move these into the appropriate section within script 3c.
-
-datCredit_valid_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
 datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
-### AB: Same comment here as before
 
-datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
-### AB: This variable is created but seemingly never used? Rather remote if true.
-
-### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., 0b(i).
-# Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
+# ### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
+# datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+# ### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
+# # By doing so, we are breaking our own "mould"/pattern. Move these into the appropriate section within script 3c.
+# 
+# datCredit_valid_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
+# datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+# datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
+# ### AB: Same comment here as before
+# 
+# datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
+# ### AB: This variable is created but seemingly never used? Rather remote if true.
+# 
+# ### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., 0b(i).
+# # Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
 
 #============================================================================================
 # ------ 1. Delinquency measures
 varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num",
                              "Arrears" ,"TimeInDelinqState","g0_Delinq_Any_Aggr_Prop",
                              "g0_Delinq_Ave","slc_acct_arr_dir_3",
-                             "slc_acct_roll_ever_24_imputed_med"),
+                             "slc_acct_roll_ever_24_imputed_mean"),
                       vartypes=c("acc", "cat", "acc", "acc", "acc", "dte", "dte",
                                  "cat", "acc"))
 
@@ -69,22 +86,23 @@ vars <- c("g0_Delinq_SD_4", "g0_Delinq_SD_5", "g0_Delinq_SD_6", "g0_Delinq_SD_9"
 # Goodness of fit test
 csTable(datCredit_train_TFD,vars)
 #         Variable     B
-# 1  g0_Delinq_SD_4 0.6188
-# 2  g0_Delinq_SD_5 0.6124
-# 5 g0_Delinq_SD_12 0.6040
-# 4  g0_Delinq_SD_9 0.5999
-# 3  g0_Delinq_SD_6 0.5918
+# Variable B_Statistic
+# 1  g0_Delinq_SD_4      0.6186
+# 5 g0_Delinq_SD_12      0.6157
+# 2  g0_Delinq_SD_5      0.6101
+# 4  g0_Delinq_SD_9      0.5955
+# 3  g0_Delinq_SD_6      0.5901
 
 ### RESULTS:  [g0_Delinq_SD_4] fits the data the best, slightly better than [g0_Delinq_SD_5]
 
 # Accuracy test
 concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#           Variable Concordance          SD LR_Statistic
-# 1:  g0_Delinq_SD_4   0.9803661 0.001401872        84013
-# 2:  g0_Delinq_SD_5   0.9732740 0.001754351        91664
-# 3:  g0_Delinq_SD_6   0.9537569 0.002316001        91691
-# 4:  g0_Delinq_SD_9   0.9213853 0.002923814        89273
-# 5: g0_Delinq_SD_12   0.8885501 0.003291758        83456
+#           Variable Concordance           SD LR_Statistic
+# 1:  g0_Delinq_SD_4   0.9928422 0.0004451396        84702
+# 2:  g0_Delinq_SD_5   0.9908799 0.0007682680        91976
+# 3:  g0_Delinq_SD_6   0.9753519 0.0015888086        91431
+# 4:  g0_Delinq_SD_9   0.9531019 0.0021947146        87688
+# 5: g0_Delinq_SD_12   0.9238008 0.0026908258        81014
 
 ### RESULTS: As the SD period increase, there is a slight decrease in concordance.
 ### NOTE: Concordance is extremely high with low variability
@@ -100,10 +118,7 @@ varlist <- vecChange(varlist,Remove="PerfSpell_g0_Delinq_SD",Add=data.table(vars
 corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
 
 ### RESULTS:  1) [g0_Delinq_Any_Aggr_Prop] and [g0_Delinq_Ave] with a correlation of 1
-###           2) [PerfSpell_g0_Delinq_Num] and [slc_acct_roll_ever_24_imputed_med]
-### NOTE: Group 1) are also highly correlated with [g0_Delinq_Any_Aggr_Prop_Lag_3],
-###       which is to be expected.
-###           3) [g0_Delinq] and [Arrears]
+###           2) [g0_Delinq] and [Arrears]
 
 ### CONCLUSION: A single variable from each group must be retained while the rest are removed.
 
@@ -126,8 +141,8 @@ csTable(datCredit_train_TFD,vars,seedVal = NA)
 # Accuracy
 concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 #                   Variable Concordance          SD LR_Statistic
-# 1:           g0_Delinq_Ave   0.5397435 0.004030550           90
-# 2: g0_Delinq_Any_Aggr_Prop   0.5379244 0.004031059           81
+# 1:           g0_Delinq_Ave   0.5862387 0.004229343         1872
+# 2: g0_Delinq_Any_Aggr_Prop   0.5849507 0.004230491         1840
 
 ### RESULTS: [g0-Delinq_Ave] has a slightly better concordance.
 
@@ -136,35 +151,6 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 ###             I expect similar results.
 
 varlist <- vecChange(varlist,Remove=c("g0_Delinq_Any_Aggr_Prop"))
-
-
-
-# ------ 1.2.2 Which variable should be kept from group 2) [PerfSpell_g0_Delinq_Num] and [slc_acct_roll_ever_24_imputed_med]
-
-vars <- c("PerfSpell_g0_Delinq_Num", "slc_acct_roll_ever_24_imputed_med")
-
-# Goodness of fit
-csTable(datCredit_train_TFD,vars,seedVal = NA)
-#                             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:           PerfSpell_g0_Delinq_Num      0.6458      0.6463      0.6457      0.6426      0.6443 0.64494
-# 2: slc_acct_roll_ever_24_imputed_med      0.6287      0.6307      0.6280      0.6300      0.6304 0.62956
-# 3:                             Range      0.0171      0.0156      0.0177      0.0126      0.0139 0.01538
-
-### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have the better goodness of fit over 5 iterations.
-
-# Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                               Variable Concordance        SD LR_Statistic
-# 1:           PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         4596
-# 2: slc_acct_roll_ever_24_imputed_med   0.8588785 0.0031795664        18196
-
-### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have a significant better concordance with the concordances having low SD's.
-
-### CONCLUSION: Keep [PerfSpell_g0_Delinq_Num] in the model and remove [slc_acct_roll_ever_24_imputed_med]
-
-varlist <- vecChange(varlist,Remove="slc_acct_roll_ever_24_imputed_med")
-
-
 
 # ------ 1.3 Which version of [g0_Delinq] should be kept in the model?
 
@@ -208,7 +194,7 @@ datCredit_train_TFD[,g0_Delinq_Lag_1 := NULL]
 # Arrears
 cox <- coxph(Surv(Start,End,Default_Ind) ~ Arrears, id=LoanID, datCredit_train_TFD)
 summary(cox); rm(cox)
-### RESULTS: Obtain a stable model
+### RESULTS: Obtained a stable model
 
 ### CONCLUSION: Unable to add [Delinq_0] to the model, since the various forms'
 ###             coef is unstable, however, [Arrears] compiles a seemingly stable
@@ -222,17 +208,17 @@ vars <- c("PerfSpell_g0_Delinq_Num", "g0_Delinq_SD_4")
 # Goodness of fit
 csTable(datCredit_train_TFD,vars,seedVal = NA)
 #                   Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: PerfSpell_g0_Delinq_Num      0.6458      0.6428      0.6479      0.6478      0.6482 0.64650
-# 2:          g0_Delinq_SD_4      0.6179      0.6163      0.6184      0.6166      0.6176 0.61736
-# 3:                   Range      0.0279      0.0265      0.0295      0.0312      0.0306 0.02914
+# 1: PerfSpell_g0_Delinq_Num      0.6448      0.6472      0.6486      0.6470      0.6431 0.64614
+# 2:          g0_Delinq_SD_4      0.6175      0.6180      0.6201      0.6176      0.6192 0.61848
+# 3:                   Range      0.0273      0.0292      0.0285      0.0294      0.0239 0.02766
 
 ### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have a much better goodness of fit.
 
 # Accuracy
 concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 #                   Variable Concordance           SD LR_Statistic
-# 1:          g0_Delinq_SD_4   0.9803661 0.0014018721        84013
-# 2: PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         7954
+# 1:          g0_Delinq_SD_4   0.9928422 0.0004451396        84702
+# 2: PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
 
 ### RESULTS: [g0_Delinq_SD_4] seems to have better concordance.
 
@@ -247,14 +233,14 @@ varlist <- vecChange(varlist,Remove="g0_Delinq_SD_4")
 
 # Build thematic model based on remaining delinquency variables.
 vars <- c("PerfSpell_g0_Delinq_Num","TimeInDelinqState","g0_Delinq_Ave",
-          "slc_acct_arr_dir_3")
+          "slc_acct_arr_dir_3", "Arrears")
 
 # Test Goodness of fit
 csTable(datCredit_train_TFD,vars)
-#                     Variable B_Statistic
 #                   Variable B_Statistic
-# 3           g0_Delinq_Ave      0.6477
-# 1 PerfSpell_g0_Delinq_Num      0.6458
+# 3           g0_Delinq_Ave      0.6489
+# 1 PerfSpell_g0_Delinq_Num      0.6475
+# 5                 Arrears      0.6455
 # 2       TimeInDelinqState          NA
 # 4      slc_acct_arr_dir_3          NA
 
@@ -341,22 +327,22 @@ vars <- c("PerfSpell_g0_Delinq_Num","g0_Delinq_Ave", "Arrears",
 # Goodness of fit
 csTable(datCredit_train_TFD,vars)
 #                         Variable B_Statistic
-# 2                 g0_Delinq_Ave      0.6477
-# 1       PerfSpell_g0_Delinq_Num      0.6458
-# 5 slc_acct_arr_dir_3_Change_Ind      0.6446
-# 3                       Arrears      0.6443
-# 4       TimeInDelinqState_Lag_1      0.6331
+# 5 slc_acct_arr_dir_3_Change_Ind      0.6501
+# 2                 g0_Delinq_Ave      0.6489
+# 1       PerfSpell_g0_Delinq_Num      0.6475
+# 3                       Arrears      0.6455
+# 4       TimeInDelinqState_Lag_1      0.6385
 
 ### RESULTS: All variables seems to be a good fit.
 
 # Accuracy
 concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 #                         Variable Concordance           SD LR_Statistic
-# 1:                       Arrears   0.9573776 0.0016578273        13229
-# 2:       PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         7954
-# 3: slc_acct_arr_dir_3_Change_Ind   0.8433911 0.0019345216        33655
-# 4:       TimeInDelinqState_Lag_1   0.7507071 0.0056323114        35701
-# 5:                 g0_Delinq_Ave   0.5397435 0.0040305498         1623
+# 1:                       Arrears   0.9568891 0.0017938453        13502
+# 2:       PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
+# 3:       TimeInDelinqState_Lag_1   0.8933628 0.0031888664        31583
+# 4: slc_acct_arr_dir_3_Change_Ind   0.8722179 0.0014858895        28431
+# 5:                 g0_Delinq_Ave   0.5862387 0.0042293435         1872
 
 ### RESULTS: [g0_Delinq_Ave] has significant less concordance than the other variables.
 
@@ -377,12 +363,12 @@ summary(coxDelinq)
 ### RESULTS: All variables are significant (p-value < 0.001)
 
 # Test goodness of fit
-GoF_CoxSnell_KS(coxDelinq,datCredit_train_TFD,GraphInd = FALSE) # 0.6322
+GoF_CoxSnell_KS(coxDelinq,datCredit_train_TFD,GraphInd = FALSE) # 0.6394
 
 ### RESULTS: Goodness of fit is a bit low
 
 # Test accuracy
-concordance(coxDelinq, newdata=datCredit_valid_TFD) # Concordance= 0.9265 se= 0.00241
+concordance(coxDelinq, newdata=datCredit_valid_TFD) # Concordance= 0.9638 se= 0.00161
 
 ### RESUTLS: extremely good prediction accuracy.
 
@@ -447,9 +433,9 @@ vars <- c("slc_acct_pre_lim_perc_imputed_med", "slc_acct_prepaid_perc_dir_12_imp
 
 # Compare goodness of fit of different variables
 csTable(datCredit_train_TFD,vars)
-#                                 Variable     B
-# 1        slc_acct_pre_lim_perc_imputed_med 0.6485
-# 2 slc_acct_prepaid_perc_dir_12_imputed_med    NA
+#                                   Variable B_Statistic
+# 1        slc_acct_pre_lim_perc_imputed_med      0.6492
+# 2 slc_acct_prepaid_perc_dir_12_imputed_med          NA
 
 ### RESULTS:  [slc_acct_prepaid_perc_dir_12_imputed_med] ran out of iterations and did not converge
 
@@ -486,16 +472,16 @@ varlist <- vecChange(varlist,Remove="slc_acct_prepaid_perc_dir_12_imputed_med")
 vars <- c("pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med")
 
 csTable(datCredit_train_TFD,vars)
-#                               Variable B_Statistic
-# 2 slc_acct_pre_lim_perc_imputed_med       0.6477
-# 1                   pmnt_method_grp       0.6453
+#                             Variable B_Statistic
+# 2 slc_acct_pre_lim_perc_imputed_med      0.6489
+# 1                   pmnt_method_grp      0.6461
 
 ### RESULTS:  [slc_acct_pre_lim_perc_imputed_med] fits the better and there is an improvement for [pmnt_method_grp]
 
 concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 #                             Variable Concordance           SD LR_Statistic
-# 1:                   pmnt_method_grp   0.7363669 0.0036080644         5777
-# 2: slc_acct_pre_lim_perc_imputed_med   0.6360895 0.0008227257         2865
+# 1:                   pmnt_method_grp   0.7643746 0.0036472739         8864
+# 2: slc_acct_pre_lim_perc_imputed_med   0.6496281 0.0005780128         5558
 
 ### RESULTS: [pmnt_method_grp]  has a much better concordance than [slc_acct_pre_lim_perc_imputed_med],
 ###           but both concordances are reasonably high.
@@ -518,17 +504,12 @@ summary(coxEngineered)
 ### RESULTS: [slc_acct_pre_lim_perc_imputed_med]  has an insignificant coef of -154
 
 # Goodness of fit
-GoF_CoxSnell_graph(coxEngineered,datCredit_train_TFD) # 0.6407
+GoF_CoxSnell_KS(coxEngineered,datCredit_train_TFD, GraphInd=FALSE) # 0.6421
 
 ### RESULTS: slight decrease in goodness of fit, although it could be due to random sampling
 
 # Accuracy
-concordance(coxEngineered,newdata=datCredit_valid_TFD) # Concordance= 0.784 se= 0.002926
-
-# # Time dependent AUC
-# timedROC(datCredit_valid_TFD, coxEngineered_valid, month_Start=0, month_End=36,
-#          fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
-#          fld_EndTime="End", numDigits=0, Graph=FALSE) # 0.7040435
+concordance(coxEngineered,newdata=datCredit_valid_TFD) # Concordance= 0.8112 se= 0.002737
 
 ### CONCLUSION: Due to increase in Concordance keep all current variables in the model.
 
@@ -1214,10 +1195,6 @@ concordance(coxMacro, newdata=datCredit_valid_TFD)# 0.5509
 modelVar <- c(modelVar,"M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6",
               "M_RealIncome_Growth")
 
-
-
-
-
 #============================================================================================
 # ------ 7. Final Model
 
@@ -1298,10 +1275,49 @@ vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqS
            "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
            "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
            "M_Inflation_Growth_6", "M_RealIncome_Growth")
-### AB: I received "exp overflow due to covariates" error when trying to fit this model.
+ ### AB: I received "exp overflow due to covariates" error when trying to fit this model.
 # This is likely because the exponentiated form of certain variables and the 
 # coxPH-function then struggles to obtain a good fit. So I simply tweaked the variable list a bit just 
 # so that I can at least get some fitted model to test. Problem 'children': [pmnt_method_grp]
+
+# Test Goodness of fit
+csTable_TFD <- csTable(datCredit_train_TFD,vars2)
+# 12                M_Inflation_Growth      0.6528
+# 9                          Principal      0.6525
+# 14               M_RealIncome_Growth      0.6508
+# 7       InterestRate_Margin_Aggr_Med      0.6502
+# 5      slc_acct_arr_dir_3_Change_Ind      0.6501
+# 6  slc_acct_pre_lim_perc_imputed_med      0.6499
+# 11                      M_DTI_Growth      0.6496
+# 10                            LN_TPE      0.6489
+# 2                            Arrears      0.6481
+# 8     InterestRate_Margin_Aggr_Med_3      0.6477
+# 1            PerfSpell_g0_Delinq_Num      0.6475
+# 13              M_Inflation_Growth_6      0.6467
+# 3                      g0_Delinq_Ave      0.6463
+# 4            TimeInDelinqState_Lag_1      0.6385
+
+# Test accuracy
+concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, vars2)
+#                             Variable Concordance           SD LR_Statistic
+# 1:                           Arrears   0.9568891 0.0017938453        13502
+# 2:           PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
+# 3:           TimeInDelinqState_Lag_1   0.8933628 0.0031888664        31583
+# 4:     slc_acct_arr_dir_3_Change_Ind   0.8722179 0.0014858895        28431
+# 5: slc_acct_pre_lim_perc_imputed_med   0.6496281 0.0005780128         5558
+# 6:                         Principal   0.6137518 0.0043225132          494
+# 7:    InterestRate_Margin_Aggr_Med_3   0.5869687 0.0043844515         1148
+# 8:                     g0_Delinq_Ave   0.5862387 0.0042293435         1872
+# 9:      InterestRate_Margin_Aggr_Med   0.5858681 0.0044509364         1214
+# 10:                      M_DTI_Growth   0.5813828 0.0042020200         1696
+# 11:              M_Inflation_Growth_6   0.5743351 0.0045314545         1353
+# 12:                M_Inflation_Growth   0.5552019 0.0045393073         1098
+# 13:                            LN_TPE   0.5209834 0.0019699539          100
+# 14:               M_RealIncome_Growth   0.4892308 0.0041952801           26
+
+# Create table object
+Table_TFD <- left_join(csTable_TFD$Table,concTable_TFD,by="Variable")
+
 # 
 # Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
@@ -1329,6 +1345,10 @@ c <- coefficients(cox_TFD)
 # 18:               M_RealIncome_Growth   -2.3490754410016
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6288
+GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6307
 
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
+
+# Save objects
+pack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), Table_TFD)
+pack.ffdf(paste0(genObjPath,"TFD_Cox_Model"), cox_TFD)

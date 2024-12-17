@@ -22,8 +22,7 @@
 # -- Outputs:
 #   - Bar chart of LoanIDs by performance spells
 #   - Bar chart of risk events by performance spells
-#   - Cumulative baseline hazard rates by performance spells (2 different groupings)
-#   - Kaplan-Meyer analysis by performance spells
+#   - Histogram of failure times f(t)
 # ------------------------------------------------------------------------------------------------------
 
 
@@ -162,3 +161,96 @@ ggsave(g2, file=paste0(genFigPath, "/FULL SET/Performance Spell Risk Events.png"
 rm(datAggr2, censored, g2, datCredit_real, label);gc()
 
 ### CONCLUSION: Group all spells greater than 4 together
+
+
+
+
+# ----------------- 2. Failure time histogram & densities per resolution type
+
+
+# ------Preliminaries
+
+# - Select one record per performance spell
+datSurv <- subset(datCredit_real, PerfSpell_Counter==1 & PerfSpell_Age < 500,
+                  select=c("LoanID","PerfSpell_Key","PerfSpell_Age", "PerfSpellResol_Type_Hist", "PerfSpell_Num", "TimeInPerfSpell")); gc()
+
+# - Group competing risks together in Resol_Type
+datSurv[,Resol_Type := case_when(PerfSpellResol_Type_Hist == "Defaulted" ~ "a_Default",
+                                 PerfSpellResol_Type_Hist == "Censored" ~ "b_Right-censored",
+                                 PerfSpellResol_Type_Hist %in% c("Settled", "Paid-up", "Written-off") ~ "c_Competing_risk")]
+# [SANITY CHECK] Proportions
+datSurv$PerfSpellResol_Type_Hist %>% table() %>% prop.table()
+(Resol_Type.props <- datSurv$Resol_Type %>% table() %>% prop.table())
+
+# - Dataset containing only the competing risks, where the type of competing risk is shown by Resol_Type2
+datSurv2 <- datSurv %>% subset(PerfSpellResol_Type_Hist%in%c("Settled", "Paid-up", "Written-off"))
+datSurv2[, Resol_Type2 := case_when(PerfSpellResol_Type_Hist=="Settled" ~ "a_Settlement",
+                                    PerfSpellResol_Type_Hist=="Paid-up" ~ "b_Paid-up",
+                                    TRUE ~ "c_Written-off-Other")]
+# - Small check
+datSurv$PerfSpellResol_Type_Hist %>% table() %>% prop.table()
+(Resol_Type2.props <- datSurv2$Resol_Type2 %>% table() %>% prop.table())
+
+
+# - Graphing Parameters
+chosenFont <- "Cambria"; dpi <- 170
+vCol <- brewer.pal(10, "Paired")[c(10,6,4, 2,1,8)]
+vCol2 <- brewer.pal(10, "Paired")[c(10,5,3, 1,2,8)]
+vLabels <- c(paste0("a_Default"="Default (", round(Resol_Type.props[1]*100, digits=1), "%)"), # Need to round to the first decimal place to ensure that the prior add up to one
+             paste0("b_Right-censored"="Right-censored (", round(Resol_Type.props[2]*100, digits=1), "%)"),
+             paste0("c_Competing_risk"="Competing Risks (", round(Resol_Type.props[3]*100, digits=1), "%)"))
+vLabels2 <- c(paste0("a_Settlement"="Settlement (", round(Resol_Type2.props[1]*100, digits=1), "%)"),
+              paste0("b_Paid-up"="Paid-up (", round(Resol_Type2.props[2]*100, digits=1), "%)"),
+              paste0("c_Written-off-Other"="Other/Write-off (", round(Resol_Type2.props[3]*100, digits=1), "%)"))
+
+
+# - Densities of resolution types overlaid
+(g1_Densities_Resol_Type <- ggplot(datSurv[PerfSpell_Age<=500,], aes(x=PerfSpell_Age, group=Resol_Type)) + theme_minimal() + 
+    labs(y=bquote(plain(Empirical~failure*' time histogram & density ')~italic(f(t))), 
+         x=bquote("Performing spell ages (months)"*~italic(T[ij]))) + 
+    theme(text=element_text(family=chosenFont),legend.position=c(0.785,0.2), 
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text = element_text(size=8, colour="gray50"), strip.text.y.right = element_text(angle=90)) + 
+    # Graphs
+    geom_histogram(aes(y=after_stat(density), colour=Resol_Type, fill=Resol_Type), position="identity",
+                   alpha=0.75, size=0.2) + 
+    geom_density(aes(colour=Resol_Type, linetype=Resol_Type), linewidth=0.8) + 
+    # facets & scale options
+    scale_colour_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=vCol2, labels=vLabels) + 
+    scale_fill_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=vCol, labels=vLabels) + 
+    scale_linetype_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=c("solid","dashed", "dotted"), labels=vLabels) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(), label=comma)
+)
+
+# - Densities of competing risks overlaid
+(g2_Densities_Resol_Type2 <- ggplot(datSurv2[PerfSpell_Age<=500,], aes(x=PerfSpell_Age, group=Resol_Type2)) + theme_bw() +
+    labs(y="", x="", title=paste0("Competing risks (", round(Resol_Type.props[3]*100, digits=1), "%)")) + 
+    theme(legend.position=c(0.75,0.40), text=element_text(size=12, family="Cambria"),
+          #specific for plot-in-plot
+          axis.text.y=element_text(margin=unit(c(0,0,0,0), "mm"), size=9),
+          axis.text.x=element_text(margin=unit(c(0,0,0,0), "mm"), size=9),
+          axis.ticks=element_blank(), axis.title.x=element_blank(), #axis.title.y=element_blank(),
+          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          panel.background = element_rect(color="black", fill="white"),
+          plot.background = element_rect(color="white"), plot.margin = unit(c(0,0,0,0),"mm"),
+          plot.title = element_text(hjust=0.55,vjust=-10,margin=margin(t=-12))) +
+    # Graphs
+    geom_histogram(aes(y=after_stat(density), colour=Resol_Type2, fill=Resol_Type2), position="identity",
+                   alpha=0.75, size=0.2) + 
+    geom_density(aes(colour=Resol_Type2, linetype=Resol_Type2), linewidth=0.6) + 
+    # facets & scale options
+    scale_colour_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=vCol[4:6], labels=vLabels2) + 
+    scale_fill_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=vCol2[4:6], labels=vLabels2) + 
+    scale_linetype_manual(name=bquote("Resolution Type"*~italic(R[ij])), values=c("solid","dashed", "dotted"), labels=vLabels2) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(), label=comma)
+)
+
+# - Combining the two above plots onto a single graph
+ymin <- diff(ggplot_build(g1_Densities_Resol_Type)$layout$panel_params[[1]]$y.range) * 0.3
+ymax <- max(ggplot_build(g1_Densities_Resol_Type)$layout$panel_params[[1]]$y.range) * 0.95
+(plot.full <- g1_Densities_Resol_Type + annotation_custom(grob = ggplotGrob(g2_Densities_Resol_Type2), xmin=100, xmax=500, ymin=ymin, ymax=ymax))
+
+# - Save plot
+ggsave(plot.full, file=paste0(genFigPath,"FULL SET/Default-FailureTime-Densities.png"),width=1350/dpi, height=1000/dpi,dpi=dpi, bg="white")

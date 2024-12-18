@@ -447,6 +447,14 @@ cat((anyNA(datCredit_smp$InterestRate_Margin_imputed_bin)) %?% 'WARNING: New fea
       'SAFE: New feature [InterestRate_Margin_imputed_bin] has no missing values. \n')
 ### RESULTS: [InterestRate_Margin_imputed_bin] created without any missingness
 
+# - Bin [PerfSpell_Num] based on previous analysis (script 4a(i)) towards grouping later spells together
+# [SANITY CHECK] Check new feature for illogical values
+datCredit_smp[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
+cat( (all.equal(datCredit_smp[PerfSpell_Num < 4,PerfSpell_Num], datCredit_smp[PerfSpell_Grp < 4,PerfSpell_Grp]) & 
+        datCredit_smp[!is.na(PerfSpell_Key) & is.na(PerfSpell_Grp), .N] == 0) %?%
+       'SAFE: New feature [PerfSpell_Grp] has no missing values and is binned as intended. \n' %:%
+       'WARNING: New feature [PerfSpell_Grp] either has missing valeus or its binning failed. \n ' )
+
 
 
 # --- 6. Feature Engineering: Inflating time-sensitive monetary variables to the latest date

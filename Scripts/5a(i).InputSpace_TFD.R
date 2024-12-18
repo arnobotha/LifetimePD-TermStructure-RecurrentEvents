@@ -37,6 +37,7 @@ datCredit_train_TFD[PerfSpell_Exit_Ind==1,.N]
 # 62132
 datCredit_train_TFD[!duplicated(PerfSpell_Key),.N]
 # 62723
+### AB [2024-12-17]: Both counts are exactly the same at my end. I suspect this is a data corruption / versioning problem at your end
 
 # ### HOMEWORK: Create [Removed]
 datCredit_train_TFD$Removed <- with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
@@ -1320,8 +1321,9 @@ Table_TFD <- left_join(csTable_TFD$Table,concTable_TFD,by="Variable")
 
 # 
 # Build model based on variables
-cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
-                               paste(vars2,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
+                 id=LoanID, datCredit_train_TFD, ties="efron")
+# NOTE: Default option for handling ties is recently "Efron's method", but we specify this for backwards compatability
 c <- coefficients(cox_TFD)
 (c <- data.table(Variable=names(c),Coefficient=c))
 #                             Variable        Coefficient
@@ -1351,4 +1353,7 @@ GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) #
 
 # Save objects
 pack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), Table_TFD)
-pack.ffdf(paste0(genObjPath,"TFD_Cox_Model"), cox_TFD)
+pack.ffdf(paste0(genPath,"TFD_Cox_Model"), cox_TFD)
+
+# - Cleanup
+rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD); gc()

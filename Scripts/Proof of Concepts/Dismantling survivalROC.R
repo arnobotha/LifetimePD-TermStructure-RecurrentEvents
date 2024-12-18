@@ -29,7 +29,7 @@ dat2 <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weig
 
 
 # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
-coxExample2 <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat, data=dat, id=ID)
+coxExample2 <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat, data=dat2, id=ID)
 summary(coxExample2)
 
 

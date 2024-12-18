@@ -29,14 +29,6 @@
 if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath);gc()
 if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath);gc()
 
-# Apply performance spell grouping from script 4a(i)
-# Load datasets
-datCredit_TFD[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-datCredit_PWPST[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-
-# Sanity check
-all.equal(datCredit_TFD[PerfSpell_Num < 4,PerfSpell_Num], datCredit_TFD[PerfSpell_Grp < 4,PerfSpell_Grp])# Should be true
-all.equal(datCredit_PWPST[PerfSpell_Num < 4,PerfSpell_Num], datCredit_PWPST[PerfSpell_Grp < 4,PerfSpell_Grp])# Should be true
 
 # -------- 1 Kaplan-Meier analysis on first performance spell when left-truncation is incorporated
 

@@ -110,7 +110,7 @@ haz_dat <- data.table(Time=kmExample$time, AtRisk_n=kmExample$n.risk,
                       Group="1",Surv_KM = kmExample$surv) %>% 
   filter(Event_n > 0 | Censored_n >0) %>%
   # Discrete-time variants
-  mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
+  mutate(CumulHazard_Disc = cumsum(hazard), Surv_KM_Disc = cumprod(1-hazard)) %>% 
   mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
 haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
 # - create alternative versions for sanity checks
@@ -119,9 +119,7 @@ haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
 # - conduct sanity checks
 all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
 all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
-all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
-plot(kmExample$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
-### RESULTS: The discrepancy is very small difference due to estimator method differences
+all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # Should be TRUE
 
 # - Graph object for shorter time, informed by previous graphs
 (gsurv1c_d <- ggplot(haz_dat[Time<=300,], aes(x=Time,y=hazard)) + theme_minimal() +

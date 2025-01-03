@@ -5,7 +5,6 @@
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha (AB)
-# VERSION: 1.0 (November-2024)
 # --------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R

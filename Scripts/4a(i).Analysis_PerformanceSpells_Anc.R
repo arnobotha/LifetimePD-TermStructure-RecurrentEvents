@@ -3,7 +3,7 @@
 # analysis aids in the decision making about a suitable cut-off point beyond 
 # which all performance spells are grouped together.
 # ------------------------------------------------------------------------------------------------------
-# PROJECT TITLE: Classifier Diagnostics
+# PROJECT TITLE: Default survival modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha, Bernard Scheepers
 # ------------------------------------------------------------------------------------------------------
 # -- Script dependencies:

@@ -5,7 +5,6 @@
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha (AB)
-# VERSION: 1.0 (November-2024)
 # --------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -68,8 +67,8 @@ vecVars_TFD <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInD
 
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
-                                   paste(vecVars_TFD,collapse=" + "))), id=LoanID, datCredit_train_TFD)
+cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vecVars_TFD,collapse=" + "))), 
+                 ties="efron", id=LoanID, datCredit_train_TFD)
 summary(cox_TFD)
 
 
@@ -85,8 +84,8 @@ vecVars_PWPST <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqSt
 
 # # Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-cox_PWP <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
-                                   paste(vecVars_PWPST,collapse=" + "))), id=LoanID, datCredit_train_PWPST)
+cox_PWP <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",paste(vecVars_PWPST,collapse=" + "))), 
+                 ties="efron", id=PerfSpell_Key, datCredit_train_PWPST)
 summary(cox_PWP)
 
 
@@ -103,7 +102,10 @@ summary(cox_PWP)
 sCohort <- "2007-11-30"
 vSpellKeys <- datCredit_valid_TFD[Date == as.Date(sCohort) & Start == 0, PerfSpell_Key]
 datCohort <- datCredit_valid_TFD[PerfSpell_Key %in% vSpellKeys]
-check1 <- subset(datCohort, PerfSpell_Key %in% unique(datCohort[,PerfSpell_Key])[1])
+check1 <- subset(datCohort, PerfSpell_Key %in% unique(datCohort[,PerfSpell_Key])[1],
+                 select=c("LoanID","PerfSpell_Key", "PerfSpell_Num", "TimeInPerfSpell","PerfSpell_Age", "PerfSpellResol_Type_Hist"))
+describe(datCohort[PerfSpell_Counter==1, PerfSpell_Age]); hist(datCohort[PerfSpell_Counter==1, PerfSpell_Age], breaks="FD")
+
 
 
 # --- Fit Kaplan-Meier (KM) nonparametric model towards calculating "Actual Hazard"
@@ -123,7 +125,7 @@ datHaz <- data.table(Time = km_TFD$time, AtRisk_n = km_TFD$n.risk, Event_n = km_
          CHaz2 = -log(km_TFD$surv))  %>% # Very similar to CHaz, derived fundamentally from KM-estimate, kept for comparative purposes
   filter(Event_n > 0 | Censored_n >0)
 describe(datHaz$Hazard_Actual); hist(datHaz$Hazard_Actual, breaks="FD")
-plot(datHaz[Time <= 300, Hazard_Actual], type="b") # restrict time just for quick plotting purpose
+plot(datHaz[Time <= sMaxSpellAge, Hazard_Actual], type="b") # restrict time just for quick plotting purpose
 ### RESULTS: Functional shape exhibits typical U-shape, as expected.
 
 
@@ -135,7 +137,12 @@ plot(datHaz[Time <= 300, Hazard_Actual], type="b") # restrict time just for quic
 
 # - Obtain both cumulative and incremental baseline hazard functions H_0(t) and h_0(t) from Cox PH model
 # NOTE: Uses Efron's method to obtain baseline hazard whereby risk sets are adjusted based on number of tied events
+datSurv_TFD <- survfit(cox_TFD, newdata=datCredit_valid_TFD, id=LoanID)
+
 datCHaz <- basehaz(cox_TFD, centered=F) %>% as.data.table() # ensure Cumulative Hazard corresponds to unadjusted (baseline) subjects
+
+# - Obtain survival curve for new data
+
 
 # Initialize interpolated baseline hazard
 vBaselineHaz <- numeric(length(datCHaz$time))
@@ -166,7 +173,7 @@ for (i in seq_along(datCHaz$time)) {
   }
 }
 
-datCHaz[, BaselineHaz :=  vBaselineHaz]
+datCHaz[, BaselineHaz := vBaselineHaz]
 
 
 

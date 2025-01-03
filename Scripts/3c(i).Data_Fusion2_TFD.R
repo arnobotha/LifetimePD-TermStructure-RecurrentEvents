@@ -306,6 +306,7 @@ hist(datCredit_smp$slc_acct_pre_lim_perc_imputed_med, breaks='FD')
 ### RESULTS: Imputation successful, with mean of 0.086 vs median of ,
 # bounded by [0, 0.74] for 5%-95% percentiles; no outliers, other than at 0 and 1
 
+
 # - Number of times an account was in arrears over last 24 months
 if (doDescribe) describe(datCredit_smp$slc_acct_roll_ever_24); hist(datCredit_smp$slc_acct_roll_ever_24, breaks='FD')
 datCredit_smp[is.na(slc_acct_roll_ever_24), .N] / datCredit_smp[,.N] * 100
@@ -322,6 +323,7 @@ if (doDescribe) describe(datCredit_smp$slc_acct_roll_ever_24_imputed_mean);
 hist(datCredit_smp$slc_acct_roll_ever_24_imputed_mean, breaks='FD')
 ### RESULTS: Imputation successful, categorical variable now has 6 distinct classes, with majority having 0-value, while
 # the imputed cases (value of 0.30) being the second most prevalent.
+
 
 # - Percentage-valued direction of prepaid/available funds - current compared to 12 months ago
 if (doDescribe) describe(datCredit_smp$slc_acct_prepaid_perc_dir_12); 
@@ -362,6 +364,7 @@ hist(datCredit_smp$slc_past_due_amt_imputed_med[datCredit_smp$slc_past_due_amt_i
 ### RESULTS: Imputation successful, with mean of 290.6 vs median of 0,
 # bounded by [0, 0] for 5%-95% percentiles; extreme outliers
 
+
 # - InterestRate_Margin (incorporating risk-based pricing info)
 if (doDescribe) describe(datCredit_smp$InterestRate_Margin); hist(datCredit_smp$InterestRate_Margin, breaks="FD")
 datCredit_smp[is.na(InterestRate_Margin), .N] / datCredit_smp[,.N] * 100
@@ -400,6 +403,7 @@ if (doDescribe) describe(datCredit_smp$AgteToTerm); hist(datCredit_smp[AgeToTerm
 ### RESULTS: Highly right-skewed distribution as expected, with mean of 0.37 vs median of 0.29,
 # bounded by [0.03, 0.9] for 5%-95% percentiles; some large outliers (max: 224)
 
+
 # - Balance to loan term | how much is still outstanding compared to Principal/Limit
 datCredit_smp[, BalanceToPrincipal := Balance/Principal]
 # [SANITY CHECK] Check new feature for illogical values
@@ -427,6 +431,7 @@ if (doDescribe) describe(datCredit_smp$pmnt_method_grp)
 ### RESULTS: Bins grouped logically such that each bin now has sufficient observations, with proportions:
 # Debit Order: 68%; MISSING_DATA: 13%; Salary/Suspense: 6%; Statement: 12%
 ### CONCLUSION: Given the greater utility of this newly-binned variable, rather use this variable than [scl_pmnt_method]
+
 
 # - Factorised [g0_Delinq] variable
 datCredit_smp[,g0_Delinq_fac := as.factor(g0_Delinq)]
@@ -499,7 +504,7 @@ rm(datMV, date_range, datInflation)
 
 
 
-# --- 8. Featuring Engineering: Portfolio-level information
+# --- 7. Featuring Engineering: Portfolio-level information
 
 # - Confirm that required data objects are loaded into memory
 if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1d"), tempPath)
@@ -677,7 +682,7 @@ suppressWarnings(rm(dat_IRM_Aggr, dat_IRM_Aggr_Check1, list_merge_variables, res
 
 
 
-# --- 9. Macroeconomic feature engineering
+# --- 8. Macroeconomic feature engineering
 
 # - Confirm that required data objects are loaded into memory
 if (!exists('datCredit_smp')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp1e"), tempPath)
@@ -744,6 +749,7 @@ pack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), datCredit_smp)
 
 # - Cleanup
 rm(datMV, list_merge_variables, results_missingness, datMV_Check1, datMV_Check2); gc()
+
 
 
 

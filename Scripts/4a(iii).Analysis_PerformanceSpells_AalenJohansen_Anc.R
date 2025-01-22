@@ -129,4 +129,6 @@ chosenFont <- "Cambria"
 dpi <- 200
 ggsave(gAJ_spell, file=paste0(genFigPath, "FULL SET/CumulProbFail_Aalen-Johansen.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
+# cleanup
+rm(aj_fit_spell, datCredit_real, datGraph, datGraph_err, datTFD, datTransprob, gAJ_spell)
 

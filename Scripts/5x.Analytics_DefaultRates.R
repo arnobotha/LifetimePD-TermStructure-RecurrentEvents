@@ -128,6 +128,10 @@ describe(datHaz$Hazard_Actual); hist(datHaz$Hazard_Actual, breaks="FD")
 plot(datHaz[Time <= sMaxSpellAge, Hazard_Actual], type="b") # restrict time just for quick plotting purpose
 ### RESULTS: Functional shape exhibits typical U-shape, as expected.
 
+# - Plot probability mass function f(t) = h(t).S(t-1) in discrete-time context
+datHaz[, EventProb := Hazard_Actual*shift(Surv_KM, n=1, fill=1)]
+plot(datHaz[Time <= sMaxSpellAge, EventProb], type="b")
+
 
 # --- Calculate fundamental quantities and enrich main data object accordingly
 

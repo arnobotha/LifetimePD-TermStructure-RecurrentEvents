@@ -33,9 +33,9 @@
 #   - datMV | prepared feature engineered macroeconomic data from script 2a
 #
 # -- Outputs:
-#   - datCredit_final_c_TFD | enriched credit dataset, fused with macroeconomic data and
-#                        various input fields, with feature engineering applied
-#   - datCredit_smp_TFD   | subsampled dataset
+#   - datCredit_smp   | subsampled dataset of the enriched datCredit_TFD
+#   - datCredit_train_TFD | Training set for TFD-definition of Cox PH model
+#   - datCredit_valid_TFD | Validation set for TFD-definition of Cox PH model
 # ---------------------------------------------------------------------------------------
 # NOTE: This script predominantly comes from another project (Kasmeer).
 # =======================================================================================

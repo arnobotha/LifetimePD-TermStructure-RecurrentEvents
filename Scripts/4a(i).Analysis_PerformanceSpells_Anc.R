@@ -1,7 +1,7 @@
 # ================================= PERFORMANCE SPELL ANALYSES =========================================
-# Analysis performed on the sample size of different performance spells. The 
-# analysis aids in the decision making about a suitable cut-off point beyond 
-# which all performance spells are grouped together.
+# Analysing the performance spells in various ways, including the maximum spell number (histogram),
+# the number of risk events over time per spell number, the failure time histogra/densities per 
+# resolution type, and the extend of tied events (Proportion tied relative to total event time frequencies)
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha, Bernard Scheepers
@@ -263,7 +263,7 @@ rm(datSurv, datSurv2, g1_Densities_Resol_Type, g2_Densities_Resol_Type2, plot.fu
 
 
 
-# ----------------- 3. Extent of tied events: Proportion tied relative to total event time frequencies
+# ----------------- 4. Extent of tied events: Proportion tied relative to total event time frequencies
 describe(datCredit_real$PerfSpellResol_Type_Hist)
 
 # - Subset performance spell-level observations towards calculating tied event times
@@ -342,4 +342,3 @@ ggsave(g1, file=paste0(genFigPath,"FULL SET/TiedEvents_Extent.png"),width=1200/d
 
 # - Cleanup
 rm(datAggr, datSpells, g1)
-  

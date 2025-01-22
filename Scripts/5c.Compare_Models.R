@@ -294,19 +294,3 @@ dat[, RiskScore := predict(cox_TFD, newdata=dat_Future, type="risk")]
 
 datAggr <- unique(datCredit_valid_TFD[DefaultStatus1==0, .(Actual = mean(DefaultStatus1_lead_12_max, na.rm=T)), by=list(Date)])
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

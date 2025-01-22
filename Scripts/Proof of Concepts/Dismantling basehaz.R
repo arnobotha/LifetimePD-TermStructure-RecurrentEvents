@@ -84,7 +84,7 @@ haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
 haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
 
 # - conduct sanity checks
-all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
+all.equal(haz_dat$Actual_Hazard, haz_dat$hazard2) # Should be TRUE
 all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
 all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # Should be TRUE
 plot(kmExample2$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")

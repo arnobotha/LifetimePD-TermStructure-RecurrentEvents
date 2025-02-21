@@ -16,7 +16,7 @@
 #   - 2e.Data_Prepare_Macro.R
 #   - 2f.Data_Fusion1.R
 #   - 3a(i).Data_Transform.R
-#   - 3c.Data_Fusion2.R
+#   - 3c(i).Data_Fusion2_TFD.R
 #   - 5a(i).InputSpace_TFD.R
 #   - 5a(iv).InputSpace_PWPST.R
 
@@ -42,12 +42,6 @@
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
-
-
-# - Feature engineering
-# NOTE: This will be moved to script 3c in due time
-datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 
 # - Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
@@ -88,11 +82,6 @@ cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique eve
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
 if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), tempPath);gc()
-
-# - Feature engineering
-# NOTE: This will be moved to script 3c in due time
-datCredit_train_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 
 # - Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation

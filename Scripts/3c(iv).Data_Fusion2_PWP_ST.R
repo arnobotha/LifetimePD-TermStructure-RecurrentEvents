@@ -454,6 +454,9 @@ cat( (all.equal(datCredit_smp[PerfSpell_Num < 4,PerfSpell_Num], datCredit_smp[Pe
        'SAFE: New feature [PerfSpell_Grp] has no missing values and is binned as intended. \n' %:%
        'WARNING: New feature [PerfSpell_Grp] either has missing valeus or its binning failed. \n ' )
 
+# - Create indicator variable for specific arrears direction
+datCredit_smp[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+
 
 
 # --- 6. Feature Engineering: Inflating time-sensitive monetary variables to the latest date

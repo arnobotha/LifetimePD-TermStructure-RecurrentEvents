@@ -37,55 +37,70 @@ if (Test){
 # ----------------- 1. Functions related to Cox-Snell residuals ------------------
 
 # --- Function to calculate Cox-Snell residuals, as adjusted for censoring.
-### AB: Insert article link that explains the rationale for this adjustment, e.g., "... as discussed by John2004 (DOI: ...)"
-# Input: [cox], A fitted Cox proportional hazard model.
-# Output: [cs], Cox-Snell residuals
-CoxSnell_adjusted <- function(cox, dat){
-  ### AB: This [Removed]-field seems hard-coded. I could not run GoF_CoxSnell_KS(coxExample) ...
-  #       Though I suppose it is because you do not yet know how to program dynamically for given field names
-  # UPDATE: It seems we only want to operate on the last row within a spell. This should rather be given to the function,
-  # instead of subsetting within the function, thereby generalising the function.
-  cs <-  dat[Removed==1,Default_Ind] - 
-    residuals(cox,type="martingale",collapse=dat$PerfSpell_Key) +
-    log(2)*(1 - dat[Removed==1,Default_Ind]) # Add log(2) to all observations that have a 0.
-  return(cs)
+# Input: [cox]: A fitted Cox proportional hazard model; [vIDS]: vector of spell IDs; [vEvents]: vector of spell-level events
+# Output: [cs]: Cox-Snell residuals
+calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
+  # First, get residuals from fitted model
+  vResid <- residuals(model,type="martingale",collapse=vIDs)
+  # Now, calculate CS-residuals
+  vCS <- vLstRow_Events - vResid + log(2)*(1 - vLstRow_Events) # Add log(2) to all right-censored observations.
+  return(vCS)
 }
 
 
-# --- Function to calculate the Goodness-of-Fit (GoF) of a given Cox regression model, mainly 
-# achieved by calculating the degree of similarity between Cox-Snell residuals
+
+# --- Function to calculate the Goodness-of-Fit (GoF) of a given Cox regression model
+# This is achieved by calculating the degree of similarity between Cox-Snell residuals
 # and a random unit exponential distribution. The similarity degree is summarised by
 # using the complement of the Kolmogorov-Smirnov test statistic (1-KS), which becomes
 # our similarity measure; higher values = greater similarity = better fit.
-# Input: [cox]: A fitted Cox proportional hazard model.
+# Input: [cox]: A fitted Cox proportional hazard model; [data_train]:
 # Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
 #         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
 #                     with the unit exponential distribution function.
-GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
+GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), fileName=NA,
+                            fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
+                            dpi=350, chosenFont="Cambria") {
+  # - Testing conditions
+  # cox <- model; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
+  # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
   
   # --- Preliminaries
-  # - Obtain adjusted Cox-Snell residuals
-  cs <- CoxSnell_adjusted(cox, dat)
+  
+  # - Sanity checks
+  if (GraphInd & is.na(fileName)) stop("File name not provided. Exiting ..")
+  
+  # - Data preparation
+  # Subset last row per performing spell for Goodness-of-Fit (GoF) purposes
+  datLstRow <- copy(data_train[get(fldLstRowInd)==1,])
+  vLstRow_Events <- datLstRow[, get(fldEventInd)]
+  
+  
+  # --- Calculate B-statistic (1-KS)
+  
+  # - Calculate adjusted Cox-Snell Residuals
+  vCS <- calc_CoxSnell_Adj(cox, vIDs=data_train[[fldSpellID]], vEvents=vLstRow_Events)
   
   # - Initialize a unit exponential distribution
-  exp <- rexp(length(cs),1)
-  
+  vExp <- rexp(length(vCS),1)
   # - Perform the two-sample Kolmogorov-Smirnov test of distribution equality
   # H_0: cs and exp originates from the same distribution
   # NOTE: We only desire the KS test statistic in measuring distributional dissimilarity
-  KS <- round(suppressWarnings(ks.test(cs,exp))$statistic,4)
+  # Then, we subtract this from 1 in creating a coherent statistic; greater is better
+  bStat <- 1 - round(suppressWarnings(ks.test(vCS, vExp))$statistic,4); names(bStat) <- "B-stat"
   
-  # Conditional execution towards creating a graphical output in accompanying main output (dissimilarity degree)
+  
+  # --- Graphing
+  # - Conditional execution towards creating a graphical output in accompanying main output (dissimilarity degree)
   if (GraphInd==T){
+    
     # Calculate the empirical cumulative distribution of the obtained Cox-Snell residuals (cs)
-    EmpDist <- ecdf(cs)
+    EmpDist <- ecdf(vCS)
     
     # Create a grid of x-values for plotting purposes
-    x <- sort(unique(c(cs, exp)))
+    x <- sort(unique(c(vCS, vExp)))
     
     # Calculate CDF-values for each observation at each x value
-    ### AB: From where is this function EmpDist?? I could not find it within any of the standad packages in script 0 ... 
-    ### AB: As such, I'm ceasing my review of this function until we clarify this point.
     y1 <- EmpDist(x)
     y2 <- pexp(x,1)
     
@@ -93,108 +108,45 @@ GoF_CoxSnell_KS <- function(cox, dat, GraphInd=T, legPos=c(0.5,0.5)) {
     D_location <- which.max(abs(y1 - y2))
     
     # Create a data frame for plotting
-    datGraph <- data.frame(x = x, cs = y1, exp = y2)
-    segment_data <- data.frame(x = x[D_location],xend = x[D_location],
+    datGraph <- rbind( data.table(x=vCS,type="1_Cox-Snell"),
+                      data.table(x=vExp,type="2_Unit_Exponential"))
+    datSegment <- data.frame(x = x[D_location],xend = x[D_location],
                                y = y1[D_location],yend = y2[D_location],type="Difference")
-    # 
-    datplot <- rbind( data.table(x=cs,type="1_Cox-Snell"),
-                      data.table(x=exp,type="2_Unit_Exponential"))
+    
+    # - Aesthetic engineering
+    dpi <- 220; chosenFont <- "Cambria"
     vCol <- brewer.pal(8,"Set1")[c(2,3)]
-    vLabel <- c("1_Cox-Snell"=bquote("Adjusted Cox-Snell Residuals "*italic(r)^(cs)),
+    vLabel <- c("1_Cox-Snell"=bquote("Adjusted Cox-Snell Residuals "*italic(r)^(CS)),
                 "2_Unit_Exponential"="Unit Exponential")
-    dpi <- 350
     
     # Plot the ECDFs with ggplot2
-    gg <- ggplot(datplot,aes(x=x,group=type)) + theme_minimal() + 
+    gg <- ggplot(datGraph,aes(x=x,group=type)) + theme_minimal() + 
         theme(text = element_text(family="Cambria"), legend.position.inside=legPos,
               legend.position = "inside",
               legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
-        labs(x = "x", y = "Cumulative Distribution Function") +
+        labs(x = bquote(italic(x)), y = bquote("Cumulative Distribution Function "*italic(F(x)))) +
         stat_ecdf(aes(color=type,linetype=type)) + 
-        geom_segment(data=segment_data,aes(x = x, xend = xend, y = y, yend = yend),
-                     linetype = "dashed", color = "black") +
+        geom_segment(data=datSegment,aes(x = x, xend = xend, y = y, yend = yend),
+                     linetype = "dashed", color = "black", 
+                     arrow=arrow(type="closed", ends="both",length=unit(0.08,"inches"))) +
         annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
-                 label = paste("D =", percent(KS)), hjust = -0.1, vjust = -0.1, fill="white", alpha=0.6) +
+                 label = paste("D =", percent(KS)), hjust = -0.2, vjust = 0.5, fill="white", alpha=0.6) +
         scale_color_manual(name = "Distributions", values = vCol, labels=vLabel) +
         scale_linetype_discrete(name = "Distributions",labels=vLabel) +
         scale_y_continuous(label=percent) + 
         scale_x_continuous(lim=c(NA,10))
     
     # Save figure
-    ggsave(gg, file=paste0(genFigPath, "TFD/Kolmogorov-Smirnov/KS",".png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
+    ggsave(gg, file=fileName, width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
     
     # Prepare return object
-    retOb <- list(Stat = as.vector(1 - KS), KS_graph=gg)
+    retOb <- list(Stat = as.vector(bStat), KS_graph=gg)
   }else{
-    retOb <- list(Stat = as.vector(1-KS))
+    retOb <- list(Stat = as.vector(bStat))
   }
   
   return(retOb)
 }
-
-### AB: I provided the following structure for you to complete, after addressing other comments
-# --- Unit test: GoF_CoxSnell_KS()
-#gg <- GoF_CoxSnell_KS(coxExample, dat, legPos = c(0.2,0.7))
-### AB: In resolving this error ("object 'Removed' not found)", we first have to strip out any dependency on the
-# (awefully-named) [Removed] variable. The function should work ONLY on what it is given, i.e., coxExample, dat, legPos.
-# Otherwise it is no longer generic and becomes 'specific' to our context, which defeats the point .
-
-
-
-
-
-
-
-
-
-# csResult <- GoF_CoxSnell_KS(coxExample,T)
-# csResult$Stat;csResult$KS_graph
-# ### RESULTS: D=0.1921
-
-### AB: Rewrite function header according to the previous bits I wrote for you
-# Function to graphically test the Cox-Snell residuals by plotting them against 
-# their respective hazard rate. The line should tend towards the 45 degree line for
-# a good fit.
-# Input: cox - cox proportional hazard model
-# Output: Graph - ggplot object to showcase the relationship
-GoF_CoxSnell_graph <- function(cox){
-  # Obtain adjusted Cox-Snell residuals
-  cs <- CoxSnell_adjusted(cox)
-  
-  # Create data for graph
-  datGraph <- survfit(coxph(Surv(cs, cox$y[, "status"]) ~ 1, method = "breslow"), type = "aalen") %>% tidy() %>%
-    mutate(cumu_hazard = -log(.data$estimate)) %>% rename(coxsnell = "time", survival = "estimate") %>%
-    subset(select=c("coxsnell","cumu_hazard"))
-  
-  # Compile ggplot graph of Cox-Snell residuals against their hazard function.
-  Graph <-  ggplot(datGraph,aes(x=coxsnell, y=cumu_hazard )) + geom_point() +
-    geom_step() + xlab(bquote("Adjusted Cox-Snell Residual "*italic(r)^(cs))) +
-    ylab("Cumulative Hazard Function") + 
-    geom_abline(slope=1,intercept=0,color='red',linetype="dashed", linewidth=1) + geom_point() + geom_step() + theme_minimal() +
-    theme(text = element_text(family="Cambria"))
-  
-  # Return ggplot object
-  return(Graph)
-}
-
-### AB: I provided the following structure for you to complete, after addressing other comments
-# --- Unit test: GoF_CoxSnell_graph()
-# GoF_CoxSnell_graph(coxExample)
-# 
-
-### AB: Is the following still truly necessary? If so, then write a comment about what this is all about
-# # p <- ggplot(datGraph, aes(x = x)) +
-# geom_line(aes(y = cs, color = "Residuals")) +
-#   geom_line(aes(y = exp, color = "Exponential")) +
-#   geom_segment(data=segment_data,aes(x = x, xend = xend, 
-#                                      y = y, yend = yend),
-#                linetype = "dashed", color = "black") + # Create the maximum distance line
-#   annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
-#            label = paste("D =", 1-KS), hjust = -0.1, vjust = -0.1, fill="white", alpha=0.6) + # Add the distance label
-#   labs(x = bquote("Adjusted Cox-Snell Residual "*italic(r)^((cs))), y = "Cumulative Distribution Function") +
-#   scale_color_manual(name = "Distributions", values = c("Residuals" = "#4DAF4A", "Exponential" = "#377EB8")) +
-#   theme_minimal() + theme(text = element_text(family="Cambria"), legend.position.inside = c(1,0),
-#                           legend.justification = c(1,0), legend.background = element_rect(fill = "white", color = "black", linewidth = 0.5))
 
 
 

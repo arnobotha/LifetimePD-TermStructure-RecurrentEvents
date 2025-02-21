@@ -30,26 +30,6 @@
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
 
-# BS: will work these changes into script c once master's is done.
-
-# BS: Detected a problem with [PerfSpell_Exit_Ind] where some loans never leave state (although they do) (Problem lies with PerfSpell_Max_Date)
-datCredit_train_TFD[PerfSpell_Exit_Ind==1,.N]
-# 62132
-datCredit_train_TFD[!duplicated(PerfSpell_Key),.N]
-# 62723
-### AB [2024-12-17]: Both counts are exactly the same at my end. I suspect this is a data corruption / versioning problem at your end
-
-# ### HOMEWORK: Create [Removed]
-datCredit_train_TFD$Removed <- with(datCredit_train_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
-datCredit_valid_TFD$Removed <- with(datCredit_valid_TFD, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))
-
-datCredit_train_TFD[Removed==1,.N]
-# 62723
-
-### HOMEWORK: Create [slc_acct_arr_dir_3_Change_Ind]
-datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-
 # ### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
 # datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 # ### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
@@ -61,9 +41,9 @@ datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3
 # ### AB: Same comment here as before
 # 
 # datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
-# ### AB: This variable is created but seemingly never used? Rather remote if true.
+# ### AB: This variable is created but seemingly never used?
 # 
-# ### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., 0b(i).
+# ### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., script 0b(i).
 # # Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
 
 #============================================================================================
@@ -1196,79 +1176,17 @@ concordance(coxMacro, newdata=datCredit_valid_TFD)# 0.5509
 modelVar <- c(modelVar,"M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6",
               "M_RealIncome_Growth")
 
+
+
+
+
+
 #============================================================================================
 # ------ 7. Final Model
 
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
-### AB: If the changes are made to the process flow (i.e., moving data prep to where they belong), then the above
-# alone should work before fitting the final model. Naturally, I am not going to run through the above, I am only
-# interested in the final model, and will trust that you have now learned the essentials of the 
-# "thematic variable selection process". ;-) Delete this comment (as with all my "### AB"-comments) after addressing/reading
-
-# ------ 7.1 How does the univariate models compare with one another?
-# Initialize variables
-vars <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
-          "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-          "pmnt_method_grp", "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-          "Principal", "Undrawn_Amt", "LN_TPE", "NewLoans_Aggr_Prop", "M_DTI_Growth",
-          "M_Inflation_Growth", "M_Inflation_Growth_6", "M_RealIncome_Growth")
-
-# Test Goodness of fit
-csTable(datCredit_train_TFD,vars)
-#                              Variable B_Statistic
-# 12                            LN_TPE      0.6520
-# 9     InterestRate_Margin_Aggr_Med_3      0.6504
-# 14                      M_DTI_Growth      0.6484
-# 11                       Undrawn_Amt      0.6483
-# 6  slc_acct_pre_lim_perc_imputed_med      0.6481
-# 10                         Principal      0.6474
-# 7                    pmnt_method_grp      0.6473
-# 2                            Arrears      0.6472
-# 15                M_Inflation_Growth      0.6468
-# 8       InterestRate_Margin_Aggr_Med      0.6464
-# 13                NewLoans_Aggr_Prop      0.6460
-# 1            PerfSpell_g0_Delinq_Num      0.6458
-# 17               M_RealIncome_Growth      0.6457
-# 16              M_Inflation_Growth_6      0.6455
-# 3                      g0_Delinq_Ave      0.6449
-# 5      slc_acct_arr_dir_3_Change_Ind      0.6446
-# 4            TimeInDelinqState_Lag_1      0.6331
-
-### RESULTS: All variables seem to have comparible Goodness of fits, although
-###           [TimeInDelinqState_Lag_1] have a particularly bad one.
-
-# Test accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                             Variable Concordance           SD LR_Statistic
-# 1:                           Arrears   0.9573776 0.0016578273        13229
-# 2:           PerfSpell_g0_Delinq_Num   0.9474644 0.0006456311         7954
-# 3:           TimeInDelinqState_Lag_1   0.9064346 0.0031587395        35701
-# 4:     slc_acct_arr_dir_3_Change_Ind   0.8433911 0.0019345216        33655
-# 5:                   pmnt_method_grp   0.7363669 0.0036080644         8299
-# 6:                       Undrawn_Amt   0.6883511 0.0006726495         2941
-# 7: slc_acct_pre_lim_perc_imputed_med   0.6360895 0.0008227257         5572
-# 8:                         Principal   0.5827355 0.0040985952          516
-# 9:    InterestRate_Margin_Aggr_Med_3   0.5603674 0.0041996844         1174
-# 10:                NewLoans_Aggr_Prop   0.5571220 0.0041596133          107
-# 11:              M_Inflation_Growth_6   0.5529680 0.0043582119         1190
-# 12:      InterestRate_Margin_Aggr_Med   0.5506784 0.0041951744         1198
-# 13:                     g0_Delinq_Ave   0.5397435 0.0040305498         1623
-# 14:                      M_DTI_Growth   0.5350355 0.0039553926         1450
-# 15:                M_Inflation_Growth   0.5202318 0.0042531877          915
-# 16:                            LN_TPE   0.5121296 0.0018064070          154
-# 17:               M_RealIncome_Growth   0.4658087 0.0039511993           35
-
-# ------ 7.2 What is the predictive performance of the final model containing the selected variables?
-# Initialize variables
-vars <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
-          "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-          "pmnt_method_grp", "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-          "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
-          "M_Inflation_Growth_6", "M_RealIncome_Growth")
-### AB: I removed [Undrawn_Amt] since it is known to be a faulty variable. This removal was already actioned 
-# in script 2f. Kindly remove any reliance in the themes above on this variable
 
 # - Initialize variables | AB-variant
 vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
@@ -1276,51 +1194,24 @@ vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqS
            "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
            "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
            "M_Inflation_Growth_6", "M_RealIncome_Growth")
- ### AB: I received "exp overflow due to covariates" error when trying to fit this model.
-# This is likely because the exponentiated form of certain variables and the 
-# coxPH-function then struggles to obtain a good fit. So I simply tweaked the variable list a bit just 
-# so that I can at least get some fitted model to test. Problem 'children': [pmnt_method_grp]
 
-# Test Goodness of fit
-csTable_TFD <- csTable(datCredit_train_TFD,vars2)
-# 12                M_Inflation_Growth      0.6528
-# 9                          Principal      0.6525
-# 14               M_RealIncome_Growth      0.6508
-# 7       InterestRate_Margin_Aggr_Med      0.6502
-# 5      slc_acct_arr_dir_3_Change_Ind      0.6501
-# 6  slc_acct_pre_lim_perc_imputed_med      0.6499
-# 11                      M_DTI_Growth      0.6496
-# 10                            LN_TPE      0.6489
-# 2                            Arrears      0.6481
-# 8     InterestRate_Margin_Aggr_Med_3      0.6477
-# 1            PerfSpell_g0_Delinq_Num      0.6475
-# 13              M_Inflation_Growth_6      0.6467
-# 3                      g0_Delinq_Ave      0.6463
-# 4            TimeInDelinqState_Lag_1      0.6385
+# Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
+csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numIt=10,
+                       fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
+### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 
+# Results are, however, very close one another such that meaningful analysis is not possible
 
-# Test accuracy
-concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, vars2)
-#                             Variable Concordance           SD LR_Statistic
-# 1:                           Arrears   0.9568891 0.0017938453        13502
-# 2:           PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
-# 3:           TimeInDelinqState_Lag_1   0.8933628 0.0031888664        31583
-# 4:     slc_acct_arr_dir_3_Change_Ind   0.8722179 0.0014858895        28431
-# 5: slc_acct_pre_lim_perc_imputed_med   0.6496281 0.0005780128         5558
-# 6:                         Principal   0.6137518 0.0043225132          494
-# 7:    InterestRate_Margin_Aggr_Med_3   0.5869687 0.0043844515         1148
-# 8:                     g0_Delinq_Ave   0.5862387 0.0042293435         1872
-# 9:      InterestRate_Margin_Aggr_Med   0.5858681 0.0044509364         1214
-# 10:                      M_DTI_Growth   0.5813828 0.0042020200         1696
-# 11:              M_Inflation_Growth_6   0.5743351 0.0045314545         1353
-# 12:                M_Inflation_Growth   0.5552019 0.0045393073         1098
-# 13:                            LN_TPE   0.5209834 0.0019699539          100
-# 14:               M_RealIncome_Growth   0.4892308 0.0041952801           26
+# Test accuracy using Harrell's c-statistic over single-factor models
+concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, vars2, 
+                           fldSpellID="PerfSpell_Key", TimeDef="TFD", genPath=genPath)
+### RESULTS: Top x single-factor models (>80%):
+# Arrears + PerfSpell_g0_Delinq_Num + TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  
 
-# Create table object
-Table_TFD <- left_join(csTable_TFD$Table,concTable_TFD,by="Variable")
+# - Combine results into a single object
+Table_TFD <- left_join(csTable_TFD$Table, concTable_TFD, by="Variable")
 
-# 
-# Build model based on variables
+
+# - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
                  id=LoanID, datCredit_train_TFD, ties="efron")
 # NOTE: Default option for handling ties is recently "Efron's method", but we specify this for backwards compatability
@@ -1347,8 +1238,8 @@ c <- coefficients(cox_TFD)
 # 18:               M_RealIncome_Growth   -2.3490754410016
 
 # Goodnes of fit
-GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4)) # 0.6307
-
+GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4),
+                fileName = paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")) # 0.6372
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
 # Save objects

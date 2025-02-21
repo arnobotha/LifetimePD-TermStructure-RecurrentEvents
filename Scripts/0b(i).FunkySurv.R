@@ -17,9 +17,9 @@
 # ----------------- 1. Functions related to the modelling process------------------
 
 # --- Function to ensure that the column is indeed part of the given dataset.
-# Input:  [cols], Vector containign the column names to be checked if they exist in the dataset.
+# Input:  [cols], Vector containing the column names to be checked if they exist in the dataset.
 #         [dataset], Dataset to check on if the columns exist.
-# Output: print on whether the columns are in the dataset or which columns are not in the datset.
+# Output: print on whether the columns are in the dataset or which columns are not in the dataset.
 colCheck <- function(cols, dataset) {
   # Check if all columns exist in the dataset
   missing_cols <- cols[!(cols %in% colnames(dataset))]
@@ -78,6 +78,8 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
   }
 }
 
+
+
 # --- Function to return the appropriate formula object based on the time definition.
 #         [TimeDef], Time definition on which the cox ph models are based on.
 #         [var], Single variable name
@@ -92,38 +94,51 @@ TimeDef_Form <- function(TimeDef="TFD", vars){
   }
 }
 
-# --- Function to extract the concordances from a range of models built on a list of variables based on a time definition.
+
+
+# --- Function to fit a given formula within a Cox regression model towards extracting Harrell's C-statistic and related quantities
+calc_HarrellC <- function(formula, data_train, data_valid, variable="", it=NA, logPath="") {
+  model <- coxph(formula,id=get(fldSpellID), data = data_train) # Fit Cox model
+  if (!is.na(it)) {
+    cat(paste0("\n\t ", it,") Single-factor survival model built. "),
+        file=paste0(logPath,"HarrelsC_log.txt"), append=T)
+  }
+  c <- concordance(model, newdata=data_valid) # Calculate concordance of the model based on the validation set.
+  conc <- as.numeric(c[1])# Extract concordance
+  sd <- sqrt(c$var)# Extract concordance variability
+  lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
+  # Return results as a data.table
+  return(data.table(Variable = variable, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
+}
+
+
+
+# --- Function to extract the concordances (Harrell's C) from single-factor models
 # Input:  [data_train], Training dataset on which the models are built on.
 #         [data_valid], Validation dataset on which the models' concordance is validated on.
 #         [variables], Vector containing a list of the variables for the models.
 #         [TimeDef], Time definition on which the cox ph models are based on.
-# Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
-concTable <- function(data_train, data_valid, variables, TimeDef="TFD") {
-  # Use lapply to efficiently compute concordances for all models
-  results <- lapply(variables, function(var) {
+# Output: [matResults]  Table containing the concordance, se(concordance) and log ratio of the singular models.
+concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_Key",
+                      TimeDef="TFD", numThreads=6, genPath) {
+  # - Testing conditions
+  # data_valid <- datCredit_valid_TFD; TimeDef="TFD"' numThreads=6
   
-  # Create a formula object based on the time definition
-  formula <- TimeDef_Form(TimeDef,var)
-    
-    tryCatch({
-      model <- coxph(formula,id=PerfSpell_Key, data = data_train)# Fit Cox model
-      c <- concordance(model, newdata=data_valid) # Calculate concordance of the model based on the validation set.
-      conc <- as.numeric(c[1])# Extract concordance
-      sd <- sqrt(c$var)# Extract concordance variability
-      lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
-      # Return results as a data.table
-      data.table(Variable = var, Concordance = conc, SD = sd, LR_Statistic = lr_stat)
-    }, warning = function(w) { # Create custom error if a certain variable produces a Warning or an Error.
-      cat("Warning: ", w$message, " for variable: ", var, "\n")
-      stop()
-    }, error = function(e) {
-      cat("Error: ", e$message, " for variable: ", var, "\n")
-      stop()
-    })
-  })
+  # - Iterate across loan space using a multi-threaded setup
+  ptm <- proc.time() #IGNORE: for computation time calculation
+  cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
+  cat("New Job: Estimating B-statistic (1-KS) for each variable as a single-factor survival model ..",
+      file=paste0(genPath,"HarrelsC_log.txt"), append=F)
   
-  # Combine all results into a single data.table.
-  results <- rbindlist(results)
+  results <- foreach(j=1:length(variables), .combine='rbind', .verbose=F, .inorder=T,
+                                 .packages=c('data.table', 'survival'), .export=c('calc_HarrellC')) %dopar%
+    { # ----------------- Start of Inner Loop -----------------
+      # - Testing conditions
+      # j <- 1
+      calc_HarrellC(formula=TimeDef_Form(TimeDef,variables[j]), variable=variables[j],
+                    data_train=data_train, data_valid=data_valid, it=j, logPath=genPath)
+    } # ----------------- End of Inner Loop -----------------
+  stopCluster(cl.port); proc.time() - ptm  
   
   # Sort by concordance in descending order.
   setorder(results, -Concordance)
@@ -132,79 +147,132 @@ concTable <- function(data_train, data_valid, variables, TimeDef="TFD") {
   return(results)
 }
 
+
+# --- Function to calcualte the complement of the KS test statistic "B-statistic"
+# Inputs: [formula]: Cox regression formula object; [data_train]: training data
+#         [fldSpellID]: Field name of spell-level ID; [vEvents]: spell-level vector of event indicators
+#         [seedVal]: Seed value for random number generation; [it]: optional iteration parameter for logging purposes;
+#         [logPath]: Optional path for log file for logging purposes
+# Outputs: b-statistic (single value)
+calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, seedVal, it=NA, logPath=NA) {
+  # Fit Model
+  model <- coxph(formula, data = data_train, id=get(fldSpellID))
+  
+  if (!is.na(it)) {
+    cat(paste0("\n\t ", it,") Single-factor survival model built. "),
+        file=paste0(logPath,"BStat_log.txt"), append=T)
+  }
+  
+  # Calculate Cox-Snell (adjusted) residuals
+  vCS <- calc_CoxSnell_Adj(model, vIDs=data_train[[fldSpellID]], vEvents=vEvents)
+  # Initialize a unit exponential distribution
+  set.seed(seedVal, kind = "Mersenne-Twister")
+  vExp <- rexp(length(vCS),1)
+  # Perform the two-sample Kolmogorov-Smirnov test of distribution equality
+  #   H_0: vCS and vExp originates from the same distribution
+  #   NOTE: We only desire the KS test statistic in measuring distributional dissimilarity
+  #   Then, we subtract this from 1 in creating a coherent statistic; greater is better
+  bStat <- 1 - round(suppressWarnings(ks.test(vCS,vExp))$statistic,4)
+  return(bStat)
+}
+
+
 # --- Function to extract the B-statistic from a range of models built on a list of variables based on a time definition.
 # Input:  [data_train], Training dataset on which the models are built on.
 #         [seedVal], Seed value to ensure results are reproducible.
 #         [numIt], Number of simulations to calculate the B-statistic.
 #         [TimeDef], Time definition on which the cox ph models are based on.
 # Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
-csTable <- function(data_train,variables,TimeDef="TFD",seedVal=1,numIt=5){
-  # Initialize results
+csTable <- function(data_train, variables, TimeDef="TFD", seedVal=1, numIt=5, 
+                    fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
+                    numThreads=6, genPath=NA){
+  
+  # - Testing conditions
+  # data_train <- datCredit_train_TFD; variables<-vars2; TimeDef<-"TFD"; seedVal<-1; numIt<-5; 
+  # fldLstRowInd="PerfSpell_Exit_Ind";  fldSpellID="PerfSpell_Key"; fldEventInd="Default_Ind"; numThreads=6
+  
+  # - Initialize results
   results <- data.frame(Variable = variables, B_Statistic = NA_real_)
   
-  # Simulate null distribution if seedVal is not NA
+  # - Data preparation
+  # Subset last row per performing spell for Goodness-of-Fit (GoF) purposes
+  datLstRow <- copy(data_train[get(fldLstRowInd)==1,])
+  vLstRow_Events <- datLstRow[, get(fldEventInd)]
+  
+  # - Simulate null distribution if seedVal is not NA
   if (!is.na(seedVal)) {
-    set.seed(seedVal, kind = "Mersenne-Twister")
     
-    # Vectorized calculation for B statistics
-    results$B_Statistic <- sapply(variables, function(var) {
-      # Create coxph formula based on the time definition
-      formula <- TimeDef_Form(TimeDef,var)
-      tryCatch({
-        model <- coxph(formula, data = data_train, id=PerfSpell_Key)  # Fit a Cox model
-        GoF_CoxSnell_KS(model, data_train, GraphInd=F)$Stat  # Calculate B statistic
-      }, warning = function(w) { # Return Warning message for specific variables.
-        cat("Warning: ", w$message, " for variable: ", var, "\n")
-        NA
-      }, error = function(e) {# Return Error message for specific variables.
-        cat("Error: ", e$message, " for variable: ", var, "\n")
-        NA
-      })
-    })
+    
+    # - Iterate across loan space using a multi-threaded setup
+    ptm <- proc.time() #IGNORE: for computation time calculation
+    cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
+    cat("New Job: Estimating B-statistic (1-KS) for each variable as a single-factor survival model ..",
+        file=paste0(genPath,"BStat_log.txt"), append=F)
+    
+    results$B_Statistic <- foreach(j=1:length(variables), .combine='rbind', .verbose=F, .inorder=T,
+                      .packages=c('data.table', 'survival'), .export=c('calc_CoxSnell_Adj', 'calcBStat', 'TimeDef_Form')) %dopar%
+      
+      { # ----------------- Start of Inner Loop -----------------
+        # - Testing conditions
+        # var <- variables[1]
+        calcBStat(formula=TimeDef_Form(TimeDef,variables[j]), data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
+                  seedVal=seedVal, it=j, logPath=genPath)
+        
+      } # ----------------- End of Inner Loop -----------------
+    stopCluster(cl.port); proc.time() - ptm
     
     # Sort results by B statistic in descending order
     results <- results[order(-results$B_Statistic, na.last = TRUE), ]
     
     # Return results and range of B statistics
-    return(list(Table = results, Range = diff(range(results$B_Statistic, na.rm = TRUE))))
+    return(list(Results = results, Range = diff(range(results$B_Statistic, na.rm = TRUE))))
     
   } else {
     # Perform iterative B calculation when seedVal is NA
     # Initialize Results matrix to contain the number of interations
-    Results <- matrix(NA, nrow = length(variables), ncol = numIt,
+    matResults <- matrix(NA, nrow = length(variables), ncol = numIt,
                          dimnames = list(variables,
                                          paste0("Iteration_", 1:numIt))) %>%
                           as.data.table()
     
+    # - Iterate across loan space using a multi-threaded setup
+    ptm <- proc.time() #IGNORE: for computation time calculation
+    cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
+    cat("New Job: Estimating B-statistics (1-KS) ..",
+        file=paste0(genPath,"BStat_log.txt"), append=F)
+    
     for (it in seq_len(numIt)) {
-      # Vectorized iteration for B statistics
-      Results[, it] <- sapply(variables, function(var) {
-        formula <- TimeDef_Form(TimeDef,var)# Create coxph formula based on the time definition
-        tryCatch({
-          model <- coxph(formula, data = data_train)# Fit coxph model.
-          GoF_CoxSnell_KS(model, data_train, GraphInd = FALSE)$Stat# Obtain the B-statistic
-        }, warning = function(w) {# Return Warning message for specific variables.
-          cat("Warning: ", w$message, " for variable: ", var, " in iteration: ", it, "\n")
-          NA
-        }, error = function(e) {# Return Error message for specific variables.
-          cat("Error: ", e$message, " for variable: ", var, " in iteration: ", it, "\n")
-          NA
-        })
-      })
+      
+      cat(paste0("\n Estimating B-statistic (1-KS) for each variable as a single-factor survival model for iteration ", it, " .."),
+          file=paste0(genPath,"BStat_log.txt"), append=T)
+      
+      matResults[, it] <- foreach(j=1:length(variables), .combine='rbind', .verbose=F, .inorder=T,
+                                     .packages=c('data.table', 'survival'), .export=c('calc_CoxSnell_Adj', 'calcBStat', 'TimeDef_Form')) %dopar%
+        
+        { # ----------------- Start of Inner Loop -----------------
+          # - Testing conditions
+          # var <- variables[1]
+          calcBStat(formula=TimeDef_Form(TimeDef,variables[j]), data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
+                    seedVal=seedVal*it, it=j, logPath=genPath)
+          
+        } # ----------------- End of Inner Loop -----------------
     }
+    stopCluster(cl.port); proc.time() - ptm
     
     # Compute additional statistics for the results matrix
-    colRanges <- Results[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))] # Calculate the Range of B-statistic value for each iteration
-    Results <- rbind(Results, Range = colRanges, fill=T)# Add ranges to the Results matrix
-    Results[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]# Calculate the average B-statistic for each variable
+    colRanges <- matResults[, lapply(.SD, function(x) diff(range(x, na.rm = TRUE)))] # Calculate the Range of B-statistic value for each iteration
+    matResults[, Average := rowMeans(.SD, na.rm = TRUE), .SDcols = patterns("^Iteration_")]# Calculate the average B-statistic for each variable
+    matResults[, Variable := variables] 
+    matResults <- matResults %>% relocate(Variable, .before=Iteration_1)
     
-    Results <- cbind(Variables = c(variables,"Range"),Results)# Add a column to the Results matrix to cross reference the variables with their respective B-statistics
-    setorder(Results,-Average)# Arrange matrix according to 
+    #matResults <- cbind(Variables = c(variables,"Range"),matResults)# Add a column to the Results matrix to cross reference the variables with their respective B-statistics
+    setorder(matResults,-Average)# Arrange matrix according to average
     
     # Return matrix of B statistics
-    return(Results)
+    return(list(Results=matResults, IterationRanges=colRanges))
   }
 }
+
 
 
 # HW BS: Comment better the spline function
@@ -482,132 +550,6 @@ risksetROC_helper <- function(dat_explain, Input_Names = c("TimeInPerfSpell", "D
                          plot = FALSE)
 }
 
-
-### AB [2024-11-28]: I suggest refactoring this swiss army knife into constituent parts, e.g.,
-# residuals on their own, prediction accuracy on its own (Harrel's C), and definitely separate from
-# time-dependent ROC-analysis. These topics may have some overlap, but they are distinct enough (in my view)
-# to stand on their own
-
-# --- function for computing various assessment measures for a given Cox Proportional Hazards model.
-#   1) A test can be conducted for proportional hazards and the Schoenfeld residuals for each covariate is plotted.
-#   2) The VIF can be computed for each covariate.
-#   3) An analysis of the reduction of deviance (ANOVA) by sequnetial addition of covariates to the model can be conducted and a visual aid provided.
-#   4) The time-depdendent ROC-curves can be plotted and the time-dependent AUC-values computed for various time-points.
-# Input: dat_train - The dataset used to train the Cox PH model
-#        dat_explain - The dataset with which the Cox PH model needs to be assessed.
-#        model - The Cox PH model to be assessed.
-#        input.l - list containing the relevant variable names in dat_train (& dat_explain) to enable the various assessments
-#             input.l <- list(Time of Observation Variable Name, Event Indicator Variable Name, c(Variable Name 1,..., Variable Name n))
-#        PH_assumption - Indicator for conducting the PH assumption test and displaying the Schoenfeld residuals (only if verbose  = FALSE).
-#        VIF - Indicator for computing the VIF of the covariates.
-#        anova_explain - Indicator for conducting an analysis of the reduction of the deviance of the model by sequential addition of variables and displaying the results (if verbos =FALSE)
-#        predict.time - Vector containg the desired times to compute the AUC values and plot the corresponding ROC curves (if verbose = FALSE)
-#        verbose - Indicator variable used to supress visual graphs created by some of the performance measures and analysis.
-# Output: List of the various test and analysis resutls, the elements of this list are as follows:
-#         Model_VIF - The VIF of each covariate
-#         Model_ANOVA - The results of a reducion in deviance analysis by the sequnetial addition of variables
-#         Model_AIC - The AIC of the fitted Cox PH model
-#         AUC - The corresponding time-dependent AUC values of the given prediction times
-#         PH_Test - Graphical- and statistical tests for proportional hazards of each of the given covariates (defaults to all covariates in the model). Also included is a dataset of the original values and the residuals.
-swiss_model <- function(dat_train, dat_explain, model, input.l = NULL, PH_assumption = TRUE, VIF = TRUE, anova_explain = FALSE, AUC_explain = FALSE, predict.time = 12, verbose = FALSE, max_time = NULL){
-  # dat_explain<-dat_valid; input.l<-list("PerfSpell_Key", "TimeInPerfSpell", "DefaultStatus1"); model<-cph; PH_assumption<-TRUE; VIF<-TRUE; anova_explain<-FALSE; AUC_explain<-TRUE; predict.time<- c(12); verbose<-FALSE; max_time<-240
-  # - Initialise the output vector
-  output <- NULL
-  
-  if (length(input.l) < 4){
-    input.l[[4]] <- as.vector(unlist(strsplit(toString(summary(model)$call$formula[[3]]), '[,+ ]+')))
-    input.l[[4]] <- input.l[[4]][input.l[[4]]!=""]
-  }
-  
-  # --- Model Assumptions
-  # - Multicollinearity
-  if (VIF){
-    Model_VIF <- vif(model)
-    output[["VIF"]] = Model_VIF
-  }
-  
-  # - Proportional Hazards Assumption
-  # Proportional Hazards Test
-  if (PH_assumption){
-    PH_Test <- cph_schoen(cph=model, dat_train = dat_train, var = input.l[[4]], id = input.l[[1]], time = input.l[[2]], status = input.l[[3]], verbose = F, max_time = max_time)
-    output[["PH_Test"]] <- PH_Test
-  }
-  
-  # --- Variable Importance Measures
-  # - ANOVA Analysis - Reduction in Deviance
-  # Conduct the ANOVA analysis, conditional on if it is required
-  if (anova_explain){
-    Model_ANOVA <- anova(model, test = 'chisq')
-    ANOVA <- list(anova = Model_ANOVA)
-    
-    # Create the ANOVA plot
-    if (!verbose){
-      # Getting the names of the relevant variables in the ANOVA object.
-      col_names <- input.l[[4]]
-      
-      # Creating a dataset from the ANOVA object for graphing.
-      datPlot <- data.frame(Variable_Name = col_names, ChiSq_Value = round(Model_ANOVA$Chisq[2:(length(col_names)+1)]), Var_Order = 1:length(col_names))
-      
-      # Creating a graph to visually present the contribution of each variable in the Cox model.
-      g_anova <- ggplot(datPlot, aes(x=reorder(Variable_Name, as.numeric(ChiSq_Value)), y=as.numeric(ChiSq_Value))) +
-        geom_col(col='blue', fill='blue') + 
-        theme_minimal() + theme(plot.title = element_text(hjust=0.5)) + coord_flip() +
-        labs(x="Variable", y="Reduction in Model's Deviance") +
-        geom_label(aes(label=Var_Order), position = position_stack(vjust=0.5))
-      
-      ANOVA[["plots"]] <- g_anova
-    }
-    
-    output[["anova"]] = ANOVA
-  }
-  
-  # --- Model Assessment
-  # - AIC Value
-  output[["AIC"]] <- extractAIC(model)[2]
-  
-  # - Time-dependent AUC Values and ROC Curves
-  if (AUC_explain){
-    # Computing the linear predictions for each recored in the given dataset and amending the dataset to include those predictions
-    cph_lp <- predict(model, dat_explain, type="lp") # linear predictions are used for assessment (X*Beta)
-    
-    # Creating a dataset containing the FPs and TPs and AUC values for each time in the vector
-    risksetROC_data <- data.frame(Predict_Time = NULL, AUC = NULL, FP = NULL, TP = NULL, Marker = NULL)
-    for (i in 1:length(predict.time)){
-      temp <- risksetROC_helper(dat_explain = dat_explain, Input_Names = (c(input.l[[2]], input.l[[3]])), marker = cph_lp, predict.time = predict.time[i])
-      risksetROC_data <- rbind(risksetROC_data, data.frame(Predict_Time = predict.time[i], AUC = temp$AUC, FP = temp$FP, TP = temp$TP))
-    }
-    rm(temp)
-    risksetROC_data <- risksetROC_data %>% arrange(Predict_Time, FP, TP) # Arranging the dataset according to the given vector of prediction times (and then by FPs and TPs)
-    
-    AUC <- list(data = data.table(predict_times = predict.time,
-                                  auc = unique(risksetROC_data$AUC)))
-    
-    # Plotting the ROC curves for the desired prediction times (if verbose = FALSE)
-    if (!verbose){
-      g_auc <- ggplot(data = risksetROC_data, mapping = aes(x = FP, y = TP)) +
-        geom_line(col = 'blue') +
-        geom_abline(col='red') +
-        geom_label(data = risksetROC_data %>% dplyr::select(Predict_Time,AUC) %>% unique,
-                   mapping = aes(label = sprintf("%.3f", AUC)), x = 0.5, y = 0.5) +
-        facet_wrap(vars(Predict_Time)) +
-        theme_bw() +
-        theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
-              legend.key = element_blank(),
-              plot.title = element_text(hjust = 0.5),
-              strip.background = element_blank()) +
-        xlab("FP") + ggtitle('ROC Curve(s) for the given CPH Model')
-      
-      AUC[["plots"]] <- g_auc
-      output[["AUC"]] <- AUC
-    }
-  }
-  
-  return(output)
-  # rm(dat_explain, model, PH_assumption, VIF, anova_explain, AUC_explain, input.l, predict.time, verbose, risksetROC_data, datPlot, Model_VIF, PH_Test, output, temp)
-}
-
-# --- Unit Test
-# swiss_cph <- swiss_model(dat_train = dat_train, dat_explain = dat_valid, model = cph, input.l = list("PerfSpell_Key", "TimeInPerfSpell", "DefaultStatus1"), PH_assumption = T, VIF = T, anova_explain = F, AUC_explain = T, predict.time = 12, verbose = F, max_time = 240)  
 
 
 

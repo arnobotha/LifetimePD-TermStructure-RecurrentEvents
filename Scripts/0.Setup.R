@@ -57,7 +57,7 @@ require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
 require(discSurv)
 require(MASS)
-require(ldatools) ### AB: ??? why necessary?
+#require(ldatools) ### AB: ??? why necessary?
 
 #for plots
 require(ggplot2)

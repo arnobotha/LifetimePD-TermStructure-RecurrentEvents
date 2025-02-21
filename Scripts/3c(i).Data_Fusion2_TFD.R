@@ -460,6 +460,9 @@ cat( (all.equal(datCredit_smp[PerfSpell_Num < 4,PerfSpell_Num], datCredit_smp[Pe
        'SAFE: New feature [PerfSpell_Grp] has no missing values and is binned as intended. \n' %:%
        'WARNING: New feature [PerfSpell_Grp] either has missing valeus or its binning failed. \n ' )
 
+# - Create indicator variable for specific arrears direction
+datCredit_smp[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+
 
 
 # --- 6. Feature Engineering: Inflating time-sensitive monetary variables to the latest date
@@ -495,6 +498,7 @@ if (doDescribe) describe(datCredit_smp$Instalment_Real); hist(datCredit_smp$Inst
 #                 bounded by [71, 1.5m] for 5%-95% percentiles; severe outliers to the right: 94m
 # [Instalment_Real]: Highly right-skewed distribution, with mean of 8.4k vs median of 7.3k
 #                 bounded by [497, 21k] for 5%-95% percentiles; severe outliers to the right: 20m; left: 0
+
 
 # - Save to disk (zip) for quick disk-based retrieval later
 pack.ffdf(paste0(genPath, "creditdata_final_TFD_smp1d"), datCredit_smp); gc()

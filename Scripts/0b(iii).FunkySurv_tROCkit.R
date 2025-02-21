@@ -636,7 +636,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       #             as weighed by the kernels in following Heagerty2000
       # NOTE: nThresh is identical to length(vMarkers_unique)
       
-      # - Iterate across loan space using multi-threaded setup
+      # - Iterate across loan space using a multi-threaded setup
       ptm <- proc.time() #IGNORE: for computation time calculation
       cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
       cat("New Job: Estimating average survival probability across each given threshold ..",

@@ -1192,10 +1192,32 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
            "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
            "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-           "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
-           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+           "M_DTI_Growth","M_Inflation_Growth", "M_Inflation_Growth_6", "M_RealIncome_Growth")
 
-# Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
+# - Build model based on variables
+cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
+                 id=LoanID, datCredit_train_TFD, ties="efron")
+# NOTE: Default option for handling ties is recently "Efron's method", but we specify this for backwards compatability
+summary(cox_TFD)
+### RESULTS: All variables are statistically significant
+
+c <- coefficients(cox_TFD)
+(c <- data.table(Variable=names(c),Coefficient=c))
+#                           Variable      Coefficient
+#1:           PerfSpell_g0_Delinq_Num    0.02161846880
+#2:                           Arrears    0.00001902814
+#3:                     g0_Delinq_Ave   -3.72501820111
+#4:           TimeInDelinqState_Lag_1   -0.15598222677
+#5:     slc_acct_arr_dir_3_Change_Ind    3.17379385353
+#6: slc_acct_pre_lim_perc_imputed_med   -8.35458939652
+#7:      InterestRate_Margin_Aggr_Med  215.53208752301
+#8:    InterestRate_Margin_Aggr_Med_3 -334.92074300726
+#9:                      M_DTI_Growth   -7.94197498714
+#10:                M_Inflation_Growth   12.33358076248
+#11:              M_Inflation_Growth_6    5.69091286677
+#12:               M_RealIncome_Growth  -19.61119748306
+
+# -T Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
 csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numIt=10,
                        fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
 ### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 
@@ -1210,34 +1232,7 @@ concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, vars2,
 # - Combine results into a single object
 Table_TFD <- left_join(csTable_TFD$Table, concTable_TFD, by="Variable")
 
-
-# - Build model based on variables
-cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
-                 id=LoanID, datCredit_train_TFD, ties="efron")
-# NOTE: Default option for handling ties is recently "Efron's method", but we specify this for backwards compatability
-c <- coefficients(cox_TFD)
-(c <- data.table(Variable=names(c),Coefficient=c))
-#                             Variable        Coefficient
-# 1:           PerfSpell_g0_Delinq_Num    0.0033543172679
-# 2:                           Arrears    0.0000705150839
-# 3:                     g0_Delinq_Ave   -5.5525678389239
-# 4:           TimeInDelinqState_Lag_1   -0.1139113572196
-# 5:     slc_acct_arr_dir_3_Change_Ind    3.3294073869448
-# 6: slc_acct_pre_lim_perc_imputed_med  -33.3990668446264
-# 7:       pmnt_method_grpMISSING_DATA   -1.4980174597352
-# 8:    pmnt_method_grpSalary/Suspense    0.9390684205780
-# 9:          pmnt_method_grpStatement    0.3823914797478
-# 10:      InterestRate_Margin_Aggr_Med  445.5030569360081
-# 11:    InterestRate_Margin_Aggr_Med_3 -356.2167460966670
-# 12:                         Principal   -0.0000014990546
-# 13:                       Undrawn_Amt    0.0000002719867
-# 14:                         LN_TPEWHL    0.3001587384029
-# 15:                      M_DTI_Growth    4.1911996761251
-# 16:                M_Inflation_Growth    4.4736472467573
-# 17:              M_Inflation_Growth_6    1.4355263441157
-# 18:               M_RealIncome_Growth   -2.3490754410016
-
-# Goodnes of fit
+# - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4),
                 fileName = paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")) # 0.6372
 ### RESULTS: Goodness of fit for the model seems to be a bit low.

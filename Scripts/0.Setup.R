@@ -125,7 +125,7 @@ source(paste0(path_cust,"TruEnd.R"))
 source(paste0(path_cust,'DelinqM.R'))
 
 # - Custom survival-related functions - generic; 
-### AB: Needs to be disected a bit and collapsed into other scripts, but only after closeout!
+### AB: Needs to be dissected a bit and collapsed into other scripts, but only after closeout!
 # I'm not longer sure of its utility if its primary function (Schoenfeld) is implemented in the next/your script
 source(paste0(path_cust,'0b(i).FunkySurv.R'))
 

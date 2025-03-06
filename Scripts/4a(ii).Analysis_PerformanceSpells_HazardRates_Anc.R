@@ -22,438 +22,742 @@
 #
 # -- Outputs:
 #   - Cumulative baseline hazard rates by performance spells (2 different groupings)
+#   - Event probabilities
+#   - Hazard rates
 #   - Kaplan-Meyer analysis by performance spells
+#   - datSurv objects | Respective to each setting, containiing survival, cumulative hezard, & event probabilities
 # ------------------------------------------------------------------------------------------------------
 
+
+
+
+# -------- 0 Preliminarnies
+
+# - Generic parameters
+mainEventName <- "Default"
+
+
+
+
+
+# -------- 1 Kaplan-Meier analysis across all performance spells | Left-truncation included
+
 # - Confirm prepared datasets are loaded into memory
-if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath);gc()
 if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath);gc()
-
-
-# -------- 1 Kaplan-Meier analysis on first performance spell when left-truncation is incorporated
-
-# Initialize a dataset with only the first performance spell
-dat <- datCredit_TFD[PerfSpell_Num==1,]
-
-# -- 1.1 Cumulative Lifetime Distribution on all months
 
 # --- Fit Kaplan-Meier (KM) nonparametric model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
-km_TFD_All <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                  id=PerfSpell_Key, data=dat)
-summary(km_TFD_All)$table # overall summary statistics
+km_All <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
+                  id=PerfSpell_Key, data=datCredit_PWPST)
+summary(km_All)$table # overall summary statistics
 ### RESULTS: 16306 events with a median survival time of 322 and 95% confidence interval of [255,262]
-(km_TFD_All_tableSummary <- surv_summary(km_TFD_All)) # Survival table
+plot(km_All, conf.int = T) # survival curve
 
 # -- Calculate various summary statistics
 # - Chosen percentile of survival times, used later as a prediction time, e.g., 75%
 # NOTE: Median would also work, though sample sizes typically dwindle at that point, which can complicate analyses
 survPercentile <- 0.75
 cat(paste0("Kaplan-Meier: Survival time at the xth percentile of the distribution of unique survival times: \n\t",
-           percTimepoint <- min(km_TFD_All$time[km_TFD_All$surv <= survPercentile],na.rm=T)))
+           percTimepoint <- min(km_All$time[km_All$surv <= survPercentile],na.rm=T)))
 # - Calculate the Truncated Mean (or "Restricted Mean Survival Time" [RMST]) of survival times
 # NOTE: The classical mean survival time is only defined when S(t) can reach 0
 # NOTE2: Calculating RMST involves integrating the KM-curve up to the last (hence truncated) observed unique event time
 #         I.e., sum the survival probabilities, as weighted by the time difference between two successive survival times
 cat(paste0("Kaplan-Meier: Truncated/Restricted Mean Survival Time: \n\t", 
-           sum(km_TFD_All$surv*diff(c(0,km_TFD_All$time)), na.rm=T)))
+           sum(km_All$surv*diff(c(0,km_All$time)), na.rm=T)))
 # - Retrieve the mean survival probability at the previously found percentile-based prediction point
 cat(paste0("Kaplan-Meier: Retrieved mean survival probability at a given time point (t=", percTimepoint, "): \n\t",
-           percent(km_TFD_All$surv[max(which(km_TFD_All$time <= percTimepoint))], accuracy=0.01)))
+           percent(km_All$surv[max(which(km_All$time <= percTimepoint))], accuracy=0.01)))
 # - Retrieve the mean survival probability at the last unique event time as prediction time, i.e., 
 # the "pooled mean survival probability"
-cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_TFD_All$time), "): \n\t",
-           percent(km_TFD_All$surv[max(which(km_TFD_All$time <= max(km_TFD_All$time)))], accuracy=0.01)))
+cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_All$time), "): \n\t",
+           percent(km_All$surv[max(which(km_All$time <= max(km_All$time)))], accuracy=0.01)))
 
 
-# --- Graphing survival and related quantities from fitted KM-model | F(t)
 
-# -- Graphing parameters
+# --- Cumulative Lifetime Distribution F(t)=1-S(t)
+
+# - Graphing parameters
 vCol <- brewer.pal(8, "Set1")[c(1)] # for F(t)
-medLife <- summary(km_TFD_All)$table["median"]
+medLife <- summary(km_All)$table["median"]
 median_survival <- data.frame(x = medLife, y = 0.5)
-mainEventName <- "Default"
+maxTime <- max(km_All$time)
 chosenFont <- "Cambria"
 dpi <- 190
 
-# -- Cumulative event/lifetime probability: F(t)=1-S(t)
-gsurv_Ft_TFD_All <- ggsurvplot(km_TFD_All, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
-                               break.time.by=round(max(km_TFD_All$time)/8), palette=vCol,
-                               xlab = bquote(Discrete~time~italic(t)*" (months) in spell: First-spell"),
-                               ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (first spell incl. left-truncation)"),
-                               xlim=c(0, max(km_TFD_All$time)+1), censor=F, 
+# - Graphing logic: Entire domain of time to event
+gsurv_Ft <- ggsurvplot(km_All, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
+                               break.time.by=round(maxTime)/8, palette=vCol,
+                               xlab = bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell"),
+                               ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (incl. left-truncation)"),
+                               xlim=c(0, maxTime+1), censor=F, 
                                ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
                                tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
                                cumevents=T, cumevents.title="Cumulative number of events", 
                                cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
                                risk.table.title = "Number in (% of) sample at risk of main event",
                                font.family=chosenFont, fontsize=2.5,
-                               surv.median.line = "hv")
+                               surv.median.line = "hv", size=0.5)
 # Add median annotation for illustrative purposes
-gsurv_Ft_TFD_All$plot <- gsurv_Ft_TFD_All$plot  +    
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
   annotate("text", x = medLife, y = 0.5,
            label = paste0("50th Percentile: ", medLife, " months"),
-           vjust=-0.5, hjust=-0.1, color = "black", size = 3, family = chosenFont)
+           vjust=-0.5, hjust=-0.1, color = "black", size = 2.5, family = chosenFont)
 # Add Custom percentile line segment for illustrative purposes   
-(gsurv_Ft_TFD_All$plot <- gsurv_Ft_TFD_All$plot  +    
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
     geom_segment(x = 0, xend=percTimepoint, y=1-survPercentile, yend = 1-survPercentile, linetype = "dashed", color = "black") +
     geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = 1-survPercentile, linetype = "dashed", color = "black") +
     annotate("text", x = percTimepoint, y = 1 - survPercentile, label = paste0(comma((1-survPercentile)*100), "th Percentile: ", round(percTimepoint, 2), " months"),
-             vjust=-0.5, hjust=-0.1, color = "black", size = 3, family = chosenFont))
+             vjust=-0.5, hjust=-0.1, color = "black", size = 2.5, family = chosenFont)
+### RESULTS: Based on survival analysis, about 100% of the dataset was consumed at t=300; We shall henceforth remove outliers purely
+# for graphing purposes
+maxPeriod <- 300
 
-# - Save graph and object
-ggsave(gsurv_Ft_TFD_All$plot, file=paste0(genFigPath, "FULL SET/gsurv_Ft_TFD_All-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-pack.ffdf(paste0(genObjPath,"gsurv_Ft_TFD_All_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"), km_TFD_All_tableSummary)
-dpi <- 150 # need to decrease size for risk tables' text
-ggsave(print(gsurv_Ft_TFD_All,newpage=F), file=paste0(genFigPath,"FULL SET/gsurv_Ft_TFD_All_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+# - Save graph
+ggsave(gsurv_Ft$plot, file=paste0(genFigPath, "FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_MultiSpell_LatentComp_InclLeftTrunc.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+dpi <- 185 # need to decrease size for risk tables' text
+ggsave(print(gsurv_Ft,newpage=F), file=paste0(genFigPath,"FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_MultiSpell_LatentComp_InclLeftTrunc_RiskTable.png"),width=1200/dpi, height=1200/dpi,dpi=dpi, bg="white")
+
+
+# - Graphing logic: Limited domain of time to event [maxPeriod]
+gsurv_Ft2 <- ggsurvplot(km_All, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
+                       break.time.by=round(maxPeriod)/8, palette=vCol,
+                       xlab = bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell"),
+                       ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (incl. left-truncation)"),
+                       xlim=c(0, maxPeriod), censor=F, 
+                       ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
+                       tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
+                       cumevents=T, cumevents.title="Cumulative number of events", 
+                       cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
+                       risk.table.title = "Number in (% of) sample at risk of main event",
+                       font.family=chosenFont, fontsize=2.5,
+                       surv.median.line = "hv", size=0.5)
+# Add median annotation for illustrative purposes
+gsurv_Ft2$plot <- gsurv_Ft2$plot  +    
+  annotate("text", x = medLife, y = 0.51,
+           label = paste0("50th Percentile: ", medLife, " months"),
+           vjust=-0.5, hjust=1, color = "black", size = 2.5, family = chosenFont)
+# Add Custom percentile line segment for illustrative purposes   
+gsurv_Ft2$plot <- gsurv_Ft2$plot  +    
+  geom_segment(x = 0, xend=percTimepoint, y=1-survPercentile, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  annotate("text", x = percTimepoint, y = 1 - survPercentile+0.01, label = paste0(comma((1-survPercentile)*100), "th Percentile: ", round(percTimepoint, 2), " months"),
+           vjust=-0.5, hjust=1, color = "black", size = 2.5, family = chosenFont)
+
+# - Save graph
+ggsave(print(gsurv_Ft2,newpage=F), file=paste0(genFigPath,"FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_MultiSpell_LatentComp_InclLeftTrunc_RiskTable_LimPeriod.png"),width=1200/dpi, height=1200/dpi,dpi=dpi, bg="white")
 
 
 
-# -- 1.2 Discrete baseline hazard function on first performance spell when left-truncation is incorporated
-# - h(t) | Empirical estimation method
-#  create plotting data object
-haz_dat <- data.table(Time=km_TFD_All$time, AtRisk_n=km_TFD_All$n.risk, 
-                      Event_n = km_TFD_All$n.event, Censored_n=km_TFD_All$n.censor,
-                      hazard=km_TFD_All$n.event/km_TFD_All$n.risk, 
-                      CumulHazard = km_TFD_All$cumhaz, #Nelson-Aalen estimator
-                      Group="1",Surv_KM = km_TFD_All$surv) %>% 
-  filter(Event_n > 0 | Censored_n >0) %>%
-  # Discrete-time variants
-  mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
-  mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
-haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
-# - create alternative versions for sanity checks
-haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
-haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
+# --- Create data and graphing objects
+# - Create survival table using surv_summary()
+(datSurv <- surv_summary(km_All)) # Survival table
+datSurv <- datSurv %>% rename(Time=time, AtRisk_n=`n.risk`, Event_n=`n.event`, Censored_n=`n.censor`, SurvivalProb_KM=`surv`) %>%
+  mutate(Hazard_Actual = Event_n/AtRisk_n, Hazard_Actual2 = 1 - SurvivalProb_KM/shift(SurvivalProb_KM,n=1,fill=1)) %>% 
+  mutate(Hazard_Actual2 = ifelse(is.na(Hazard_Actual2), 0, Hazard_Actual2)) %>% # Handle NaN-values
+  mutate(CHaz = cumsum(Hazard_Actual),
+         CHaz2 = -log(SurvivalProb_KM),# Created as a sanity check
+         SurvivalProb_KM_Disc = cumprod(1-Hazard_Actual)) %>% # Created as a sanity check
+  mutate(EventRate = Hazard_Actual*shift(SurvivalProb_KM, n=1, fill=1)) %>%  # probability mass function f(t)=h(t).S(t-1)
+  filter(Event_n > 0 | Censored_n >0) %>% as.data.table()
+
 # - conduct sanity checks
-all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
-### RESULTS: 8 last values are NAN, since the 8th last value has a [hazard] = 1 which results in [Surv_KM_Disc]=0
-all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
-all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
-plot(km_TFD_All$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
-### RESULTS: The discrepancy is very small difference due to estimator method differences
+all.equal(datSurv$Hazard_Actual, datSurv$Hazard_Actual2) # Should be TRUE
+all.equal(datSurv$SurvivalProb_KM, datSurv$SurvivalProb_KM_Disc) # Should be TRUE
+all.equal(km_All$cumhaz, datSurv$CHaz) # Should be TRUE
+all.equal(datSurv$CHaz, datSurv$CHaz2)
+plot(datSurv$CHaz - datSurv$CHaz2, type="b")
+### RESULTS: CHaz2 is very similar to CHaz, derived fundamentally from KM-estimate of S(t), though kept for comparative purposes
 
-# --- Graphing survival and related quantities from fitted KM-model | h(t)
+# - Remove sanity checks
+datSurv[, c("SurvivalProb_KM_Disc","CHaz2", "Hazard_Actual2") := NULL]
 
-# -- Cubic spline for hazard rate
-haz_dat$Spline <- spline_estimation(haz_dat$Time, haz_dat$hazard, 5, 3)
+# - Distributional analyses
+# Hazard rate
+describe(datSurv$Hazard_Actual); hist(datSurv$Hazard_Actual, breaks="FD")
+plot(datSurv$Hazard_Actual, type="b")
+### RESULTS: No apparent shape though increasingly affected by outliers as time increases,
+# so we should put less stock in those right-most results on the x-axis.
 
-# -- Graphing parameters
-vCol2 <- brewer.pal(10, "Paired")[c(10,9)] # for h(t)
-vlabel <- c("Cubic Spline", bquote(~italic(h[0](t))))
+# Event rate
+describe(datSurv$EventRate); hist(datSurv$EventRate, breaks="FD")
+plot(datSurv$EventRate, type="b")
+### RESULTS: Shows a U-shaped distribution, as expected
 
-# - Graph object for shorter time, informed by previous graphs
-(gsurv_ht_TFD_All <- ggplot(haz_dat, aes(x=Time)) + theme_minimal() +
-                    geom_point(aes(y=hazard, colour=vCol2[2])) + 
-                    geom_line(aes(y=Spline, colour=vCol2[1]), linetype="solid") +
-                    labs(y=bquote(plain(Estimated~~italic(h[0](t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (All Months)")), 
-                         x=bquote(Discrete~time~italic(t)*" (months) in spell: Single-spell")) + 
-                    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-                    scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
-                    scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
-                    scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-                    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
-### RESULTS: The hazard appears to be near-constant over time, except after month 225 when a peak forms
 
-# -- Save plots
-dpi <- 215 # reset
-ggsave(gsurv_ht_TFD_All, file=paste0(genFigPath,"FULL SET/gsurv_ht_TFD_All-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+
+# --- Graphing the hazard rate h(t)
+
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.2
+smthHazard_Act <- loess(datSurv$Hazard_Actual ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthHazard_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthHazard_Act, newdata=datSurv, se=T)
+
+# - Add smoothed hazard to graphing object
+datSurv[, Hazard_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, Hazard_spline_upper := Hazard_spline + critVal*vPredSmth$se.fit]
+datSurv[, Hazard_spline_lower := Hazard_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol2 <- brewer.pal(10, "Paired")[c(10,9)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] hazard'*~italic(h(t))*' with 95% CI'))
+datSurv[, Group := "1"] # only necessary for aesthetics when using geom_smooth() during plotting
+
+# - Create main graph 
+(gsurv_ht <- ggplot(datSurv[Time<= maxPeriod, ], aes(x=Time, y=Hazard_Actual)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=Hazard_Actual), colour=vCol2[2]) + 
+    geom_line(aes(y=Hazard_Actual), colour=vCol2[2], linetype="solid") + 
+    #geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
+    # Smoothed quantity
+    geom_line(aes(y=Hazard_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=Hazard_spline_lower, ymax=Hazard_spline_upper), fill=vCol2[1], alpha=0.25)+
+    # Scales and options
+    labs(y=bquote(plain(Discrete~hazard~~italic(h(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (incl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
+### RESULTS: The hazard appears to be U-shaped, as expected
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ht, file=paste0(genFigPath, "FULL SET/DiscreteHazard_", mainEventName,"_SpellLevel_MultiSpell-LatentComp_InclLeftTrunc-AG.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
-# Housekeeping
-rm(dat, gsurv_Ft_TFD_All, gsurv_ht_TFD_All, km_TFD_All, km_TFD_All_tableSummary, median_survival, haz_dat, vlabel)
-
-# Reduce months to 300
-# Load datasets
-datCredit_TFD <- subset(datCredit_TFD, End <= 300)
-datCredit_PWPST <- subset(datCredit_PWPST, End <= 300)
-
-# Sanity check
-max(datCredit_TFD$Start) == 299
-max(datCredit_PWPST$Start) == 299
 
 
+# --- Graphing the event density / probability mass function f(t)
+
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.3
+smthEventRate_Act <- loess(datSurv$EventRate ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthEventRate_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthEventRate_Act, newdata=datSurv, se=T)
+
+# - Add smoothed estimate to graphing object
+datSurv[, EventRate_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, EventRate_spline_upper := EventRate_spline + critVal*vPredSmth$se.fit]
+datSurv[, EventRate_spline_lower := EventRate_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol3 <- brewer.pal(10, "Paired")[c(4,3)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] estimate'*~italic(f(t))*' with 95% CI'))
+
+# - Create main graph 
+(gsurv_ft <- ggplot(datSurv[Time <= maxPeriod,], aes(x=Time, y=EventRate)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=EventRate), colour=vCol3[2]) + 
+    geom_line(aes(y=EventRate), colour=vCol3[2], linetype="solid") + 
+    # Smoothed quantity
+    geom_line(aes(y=EventRate_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=EventRate_spline_lower, ymax=EventRate_spline_upper), fill=vCol3[1], alpha=0.15)+
+    # Scales and options
+    labs(y=bquote(plain(Event~probability~~italic(f(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (incl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: Multi-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma) + 
+    guides(colour = "none"))
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ft, file=paste0(genFigPath, "FULL SET/EventProb-", mainEventName,"_SpellLevel_MultiSpell_LatentComp_InclLeftTrunc.png"),
+       width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+
+# - Save snapshots to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"datSurv_KM_MultiSpell"), datSurv)
+
+# - Housekeeping
+rm(gsurv_Ft, gsurv_Ft2, gsurv_ht, gsurv_ft, km_All, median_survival, datSurv, vlabel, datCredit_PWPST, 
+   smthEventRate_Act, smthHazard_Act, vPredSmth)
 
 
 
-# -------- 2 Kaplan-Meier analysis on first performance spell when left-truncation is incorporated
 
-# Initialize a dataset with only the first performance spell
+
+# -------- 2 Kaplan-Meier analysis on first performance spell | Left-truncation included
+
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath);gc()
+
+# - Initialize a dataset with only the first performance spell
 dat <- datCredit_TFD[PerfSpell_Num==1,]
-
-# -- 2.1 Cumulative Lifetime Distribution on first performance spell when left-truncation is incorporated
 
 # --- Fit Kaplan-Meier (KM) nonparametric model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
-km_TFD <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                     id=PerfSpell_Key, data=dat)
-summary(km_TFD)$table # overall summary statistics
-### RESULTS: 16306 events with a median survival time of 258 and 95% confidence interval of [255,262]
-(km_TFD_tableSummary <- surv_summary(km_TFD)) # Survival table
-### RESULTS: Median survival time of 258 has standard error of 1%, which is low.
+km_first <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
+                  id=PerfSpell_Key, data=dat)
+summary(km_first)$table # overall summary statistics
+### RESULTS: 16306 events with a median survival time of 322 and 95% confidence interval of [255,262]
+plot(km_first, conf.int = T) # survival curve
 
 # -- Calculate various summary statistics
 # - Chosen percentile of survival times, used later as a prediction time, e.g., 75%
 # NOTE: Median would also work, though sample sizes typically dwindle at that point, which can complicate analyses
 survPercentile <- 0.75
 cat(paste0("Kaplan-Meier: Survival time at the xth percentile of the distribution of unique survival times: \n\t",
-           percTimepoint <- min(km_TFD$time[km_TFD$surv <= survPercentile],na.rm=T)))
+           percTimepoint <- min(km_first$time[km_first$surv <= survPercentile],na.rm=T)))
 # - Calculate the Truncated Mean (or "Restricted Mean Survival Time" [RMST]) of survival times
 # NOTE: The classical mean survival time is only defined when S(t) can reach 0
 # NOTE2: Calculating RMST involves integrating the KM-curve up to the last (hence truncated) observed unique event time
 #         I.e., sum the survival probabilities, as weighted by the time difference between two successive survival times
 cat(paste0("Kaplan-Meier: Truncated/Restricted Mean Survival Time: \n\t", 
-           sum(km_TFD$surv*diff(c(0,km_TFD$time)), na.rm=T)))
+           sum(km_first$surv*diff(c(0,km_first$time)), na.rm=T)))
 # - Retrieve the mean survival probability at the previously found percentile-based prediction point
 cat(paste0("Kaplan-Meier: Retrieved mean survival probability at a given time point (t=", percTimepoint, "): \n\t",
-           percent(km_TFD$surv[max(which(km_TFD$time <= percTimepoint))], accuracy=0.01)))
+           percent(km_first$surv[max(which(km_first$time <= percTimepoint))], accuracy=0.01)))
 # - Retrieve the mean survival probability at the last unique event time as prediction time, i.e., 
 # the "pooled mean survival probability"
-cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_TFD$time), "): \n\t",
-           percent(km_TFD$surv[max(which(km_TFD$time <= max(km_TFD$time)))], accuracy=0.01)))
+cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_first$time), "): \n\t",
+           percent(km_first$surv[max(which(km_first$time <= max(km_first$time)))], accuracy=0.01)))
 
 
-# --- Graphing survival and related quantities from fitted KM-model | F(t)
 
-# -- Graphing parameters
+# --- Cumulative Lifetime Distribution F(t)=1-S(t)
+
+# - Graphing parameters
 vCol <- brewer.pal(8, "Set1")[c(1)] # for F(t)
-medLife <- summary(km_TFD)$table["median"]
+medLife <- summary(km_first)$table["median"]
 median_survival <- data.frame(x = medLife, y = 0.5)
-mainEventName <- "Default"
+maxTime <- max(km_first$time)
 chosenFont <- "Cambria"
 dpi <- 190
 
-# -- Cumulative event/lifetime probability: F(t)=1-S(t)
-gsurv_Ft_TFD <- ggsurvplot(km_TFD, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
-                          break.time.by=round(max(km_TFD$time)/8), palette=vCol,
-                          xlab = bquote(Discrete~time~italic(t)*" (months) in spell: First-spell"),
-                          ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (incl. left-truncation)"),
-                          xlim=c(0, max(km_TFD$time)+1), censor=F, 
-                          ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
-                          tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
-                          cumevents=T, cumevents.title="Cumulative number of events", 
-                          cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
-                          risk.table.title = "Number in (% of) sample at risk of main event",
-                          font.family=chosenFont, fontsize=2.5,
-                          surv.median.line = "hv")
+# - Graphing logic: Entire domain of time to event
+gsurv_Ft <- ggsurvplot(km_first, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
+                       break.time.by=round(maxTime)/8, palette=vCol,
+                       xlab = bquote(Discrete~time~italic(t)*" (months) in spell: First-spell"),
+                       ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (incl. left-truncation)"),
+                       xlim=c(0, maxTime+1), censor=F, 
+                       ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
+                       tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
+                       cumevents=T, cumevents.title="Cumulative number of events", 
+                       cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
+                       risk.table.title = "Number in (% of) sample at risk of main event",
+                       font.family=chosenFont, fontsize=2.5,
+                       surv.median.line = "hv", size=0.5)
 # Add median annotation for illustrative purposes
-gsurv_Ft_TFD$plot <- gsurv_Ft_TFD$plot  +    
-                      annotate("text", x = medLife, y = 0.5,
-                      label = paste0("50th Percentile: ", medLife, " months"),
-                      vjust=-0.5, hjust=1, color = "black", size = 3, family = chosenFont)
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
+  annotate("text", x = medLife, y = 0.5,
+           label = paste0("50th Percentile: ", medLife, " months"),
+           vjust=-0.5, hjust=-0.1, color = "black", size = 2.5, family = chosenFont)
 # Add Custom percentile line segment for illustrative purposes   
-(gsurv_Ft_TFD$plot <- gsurv_Ft_TFD$plot  +    
-                      geom_segment(x = 0, xend=percTimepoint, y=1-survPercentile, yend = 1-survPercentile, linetype = "dashed", color = "black") +
-                      geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = 1-survPercentile, linetype = "dashed", color = "black") +
-                      annotate("text", x = percTimepoint, y = 1 - survPercentile, label = paste0(comma((1-survPercentile)*100), "th Percentile: ", round(percTimepoint, 2), " months"),
-                               vjust=-0.5, hjust=1, color = "black", size = 3, family = chosenFont))
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
+  geom_segment(x = 0, xend=percTimepoint, y=1-survPercentile, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  annotate("text", x = percTimepoint, y = 1 - survPercentile, label = paste0(comma((1-survPercentile)*100), "th Percentile: ", round(percTimepoint, 2), " months"),
+           vjust=-0.5, hjust=-0.1, color = "black", size = 2.5, family = chosenFont)
+### RESULTS: Based on survival analysis, about 100% of the dataset was consumed at t=300; We shall henceforth remove outliers purely
+# for graphing purposes
+maxPeriod <- 300
 
-# - Save graph and object
-ggsave(gsurv_Ft_TFD$plot, file=paste0(genFigPath, "FULL SET/gsurv_Ft_TFD-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-pack.ffdf(paste0(genObjPath,"gsurv_Ft_TFD_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"), km_TFD_tableSummary)
-dpi <- 150 # need to decrease size for risk tables' text (152 is the cut-off value for the table annotation)
-ggsave(print(gsurv_Ft_TFD,newpage=F), file=paste0(genFigPath,"FULL SET/gsurv_Ft_TFD_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+# - Save graph
+ggsave(gsurv_Ft$plot, file=paste0(genFigPath, "FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_FirstSpell_LatentComp_InclLeftTrunc.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+dpi <- 185 # need to decrease size for risk tables' text
+ggsave(print(gsurv_Ft,newpage=F), file=paste0(genFigPath,"FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_FirstSpell_LatentComp_InclLeftTrunc_RiskTable.png"),width=1200/dpi, height=1200/dpi,dpi=dpi, bg="white")
 
 
+# --- Create data and graphing objects
+# - Create survival table using surv_summary()
+(datSurv <- surv_summary(km_first)) # Survival table
+datSurv <- datSurv %>% rename(Time=time, AtRisk_n=`n.risk`, Event_n=`n.event`, Censored_n=`n.censor`, SurvivalProb_KM=`surv`) %>%
+  mutate(Hazard_Actual = Event_n/AtRisk_n, Hazard_Actual2 = 1 - SurvivalProb_KM/shift(SurvivalProb_KM,n=1,fill=1)) %>% 
+  mutate(Hazard_Actual2 = ifelse(is.na(Hazard_Actual2), 0, Hazard_Actual2)) %>% # Handle NaN-values
+  mutate(CHaz = cumsum(Hazard_Actual),
+         CHaz2 = -log(SurvivalProb_KM),# Created as a sanity check
+         SurvivalProb_KM_Disc = cumprod(1-Hazard_Actual)) %>% # Created as a sanity check
+  mutate(EventRate = Hazard_Actual*shift(SurvivalProb_KM, n=1, fill=1)) %>%  # probability mass function f(t)=h(t).S(t-1)
+  filter(Event_n > 0 | Censored_n >0) %>% as.data.table()
 
-# -- 2.2 Discrete baseline hazard function on first performance spell when left-truncation is incorporated
-# - h(t) | Empirical estimation method
-#  create plotting data object
-haz_dat <- data.table(Time=km_TFD$time, AtRisk_n=km_TFD$n.risk, 
-                      Event_n = km_TFD$n.event, Censored_n=km_TFD$n.censor,
-                      hazard=km_TFD$n.event/km_TFD$n.risk, 
-                      CumulHazard = km_TFD$cumhaz, #Nelson-Aalen estimator
-                      Group="1",Surv_KM = km_TFD$surv) %>% 
-  filter(Event_n > 0 | Censored_n >0) %>%
-  # Discrete-time variants
-  mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
-  mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
-haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
-# - create alternative versions for sanity checks
-haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
-haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
 # - conduct sanity checks
-all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
-### RESULTS: 8 last values are NAN, since the 8th last value has a [hazard] = 1 which results in [Surv_KM_Disc]=0
-all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
-all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
-plot(km_TFD$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
-### RESULTS: The discrepancy is very small difference due to estimator method differences
+all.equal(datSurv$Hazard_Actual, datSurv$Hazard_Actual2) # Should be TRUE
+all.equal(datSurv$SurvivalProb_KM, datSurv$SurvivalProb_KM_Disc) # Should be TRUE
+all.equal(km_first$cumhaz, datSurv$CHaz) # Should be TRUE
+all.equal(datSurv$CHaz, datSurv$CHaz2)
+plot(datSurv$CHaz - datSurv$CHaz2, type="b")
+### RESULTS: CHaz2 is very similar to CHaz, derived fundamentally from KM-estimate of S(t), though kept for comparative purposes
 
-# --- Graphing survival and related quantities from fitted KM-model | h(t)
+# - Remove sanity checks
+datSurv[, c("SurvivalProb_KM_Disc","CHaz2", "Hazard_Actual2") := NULL]
 
-# -- Cubic spline for hazard rate
-# HW: Pack Spline haz_date
-haz_dat$Spline <- spline_estimation(haz_dat$Time, haz_dat$hazard, 10, 3)
+# - Distributional analyses
+# Hazard rate
+describe(datSurv$Hazard_Actual); hist(datSurv$Hazard_Actual, breaks="FD")
+plot(datSurv$Hazard_Actual, type="b")
+### RESULTS: No apparent shape though increasingly affected by outliers as time increases,
+# so we should put less stock in those right-most results on the x-axis.
 
-# -- Graphing parameters
-vCol2 <- brewer.pal(10, "Paired")[c(10,9)] # for h(t)
-vlabel <- c("Cubic Spline", bquote(~italic(h[0](t))))
+# Event rate
+describe(datSurv$EventRate); hist(datSurv$EventRate, breaks="FD")
+plot(datSurv$EventRate, type="b")
+### RESULTS: Shows a U-shaped distribution, as expected
 
-# - Graph object for shorter time, informed by previous graphs
-(gsurv_ht_TFD <- ggplot(haz_dat, aes(x=Time)) + theme_minimal() +
-                  geom_point(aes(y=hazard, colour=vCol2[2])) + 
-                  geom_line(aes(y=Spline, colour=vCol2[1]), linetype="solid") +
-                  labs(y=bquote(plain(Estimated~~italic(h[0](t))*" ["*.(mainEventName)*"]"*": Kaplan-Meier (incl. left-trunc.)")), 
-                       x=bquote(Discrete~time~italic(t)*" (months) in spell: Single-spell")) + 
-                  theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-                  scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
-                  scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
-                  scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-                  scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
-### RESULTS: The hazard appears to be near-constant over time, except after month 225 when a peak forms
 
-# -- Save plots
-dpi <- 215 # reset
-ggsave(gsurv_ht_TFD, file=paste0(genFigPath,"FULL SET/gsurv_ht_TFD-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),
+
+# --- Graphing the hazard rate h(t)
+
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.2
+smthHazard_Act <- loess(datSurv$Hazard_Actual ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthHazard_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthHazard_Act, newdata=datSurv, se=T)
+
+# - Add smoothed hazard to graphing object
+datSurv[, Hazard_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, Hazard_spline_upper := Hazard_spline + critVal*vPredSmth$se.fit]
+datSurv[, Hazard_spline_lower := Hazard_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol2 <- brewer.pal(10, "Paired")[c(10,9)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] hazard'*~italic(h(t))*' with 95% CI'))
+datSurv[, Group := "1"] # only necessary for aesthetics when using geom_smooth() during plotting
+
+# - Create main graph 
+(gsurv_ht <- ggplot(datSurv[Time<= maxPeriod, ], aes(x=Time, y=Hazard_Actual)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=Hazard_Actual), colour=vCol2[2]) + 
+    geom_line(aes(y=Hazard_Actual), colour=vCol2[2], linetype="solid") + 
+    #geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
+    # Smoothed quantity
+    geom_line(aes(y=Hazard_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=Hazard_spline_lower, ymax=Hazard_spline_upper), fill=vCol2[1], alpha=0.25)+
+    # Scales and options
+    labs(y=bquote(plain(Discrete~hazard~~italic(h(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (incl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
+### RESULTS: The hazard appears to be U-shaped, as expected
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ht, file=paste0(genFigPath, "FULL SET/DiscreteHazard_", mainEventName,"_SpellLevel_FirstSpell-LatentComp_InclLeftTrunc-AG.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
-# Housekeeping
-rm(dat, gsurv_Ft_TFD, gsurv_ht_TFD, km_TFD, km_TFD_tableSummary, median_survival, haz_dat, vlabel)
 
 
-# -- 1.3 Cumulative Lifetime Distribution function on first performance spell when left-truncation is not incorporated
+# --- Graphing the event density / probability mass function f(t)
 
-# Initialize a dataset with only the first performance spell
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.3
+smthEventRate_Act <- loess(datSurv$EventRate ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthEventRate_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthEventRate_Act, newdata=datSurv, se=T)
+
+# - Add smoothed estimate to graphing object
+datSurv[, EventRate_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, EventRate_spline_upper := EventRate_spline + critVal*vPredSmth$se.fit]
+datSurv[, EventRate_spline_lower := EventRate_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol3 <- brewer.pal(10, "Paired")[c(4,3)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] estimate'*~italic(f(t))*' with 95% CI'))
+
+# - Create main graph 
+(gsurv_ft <- ggplot(datSurv[Time <= maxPeriod,], aes(x=Time, y=EventRate)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=EventRate), colour=vCol3[2]) + 
+    geom_line(aes(y=EventRate), colour=vCol3[2], linetype="solid") + 
+    # Smoothed quantity
+    geom_line(aes(y=EventRate_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=EventRate_spline_lower, ymax=EventRate_spline_upper), fill=vCol3[1], alpha=0.15)+
+    # Scales and options
+    labs(y=bquote(plain(Event~probability~~italic(f(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (incl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma) + 
+    guides(colour = "none"))
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ft, file=paste0(genFigPath, "FULL SET/EventProb-", mainEventName,"_SpellLevel_FirstSpell_LatentComp_InclLeftTrunc.png"),
+       width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+
+# - Save snapshots to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"datSurv_KM_FirstSpell"), datSurv)
+
+# - Housekeeping
+rm(gsurv_Ft, gsurv_ht, gsurv_ft, km_first, median_survival, datSurv, vlabel, datCredit_TFD, 
+   smthEventRate_Act, smthHazard_Act, vPredSmth, dat)
+
+
+
+
+
+
+# -------- 3 Kaplan-Meier analysis on first performance spell | Left-truncation excluded
+
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath);gc()
+
+# - Initialize a dataset with only the first performance spell and excluding left-truncated spells
 dat <- datCredit_TFD[PerfSpell_Num==1 & PerfSpell_LeftTrunc==0,]
 
 # --- Fit Kaplan-Meier (KM) nonparametric model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
-km_TFD_noLeftTrunc <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                  id=PerfSpell_Key, data=dat)
-summary(km_TFD_noLeftTrunc)$table # overall summary statistics
-### RESULTS: 7489 events with no median survival time
-(km_TFD_noLeftTrunc_tableSummary <- surv_summary(km_TFD_noLeftTrunc)) # Survival table
+km_first <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
+                    id=PerfSpell_Key, data=dat)
+summary(km_first)$table # overall summary statistics
+### RESULTS: 16306 events with a median survival time of 322 and 95% confidence interval of [255,262]
+plot(km_first, conf.int = T) # survival curve
 
 # -- Calculate various summary statistics
 # - Chosen percentile of survival times, used later as a prediction time, e.g., 75%
 # NOTE: Median would also work, though sample sizes typically dwindle at that point, which can complicate analyses
 survPercentile <- 0.75
 cat(paste0("Kaplan-Meier: Survival time at the xth percentile of the distribution of unique survival times: \n\t",
-           percTimepoint <- min(km_TFD_noLeftTrunc$time[km_TFD_noLeftTrunc$surv <= survPercentile],na.rm=T)))
+           percTimepoint <- min(km_first$time[km_first$surv <= survPercentile],na.rm=T)))
 # - Calculate the Truncated Mean (or "Restricted Mean Survival Time" [RMST]) of survival times
 # NOTE: The classical mean survival time is only defined when S(t) can reach 0
 # NOTE2: Calculating RMST involves integrating the KM-curve up to the last (hence truncated) observed unique event time
 #         I.e., sum the survival probabilities, as weighted by the time difference between two successive survival times
 cat(paste0("Kaplan-Meier: Truncated/Restricted Mean Survival Time: \n\t", 
-           sum(km_TFD_noLeftTrunc$surv*diff(c(0,km_TFD_noLeftTrunc$time)), na.rm=T)))
+           sum(km_first$surv*diff(c(0,km_first$time)), na.rm=T)))
 # - Retrieve the mean survival probability at the previously found percentile-based prediction point
 cat(paste0("Kaplan-Meier: Retrieved mean survival probability at a given time point (t=", percTimepoint, "): \n\t",
-           percent(km_TFD_noLeftTrunc$surv[max(which(km_TFD_noLeftTrunc$time <= percTimepoint))], accuracy=0.01)))
+           percent(km_first$surv[max(which(km_first$time <= percTimepoint))], accuracy=0.01)))
 # - Retrieve the mean survival probability at the last unique event time as prediction time, i.e., 
 # the "pooled mean survival probability"
-cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_TFD_noLeftTrunc$time), "): \n\t",
-           percent(km_TFD_noLeftTrunc$surv[max(which(km_TFD_noLeftTrunc$time <= max(km_TFD_noLeftTrunc$time)))], accuracy=0.01)))
+cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(km_first$time), "): \n\t",
+           percent(km_first$surv[max(which(km_first$time <= max(km_first$time)))], accuracy=0.01)))
 
 
-# --- Graphing survival and related quantities from fitted KM-model | F(t)
 
-# -- Graphing parameters
+# --- Cumulative Lifetime Distribution F(t)=1-S(t)
+
+# - Graphing parameters
 vCol <- brewer.pal(8, "Set1")[c(1)] # for F(t)
-maxProb <- min(km_TFD_noLeftTrunc_tableSummary$surv)
-mainEventName <- "Default"
+medLife <- summary(km_first)$table["median"]
+median_survival <- data.frame(x = medLife, y = 0.5)
+maxTime <- max(km_first$time)
 chosenFont <- "Cambria"
-dpi <- 170
+dpi <- 190
 
-# -- Cumulative event/lifetime probability: F(t)=1-S(t)
-gsurv_Ft_TFD_noLeftTrunc <- ggsurvplot(km_TFD_noLeftTrunc, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
-                             break.time.by=round(max(km_TFD_noLeftTrunc$time)/8), palette=vCol,
-                             xlab = bquote(Discrete~time~italic(t)*" (months) in spell: First-spell"),
-                             ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (first spell exc. left-truncation)"),
-                             xlim=c(0, max(km_TFD_noLeftTrunc$time)+1), censor=F, 
-                             ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
-                             tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
-                             cumevents=T, cumevents.title="Cumulative number of events", 
-                             cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
-                             risk.table.title = "Number in (% of) sample at risk of main event",
-                             font.family=chosenFont, fontsize=2.5)
+# - Graphing logic: Entire domain of time to event
+gsurv_Ft <- ggsurvplot(km_first, fun="event", conf.int=T, surv.scale = "percent", legend="none", 
+                       break.time.by=round(maxTime)/8, palette=vCol,
+                       xlab = bquote(Discrete~time~italic(t)*" (months) in spell: First-spell"),
+                       ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (excl. left-truncation)"),
+                       xlim=c(0, maxTime+1), censor=F, 
+                       ggtheme = theme_bw(base_family=chosenFont), tables.theme = theme_cleantable(),
+                       tables.height=0.10, tables.y.text=F, tables.y.text.col=T, risk.table = "abs_pct", risk.table.pos = "out",
+                       cumevents=T, cumevents.title="Cumulative number of events", 
+                       cumcensor=T, cumcensor.title="Cumulative number of censored observations (incl. competing risks)",
+                       risk.table.title = "Number in (% of) sample at risk of main event",
+                       font.family=chosenFont, fontsize=2.5,
+                       surv.median.line = "hv", size=0.5)
+# Add median annotation for illustrative purposes
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
+  annotate("text", x = medLife, y = 0.5,
+           label = paste0("50th Percentile: ", medLife, " months"),
+           vjust=-0.5, hjust=0.5, color = "black", size = 2.5, family = chosenFont)
 # Add Custom percentile line segment for illustrative purposes   
-(gsurv_Ft_TFD_noLeftTrunc$plot <- gsurv_Ft_TFD_noLeftTrunc$plot  +    
-                                  geom_segment(x = 0, xend=192, y=1-maxProb, yend = 1-maxProb, linetype = "dashed", color = "black") +
-                                  geom_segment(x = 192, xend=192, y=0, yend = 1-maxProb, linetype = "dashed", color = "black") +
-                                  annotate("text", x = 192, y = 1 - maxProb, label = paste0(comma((1-maxProb)*100), "th Percentile: 192 months"),
-                                           vjust=-0.5, hjust=1, color = "black", size = 3, family = chosenFont))
+gsurv_Ft$plot <- gsurv_Ft$plot  +    
+  geom_segment(x = 0, xend=percTimepoint, y=1-survPercentile, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  geom_segment(x = percTimepoint, xend=percTimepoint, y=0, yend = 1-survPercentile, linetype = "dashed", color = "black") +
+  annotate("text", x = percTimepoint, y = 1 - survPercentile, label = paste0(comma((1-survPercentile)*100), "th Percentile: ", round(percTimepoint, 2), " months"),
+           vjust=-0.6, hjust=1, color = "black", size = 2.5, family = chosenFont)
+### RESULTS: Based on survival analysis, about 100% of the dataset was consumed at t=300; We shall henceforth remove outliers purely
+# for graphing purposes
+maxPeriod <- 300
 
-# - Save graph and object
-ggsave(gsurv_Ft_TFD_noLeftTrunc$plot, file=paste0(genFigPath, "FULL SET/gsurv_Ft_TFD_noLeftTrunc-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-ExclLeftTrunc_Correct.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-pack.ffdf(paste0(genObjPath,"gsurv_Ft_TFD_noLeftTrunc_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct"), km_TFD_noLeftTrunc_tableSummary)
-dpi <- 150 # need to decrease size for risk tables' text
-ggsave(print(gsurv_Ft_TFD_noLeftTrunc,newpage=F), file=paste0(genFigPath,"FULL SET/gsurv_Ft_TFD_noLeftTrunc_RiskTable-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp-InclLeftTrunc_Correct.png"),width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+# - Save graph
+ggsave(gsurv_Ft$plot, file=paste0(genFigPath, "FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_FirstSpell_LatentComp_ExclLeftTrunc.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+dpi <- 185 # need to decrease size for risk tables' text
+ggsave(print(gsurv_Ft,newpage=F), file=paste0(genFigPath,"FULL SET/CumulLifetimeProb_", mainEventName,"_SpellLevel_FirstSpell_LatentComp_ExclLeftTrunc_RiskTable.png"),width=1200/dpi, height=1200/dpi,dpi=dpi, bg="white")
 
 
+# --- Create data and graphing objects
+# - Create survival table using surv_summary()
+(datSurv <- surv_summary(km_first)) # Survival table
+datSurv <- datSurv %>% rename(Time=time, AtRisk_n=`n.risk`, Event_n=`n.event`, Censored_n=`n.censor`, SurvivalProb_KM=`surv`) %>%
+  mutate(Hazard_Actual = Event_n/AtRisk_n, Hazard_Actual2 = 1 - SurvivalProb_KM/shift(SurvivalProb_KM,n=1,fill=1)) %>% 
+  mutate(Hazard_Actual2 = ifelse(is.na(Hazard_Actual2), 0, Hazard_Actual2)) %>% # Handle NaN-values
+  mutate(CHaz = cumsum(Hazard_Actual),
+         CHaz2 = -log(SurvivalProb_KM),# Created as a sanity check
+         SurvivalProb_KM_Disc = cumprod(1-Hazard_Actual)) %>% # Created as a sanity check
+  mutate(EventRate = Hazard_Actual*shift(SurvivalProb_KM, n=1, fill=1)) %>%  # probability mass function f(t)=h(t).S(t-1)
+  filter(Event_n > 0 | Censored_n >0) %>% as.data.table()
 
-# -- 1.4 Discrete baseline hazard function on first performance spell when left-truncation is not incorporated
-# - h(t) | Empirical estimation method
-# create plotting data object
-haz_dat <- data.table(Time=km_TFD_noLeftTrunc$time, AtRisk_n=km_TFD_noLeftTrunc$n.risk, 
-                      Event_n = km_TFD_noLeftTrunc$n.event, Censored_n=km_TFD_noLeftTrunc$n.censor,
-                      hazard=km_TFD_noLeftTrunc$n.event/km_TFD_noLeftTrunc$n.risk, 
-                      CumulHazard = km_TFD_noLeftTrunc$cumhaz, #Nelson-Aalen estimator
-                      Group="1",Surv_KM = km_TFD_noLeftTrunc$surv) %>% 
-  filter(Event_n > 0 | Censored_n >0) %>%
-  # Discrete-time variants
-  mutate(CumulHazard_Disc = -cumsum(log(1-hazard)), Surv_KM_Disc = cumprod(1-hazard)) %>% 
-  mutate(Event_KM_Disc = 1-Surv_KM_Disc) %>% as.data.table()
-haz_dat[, Surv_KM_Disc_prev:= shift(Surv_KM_Disc, n=1, type="lag"), by=list(Group)]
-# - create alternative versions for sanity checks
-haz_dat[Time==Time[1], hazard2 := 1 - Surv_KM_Disc]
-haz_dat[Time>Time[1], hazard2 := 1 - Surv_KM_Disc/Surv_KM_Disc_prev]
 # - conduct sanity checks
-all.equal(haz_dat$hazard, haz_dat$hazard2) # Should be TRUE
-all.equal(haz_dat$Surv_KM, haz_dat$Surv_KM_Disc) # Should be TRUE
-all.equal(haz_dat$CumulHazard, haz_dat$CumulHazard_Disc) # usually FALSE
-plot(km_TFD_noLeftTrunc$time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
-### RESULTS: The discrepancy is very small difference due to estimator method differences
+all.equal(datSurv$Hazard_Actual, datSurv$Hazard_Actual2) # Should be TRUE
+all.equal(datSurv$SurvivalProb_KM, datSurv$SurvivalProb_KM_Disc) # Should be TRUE
+all.equal(km_first$cumhaz, datSurv$CHaz) # Should be TRUE
+all.equal(datSurv$CHaz, datSurv$CHaz2)
+plot(datSurv$CHaz - datSurv$CHaz2, type="b")
+### RESULTS: CHaz2 is very similar to CHaz, derived fundamentally from KM-estimate of S(t), though kept for comparative purposes
 
-# --- Graphing survival and related quantities from fitted KM-model | h(t)
+# - Remove sanity checks
+datSurv[, c("SurvivalProb_KM_Disc","CHaz2", "Hazard_Actual2") := NULL]
 
-# -- Cubic spline for hazard rate
-haz_dat$Spline <- spline_estimation(haz_dat$Time, haz_dat$hazard, 10, 3)
+# - Distributional analyses
+# Hazard rate
+describe(datSurv$Hazard_Actual); hist(datSurv$Hazard_Actual, breaks="FD")
+plot(datSurv$Hazard_Actual, type="b")
+### RESULTS: No apparent shape though increasingly affected by outliers as time increases,
+# so we should put less stock in those right-most results on the x-axis.
 
-# -- Graphing parameters
-vCol2 <- brewer.pal(10, "Paired")[c(10,9)] # for h(t)
-vlabel <- c("Cubic Spline", bquote(~italic(h[0](t))))
+# Event rate
+describe(datSurv$EventRate); hist(datSurv$EventRate, breaks="FD")
+plot(datSurv$EventRate, type="b")
+### RESULTS: Shows a U-shaped distribution, as expected
 
-# - Graph object for shorter time, informed by previous graphs
-(gsurv_ht_TFD_noLeftTrunc <- ggplot(haz_dat, aes(x=Time)) + theme_minimal() +
-                            geom_point(aes(y=hazard, colour=vCol2[2])) + 
-                            geom_line(aes(y=Spline, colour=vCol2[1]), linetype="solid") +
-                            labs(y=bquote(plain(Estimated~italic(h[0](t))*"["*.(mainEventName)*"]: Kaplan-Meier (excl. left-trunc.)")), 
-                                 x=bquote(Discrete~time~italic(t)*" (months) in spell: First spell")) + 
-                            theme(text=element_text(family=chosenFont),legend.position="bottom") + 
-                            scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
-                            scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
-                            scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-                            scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
-### RESULTS: The hazard appears to be near-constant over time, with some notable oscillation over some prediction periods.
-# However, when viewed in tandem with S(t), itself almost a straight downward-sloping line, it makes sense for hazard
-# to be near-flat. The oscillation also seems more pronounced towards later prediction periods than earlier ones.
 
-# -- Save plots
-dpi <- 220 # reset
-ggsave(gsurv_ht_TFD_noLeftTrunc, file=paste0(genFigPath,"FULL SET/gsurv_ht_TFD_noLeftTrunc-", mainEventName,"_Hazard-KaplanMeier-SpellLevel-MultiSpell-LatentComp-excLeftTrunc_Correct.png"),
+
+# --- Graphing the hazard rate h(t)
+
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.2
+smthHazard_Act <- loess(datSurv$Hazard_Actual ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthHazard_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthHazard_Act, newdata=datSurv, se=T)
+
+# - Add smoothed hazard to graphing object
+datSurv[, Hazard_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, Hazard_spline_upper := Hazard_spline + critVal*vPredSmth$se.fit]
+datSurv[, Hazard_spline_lower := Hazard_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol2 <- brewer.pal(10, "Paired")[c(10,9)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] hazard'*~italic(h(t))*' with 95% CI'))
+datSurv[, Group := "1"] # only necessary for aesthetics when using geom_smooth() during plotting
+
+# - Create main graph 
+(gsurv_ht <- ggplot(datSurv[Time<= maxPeriod, ], aes(x=Time, y=Hazard_Actual)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=Hazard_Actual), colour=vCol2[2]) + 
+    geom_line(aes(y=Hazard_Actual), colour=vCol2[2], linetype="solid") + 
+    #geom_smooth(aes(colour=Group, fill=Group), se=T, method="loess", span=sSpan, alpha=0.25, linetype="dotted") +
+    # Smoothed quantity
+    geom_line(aes(y=Hazard_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=Hazard_spline_lower, ymax=Hazard_spline_upper), fill=vCol2[1], alpha=0.25)+
+    # Scales and options
+    labs(y=bquote(plain(Discrete~hazard~~italic(h(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (excl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol2, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
+### RESULTS: The hazard appears to be slightly U-shaped, as expected
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ht, file=paste0(genFigPath, "FULL SET/DiscreteHazard_", mainEventName,"_SpellLevel_FirstSpell-LatentComp_ExclLeftTrunc-AG.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
-# Housekeeping
-rm(dat,gsurv_ht_TFD_noLeftTrunc, km_TFD_noLeftTrunc, km_TFD_noLeftTrunc_tableSummary, haz_dat)
+
+
+# --- Graphing the event density / probability mass function f(t)
+
+# Fitting Locally Estimated Scatterplot Smoothing (LOESS)
+sSpan <- 0.3
+smthEventRate_Act <- loess(datSurv$EventRate ~ datSurv[,list(x=1:.N)]$x, span=sSpan)
+summary(smthEventRate_Act)
+
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth <- predict(smthEventRate_Act, newdata=datSurv, se=T)
+
+# - Add smoothed estimate to graphing object
+datSurv[, EventRate_spline := vPredSmth$fit]
+alpha <- 0.05 # significance level for confidence intervals
+critVal <- qt(1-alpha/2, df=vPredSmth$df) # use t-distribution for small sample sizes (<30)
+datSurv[, EventRate_spline_upper := EventRate_spline + critVal*vPredSmth$se.fit]
+datSurv[, EventRate_spline_lower := EventRate_spline - critVal*vPredSmth$se.fit]
+
+# - Graphing parameters
+vCol3 <- brewer.pal(10, "Paired")[c(4,3)]
+vlabel <- c(bquote('LOESS-smoothed [span: '*.(sSpan)*'] estimate'*~italic(f(t))*' with 95% CI'))
+
+# - Create main graph 
+(gsurv_ft <- ggplot(datSurv[Time <= maxPeriod,], aes(x=Time, y=EventRate)) + theme_minimal() +
+    # Main graph
+    geom_point(aes(y=EventRate), colour=vCol3[2]) + 
+    geom_line(aes(y=EventRate), colour=vCol3[2], linetype="solid") + 
+    # Smoothed quantity
+    geom_line(aes(y=EventRate_spline), colour="black", linetype="dotted") +
+    geom_ribbon(aes(x=Time, ymin=EventRate_spline_lower, ymax=EventRate_spline_upper), fill=vCol3[1], alpha=0.15)+
+    # Scales and options
+    labs(y=bquote(plain(Event~probability~~italic(f(t))*" ["*.(mainEventName)*"]"*":  Kaplan-Meier (excl. left-truncation)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    scale_colour_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_fill_manual(name="", values=vCol3, labels=vlabel) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma) + 
+    guides(colour = "none"))
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ft, file=paste0(genFigPath, "FULL SET/EventProb-", mainEventName,"_SpellLevel_FirstSpell_LatentComp_ExclLeftTrunc.png"),
+       width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
+
+# - Save snapshots to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"datSurv_KM_FirstSpell_ExclLeftTrunc"), datSurv)
+
+# - Housekeeping
+rm(gsurv_Ft, gsurv_ht, gsurv_ft, km_first, median_survival, datSurv, vlabel, datCredit_TFD, 
+   smthEventRate_Act, smthHazard_Act, vPredSmth, dat)
 
 
 
 
-# -- 1.5 Cumulative Lifetime Distribution function on different performance spells
-# Initialize data by one loan in the 9th performance spell that was censored
+
+# -------- 3 Kaplan-Meier analysis across multiple spells, having capped certain spell numbers | Left-truncation included
+
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD_smp2"), tempPath);gc()
+
+# - Initialize data by excluding the 9th performance spell
 dat <- datCredit_PWPST[PerfSpell_Num !=9,]
 
-# --- Fit Cox-model based on [PerfSpell_Num]
+# - Bin [PerfSpell_Num] based on previous analysis (script 4a(i)) towards grouping later spells together
+### NOTE: This variable is created anyways in script 3c(iv), though within the subsampld set
+dat[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
+
+
+# --- Fit Kaplan-Meier (KM) nonparametric model
 km_PerfSpells <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ PerfSpell_Grp, 
                               id=PerfSpell_Key, data=dat)
 summary(km_PerfSpells)$table # overall summary statistics
 ### RESULTS: The 7th and 8th performance spell have no upper limit for their respective median 95th confidence interval
 (km_PerfSpells_tableSummary <- surv_summary(km_PerfSpells)) # Survival table
 
-# --- Graphing survival and related quantities from fitted KM-model | F(t)
 
-# -- Graphing parameters
+# --- Cumulative Lifetime Distribution F(t) = 1 - S(t)
+
+# - Graphing parameters
 vCol <- brewer.pal(8, "Dark2")[1:4] # for F(t)
 
 # Create facet groupings for performance spells
@@ -463,22 +767,21 @@ dat[, PerfSpell_Label := fifelse(PerfSpell_Num <= 3, "Perf. Spells 1-3",
 mainEventName <- "Default"
 chosenFont <- "Cambria"
 dpi <- 150
-# -- Cumulative event/lifetime probability: F(t)=1-S(t)
-(gsurv_Ft_PerfSpells <- ggsurvplot(km_PerfSpells, data=dat, fun="event", conf.int=T, surv.scale="percent",
+
+# - Graphing logic
+gsurv_Ft_PerfSpells <- ggsurvplot(km_PerfSpells, data=dat, fun="event", conf.int=T, surv.scale="percent",
                                 palette=vCol, xlab = bquote(Discrete~time~italic(t)*" (months) in spells"),
                                 ylab = bquote(CLD~"["*.(mainEventName)*"]"*~italic(F(t))*": Kaplan-Meier (By Performance Spells)"),
                                 legend.title="Performance Spells", legend="bottom",
                                 legend.labs=c("Spell 1", "Spell 2","Spell 3", "Spell 4+"),
-                                censor=F, ggtheme = theme_bw(base_family=chosenFont)))
+                                censor=F, ggtheme = theme_bw(base_family=chosenFont))
 
 # - Save graph and object
 ggsave(print(gsurv_Ft_PerfSpells,newpage=F), file=paste0(genFigPath, "FULL SET/gsurv_Ft_PerfSpells-", mainEventName,"_Surv-KaplanMeier-SpellLevel-MultiSpell-LatentComp_Correct.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-pack.ffdf(paste0(genObjPath,"KM_PerfSpells_RiskTable"), km_PerfSpells_tableSummary)
 
 
-# -- 1.4 Discrete baseline hazard function on different performance spells
-# - h(t) | Empirical estimation method
-# create plotting data object
+# --- Discrete baseline hazard function h(t)
+# - Create plotting data object
 haz_dat <- data.table(Time=km_PerfSpells$time, AtRisk_n=km_PerfSpells$n.risk, 
                       Event_n = km_PerfSpells$n.event, Censored_n=km_PerfSpells$n.censor,
                       hazard=km_PerfSpells$n.event/km_PerfSpells$n.risk, 
@@ -502,7 +805,7 @@ plot(haz_dat$Time, haz_dat$CumulHazard - haz_dat$CumulHazard_Disc, type="b")
 
 # --- Graphing survival and related quantities from fitted KM-model | h(t)
 
-# -- Graphing parameters
+# - Graphing parameters
 vCol2_Line <- brewer.pal(8, "Dark2")[c(1:4)] # for h(t) lines
 vCol2_Point <- brewer.pal(8, "Pastel2")[c(1:4)] # for h(t) points
 # Create facet groupings for performance spells
@@ -513,29 +816,42 @@ haz_dat[, GroupLabel := factor(Group, levels = 1:4,
                                  bquote(~italic(h[0](t))*": Performance Spell 3"),
                                  bquote(~italic(h[0](t))*": Performance Spell 4+")))]
 
-# -- Cubic spline for hazard rate
-Spline_1 <- spline_estimation(haz_dat[Group==1,Time], haz_dat[Group==1,hazard], 10, 3)
-Spline_2 <- spline_estimation(haz_dat[Group==2,Time], haz_dat[Group==2,hazard], 10, 3)
-Spline_3 <- spline_estimation(haz_dat[Group==3,Time], haz_dat[Group==3,hazard], 10, 3)
-Spline_4 <- spline_estimation(haz_dat[Group==4,Time], haz_dat[Group==4,hazard], 10, 3)
-haz_dat[Group==1, `:=` (Spline=Spline_1, colLine=vCol2_Line[1], colPoint=vCol2_Point[1])]
-haz_dat[Group==2, `:=` (Spline=Spline_2, colLine=vCol2_Line[2], colPoint=vCol2_Point[2])]
-haz_dat[Group==3, `:=` (Spline=Spline_3, colLine=vCol2_Line[3], colPoint=vCol2_Point[3])]
-haz_dat[Group==4, `:=` (Spline=Spline_4, colLine=vCol2_Line[4], colPoint=vCol2_Point[4])]
+# - Fitting natural cubic splines
+sDf1 <- 5; sDf2 <- 4; sDf3 <- 5; sDf4 <- 5;
+smthHazard_Act1 <- lm(haz_dat[Group==1,hazard] ~ ns(haz_dat[Group==1,Time],df=sDf1))
+smthHazard_Act2 <- lm(haz_dat[Group==2,hazard] ~ ns(haz_dat[Group==2,Time],df=sDf2))
+smthHazard_Act3 <- lm(haz_dat[Group==3,hazard] ~ ns(haz_dat[Group==3,Time],df=sDf3))
+smthHazard_Act4 <- lm(haz_dat[Group==4,hazard] ~ ns(haz_dat[Group==4,Time],df=sDf4))
+summary(smthHazard_Act1); summary(smthHazard_Act2)
+summary(smthHazard_Act3); summary(smthHazard_Act4)
+plot(predict(smthHazard_Act1, newdata=data.table(stop=unique(haz_dat[Group==1, Time]))))
+plot(predict(smthHazard_Act2, newdata=data.table(stop=unique(haz_dat[Group==2, Time]))))
+plot(predict(smthHazard_Act3, newdata=data.table(stop=unique(haz_dat[Group==3, Time]))))
+plot(predict(smthHazard_Act4, newdata=data.table(stop=unique(haz_dat[Group==4, Time]))))
+
+# - Render predictions
+haz_dat[Group==1, Spline := predict(smthHazard_Act1, newdata=data.table(stop=unique(haz_dat[Group==1, Time])))]
+haz_dat[Group==2, Spline := predict(smthHazard_Act2, newdata=data.table(stop=unique(haz_dat[Group==2, Time])))]
+haz_dat[Group==3, Spline := predict(smthHazard_Act3, newdata=data.table(stop=unique(haz_dat[Group==3, Time])))]
+haz_dat[Group==4, Spline := predict(smthHazard_Act4, newdata=data.table(stop=unique(haz_dat[Group==4, Time])))]
+
+# - Aesthetic engineering
+vLabel <- c("1"=paste0("Group 1 natural spline (df=", sDf1, ")"), "2"=paste0("Group 2 natural spline (df=", sDf2, ")"),
+            "3"=paste0("Group 3 natural spline (df=", sDf3, ")"), "4"=paste0("Group 1 natural spline (df=", sDf4, ")"))
 
 # - Graph object for shorter time, informed by previous graphs
 (gsurv_ht_PerfSpell <- ggplot(haz_dat, aes(x=Time)) + theme_minimal() +
-                              geom_point(aes(y=hazard, colour=colPoint)) + 
-                              geom_line(aes(y=Spline, colour=colLine), linetype="solid") +
-                              labs(y=bquote(plain(Estimated~hazard*" ["*.(mainEventName)*"]"*~italic(h[0](t))*":  Kaplan-Meier (spell-level)")), 
-                                   x=bquote(Discrete~time~italic(t)*" (months) in each spell: Single-spell")) + 
-                              theme(text=element_text(family=chosenFont),legend.position="bottom",
-                                    strip.background=element_rect(fill="snow2", colour="snow2"),
-                                    strip.text=element_text(size=8, colour="gray50")) +
-                              facet_wrap(~GroupLabel, scales="free", labeller=label_parsed) + 
-                              scale_colour_identity() +
-                              scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-                              scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
+    labs(y=bquote(plain(Estimated~baseline~hazard*" ["*.(mainEventName)*"]"*~italic(h[0](t))*":  Kaplan-Meier (spell-level)")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in each spell: Single-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom",
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50")) +
+    geom_point(aes(y=hazard, colour=Group), alpha=0.25) + 
+    geom_line(aes(y=Spline, colour=Group), linetype="solid") +
+    facet_wrap(~GroupLabel, scales="free", labeller=label_parsed) + 
+    scale_colour_manual(name="", values=vCol2_Line, labels=vLabel) +
+    scale_y_continuous(breaks=breaks_pretty(), label=comma) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma))
 ### RESULTS:  As the performance spell increase, the volatility in the hazard rate increases accordingly. Note that
 ###           Spell 5 on wards seem to peak near the end of their life time, while the spells 2-4 peak at the start of the 
 ###           life time (Spell 1 would also have a similar display as the latter group if not for the left-truncated spells).
@@ -546,36 +862,6 @@ ggsave(gsurv_ht_PerfSpell, file=paste0(genFigPath,"FULL SET/gsurv_ht_PerfSpell-"
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 # Housekeeping
-rm(dat, vlabel, datCredit_PWPST, datCredit_TFD, Facet_lbl, gsurv_Ft_PerfSpells, gsurv_ht_PerfSpell, haz_dat, km_PerfSpells, km_PerfSpells_tableSummary)
+rm(dat, vlabel, datCredit_PWPST, datCredit_TFD, Facet_lbl, gsurv_Ft_PerfSpells, gsurv_ht_PerfSpell, haz_dat, km_PerfSpells, 
+   km_PerfSpells_tableSummary, smthHazard_Act1, smthHazard_Act2, smthHazard_Act3, smthHazard_Act4)
 
-# Save Datasets with new changes
-# Load datasets
-if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
-if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
-if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), tempPath);gc()
-if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
-
-# Reduce months to 300
-# Load datasets
-datCredit_train_TFD <- subset(datCredit_train_TFD, End <= 300)
-datCredit_valid_TFD <- subset(datCredit_valid_TFD, End <= 300)
-datCredit_train_PWPST <- subset(datCredit_train_PWPST, End <= 300)
-datCredit_valid_PWPST <- subset(datCredit_valid_PWPST, End <= 300)
-
-# Load datasets
-datCredit_train_TFD[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-datCredit_valid_TFD[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-datCredit_train_PWPST[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-datCredit_valid_PWPST[,PerfSpell_Grp := fifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
-
-# --- 5.2 Saving the dataset amendments scheme
-# - Training dataset
-pack.ffdf(paste0(genPath,"creditdata_train_TFD"), datCredit_train_TFD)
-pack.ffdf(paste0(genPath,"creditdata_train_PWPST"), datCredit_train_PWPST)
-
-# - Validation dataset
-pack.ffdf(paste0(genPath,"creditdata_valid_TFD"), datCredit_valid_TFD)
-pack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), datCredit_valid_PWPST)
-
-# Housekeeping
-rm(datCredit_train_PWPST, datCredit_train_TFD, datCredit_valid_PWPST, datCredit_valid_TFD)

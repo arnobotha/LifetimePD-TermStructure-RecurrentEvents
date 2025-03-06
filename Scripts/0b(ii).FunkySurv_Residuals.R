@@ -62,7 +62,7 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), file
                             fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
                             dpi=350, chosenFont="Cambria") {
   # - Testing conditions
-  # cox <- model; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
+  # cox <- cox_TFD; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
   # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
   
   # --- Preliminaries
@@ -148,6 +148,43 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), file
   return(retOb)
 }
 
+
+
+
+GoF_CoxSnell_KaplanMeier <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), fileName=NA,
+                            fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
+                            dpi=350, chosenFont="Cambria") {
+  # - Testing conditions
+  # cox <- cox_TFD; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
+  # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
+  # fldLstRowInd="PerfSpell_Exit_Ind"; fldEventInd="Default_Ind"
+  
+  # --- Preliminaries
+  
+  # - Sanity checks
+  if (GraphInd & is.na(fileName)) stop("File name not provided. Exiting ..")
+  
+  # - Data preparation
+  # Subset last row per performing spell for Goodness-of-Fit (GoF) purposes
+  datLstRow <- copy(data_train[get(fldLstRowInd)==1,])
+  vLstRow_Events <- datLstRow[, get(fldEventInd)]
+  
+  
+  # --- Calculate KM-based B-statistic (1-KS)
+  
+  # - Calculate adjusted Cox-Snell Residuals
+  vCS <- calc_CoxSnell_Adj(cox, vIDs=data_train[[fldSpellID]], vEvents=vLstRow_Events)
+  
+  # - Fit Kaplan-Meier curve using residuals as input
+  KM_fit <- survfit(Surv(vCS, vLstRow_Events) ~ 1)
+  # Mills2012 (ch. 7) and Ansin2015 plotting approach
+  vSurv <- KM_fit$surv[KM_fit$time<20]
+  vTime <- KM_fit$time[KM_fit$time<20]
+  plot(vTime, vSurv, xlim=range(vTime), ylim=c(0,1), type="l")
+  t0 <- seq(0,max(vTime), 0.05)
+  lines(t0, exp(-t0), col="red", type="b")
+       
+}
 
 
 

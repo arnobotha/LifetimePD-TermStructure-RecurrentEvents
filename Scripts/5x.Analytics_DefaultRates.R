@@ -1,5 +1,5 @@
 # ========================= INVESTIGATING SURVIVALROC() ==========================
-# As a poof of concept, we shall compare various functions from various packages
+# As a proof of concept, we shall compare various functions from various packages
 # in conducting time-dependent ROC-analyses on the same fitted Cox regression model,
 # having used the prepared credit data
 # --------------------------------------------------------------------------------
@@ -43,13 +43,10 @@ if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
 if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_valid_PWPST"), tempPath);gc()
-
-# - Feature engineering
-# NOTE: This will be moved to script 3c in due time
-datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_train_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-datCredit_valid_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
+setDT(datCredit_train_TFD, key="PerfSpell_Key")
+setDT(datCredit_valid_TFD, key="PerfSpell_Key")
+setDT(datCredit_train_PWPST, key="PerfSpell_Key")
+setDT(datCredit_valid_PWPST, key="PerfSpell_Key")
 
 
 
@@ -61,8 +58,7 @@ datCredit_valid_PWPST[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir
 # - Initialize variables | AB-variant
 vecVars_TFD <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
                  "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-                 "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-                 "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
+                 "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", "M_DTI_Growth","M_Inflation_Growth",
                  "M_Inflation_Growth_6", "M_RealIncome_Growth")
 
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
@@ -96,88 +92,31 @@ summary(cox_PWP)
 
 # ------ Time to first Default (TFD) definition
 
-
 # --- Preliminaries
-# - Define cohort and filter data
-sCohort <- "2007-11-30"
-vSpellKeys <- datCredit_valid_TFD[Date == as.Date(sCohort) & Start == 0, PerfSpell_Key]
-datCohort <- datCredit_valid_TFD[PerfSpell_Key %in% vSpellKeys]
-check1 <- subset(datCohort, PerfSpell_Key %in% unique(datCohort[,PerfSpell_Key])[1],
-                 select=c("LoanID","PerfSpell_Key", "PerfSpell_Num", "TimeInPerfSpell","PerfSpell_Age", "PerfSpellResol_Type_Hist"))
-describe(datCohort[PerfSpell_Counter==1, PerfSpell_Age]); hist(datCohort[PerfSpell_Counter==1, PerfSpell_Age], breaks="FD")
+numSpellKeys <- length(unique(datCredit_valid_TFD$PerfSpell_Key))
+vSpellKeys <- unique(datCredit_valid_TFD$PerfSpell_Key)
 
 
 
-# --- Fit Kaplan-Meier (KM) nonparametric model towards calculating "Actual Hazard"
-# Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
-# All competing events preclude the main event from happening and are therefore considered as censored
-# ID is set as the spell key, with no stratification
-km_TFD <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                  id=LoanID, data=datCredit_train_TFD)
-summary(km_TFD)$table # overall summary statistics
-### RESULTS: 62k events, with no median survival probability
-(km_TFD_survFitSummary <- surv_summary(km_TFD)) # Survival table
+# --- Iterate across spell keys and calculate survival-related quantities using survQuants()
+ptm <- proc.time() #IGNORE: for computation time calculation
+#cl.port <- makeCluster(round(6)); registerDoParallel(cl.port) # multi-threading setup
+cat("New Job: Estimating various survival quantities at the loan-period level for a given dataset ..",
+    file=paste0(genPath,"survQuants_log.txt"), append=F)
 
-# - Create hazard table from KM-object towards creating "Actual Hazard"
-datHaz <- data.table(Time = km_TFD$time, AtRisk_n = km_TFD$n.risk, Event_n = km_TFD$n.event, Censored_n=km_TFD$n.censor,
-                     Hazard_Actual = km_TFD$n.event/km_TFD$n.risk, Surv_KM = km_TFD$surv) %>% 
-  mutate(CHaz = cumsum(Hazard_Actual),
-         CHaz2 = -log(km_TFD$surv))  %>% # Very similar to CHaz, derived fundamentally from KM-estimate, kept for comparative purposes
-  filter(Event_n > 0 | Censored_n >0)
-describe(datHaz$Hazard_Actual); hist(datHaz$Hazard_Actual, breaks="FD")
-plot(datHaz[Time <= sMaxSpellAge, Hazard_Actual], type="b") # restrict time just for quick plotting purpose
-### RESULTS: Functional shape exhibits typical U-shape, as expected.
+datSurv_TFD <- foreach(j=1:numSpellKeys, .combine='rbind', .verbose=F, .inorder=T,
+                   .packages=c('data.table', 'survival'), .export=c('survQuants')) %do%
+  { # ----------------- Start of Inner Loop -----------------
+    # - Testing conditions
+    # j <- 1
+    prepDat <- survQuants(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]), coxGiven = cox_TFD,
+                          it=j, numKeys=numSpellKeys, genPath=genPath)
+  } # ----------------- End of Inner Loop -----------------
+#stopCluster(cl.port); 
+proc.time() - ptm; # 54h
 
-# - Plot probability mass function f(t) = h(t).S(t-1) in discrete-time context
-datHaz[, EventProb := Hazard_Actual*shift(Surv_KM, n=1, fill=1)]
-plot(datHaz[Time <= sMaxSpellAge, EventProb], type="b")
-
-
-# --- Calculate fundamental quantities and enrich main data object accordingly
-
-
-# - Fuse hazards with main dataset
-#datCohort <- merge(datCohort, datHaz[, list(Time, Hazard_Actual, CHaz)], by.x="End", by.y="Time", all.x=T)
-
-# - Obtain both cumulative and incremental baseline hazard functions H_0(t) and h_0(t) from Cox PH model
-# NOTE: Uses Efron's method to obtain baseline hazard whereby risk sets are adjusted based on number of tied events
-datSurv_TFD <- survfit(cox_TFD, newdata=datCredit_valid_TFD, id=LoanID)
-
-datCHaz <- basehaz(cox_TFD, centered=F) %>% as.data.table() # ensure Cumulative Hazard corresponds to unadjusted (baseline) subjects
-
-# - Obtain survival curve for new data
-
-
-# Initialize interpolated baseline hazard
-vBaselineHaz <- numeric(length(datCHaz$time))
-
-# Loop through each time point to perform interpolation
-for (i in seq_along(datCHaz$time)) {
-  # i <- 889
-  # Get list of indices where conditions hold true
-  lower_index <- which(datCHaz$time <= datCHaz$time[i])
-  upper_index <- which(datCHaz$time > datCHaz$time[i])
-  
-  # Apply min and max respectively on lower and upper indices towards getting bounds
-  if (length(lower_index) > 1) lower_index <- max(lower_index) else lower_index <- NA
-  if (length(upper_index) > 1)  upper_index <- min(upper_index) else upper_index <- NA
-  
-  if (is.na(lower_index)) {
-    vBaselineHaz[i] <- datCHaz$hazard[1]
-  } else if (is.na(upper_index)) {
-    vBaselineHaz[i] <- datCHaz$hazard[length(datCHaz$hazard)]
-  } else {
-    t1 <- datCHaz$time[lower_index]
-    t2 <- datCHaz$time[upper_index]
-    h1 <- datCHaz$hazard[lower_index]
-    h2 <- datCHaz$hazard[upper_index]
-    
-    # Interpolate linearly
-    vBaselineHaz[i] <- h1 + ( (h2 - h1) * (datCHaz$time[i] - t1) / (t2 - t1) )
-  }
-}
-
-datCHaz[, BaselineHaz := vBaselineHaz]
+# - Save snapshots to disk (zip) for quick disk-based retrieval later
+pack.ffdf(paste0(genPath,"datSurv_TFD"), datSurv_TFD)
 
 
 
@@ -185,117 +124,139 @@ datCHaz[, BaselineHaz := vBaselineHaz]
 
 
 
+### SCRATCH -----------------------------------
+test <- subset(datCredit_valid_TFD, LoanID %in% unique(datCredit_valid_TFD[PerfSpell_Age > 5 & PerfSpell_Num > 2,LoanID])[1:3],
+               select=c("LoanID", "Date", vecVars_TFD, "PerfSpell_Key", "PerfSpell_Num","PerfSpell_Counter","Start", "End", "Default_Ind"))
+numSpellKeys <- length(unique(test$PerfSpell_Key))
+vSpellKeys <- unique(test$PerfSpell_Key)
+j <- 1
+# Compare outputs
+(prepDat <- survQuants(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]), coxGiven = cox_TFD,
+                      it=j, numKeys=numSpellKeys, genPath=genPath))
 
-### AB [2024-12-18]: The code below is still very messy. This is just proof/disproof of concepts in trying to untangle this problem
-
-
-# --- Score data using Cox PH model 
-# We want to focus on the discrete-time hazard as the conditional probability of defaulting at t in 1 month intervals,
-# having survived up to time t
-datCohort[, RiskScore := predict(cox_TFD, newdata = datCohort, type = "risk", id=PerfSpell_Key)]
-
-# - Obtain unique event times for those cases that experienced the event
-#vEventTimes <- sort(unique(datCohort$End[datCohort$Default_Ind==1]))
-vEventTimes <- sort(unique(datCohort$End))
-
-# - Initialize data object for baseline hazard calculation
-datEventTimes_Haz <- data.table(time = vEventTimes, n_event = numeric(length(vEventTimes)),
-                                total_risk = numeric(length(vEventTimes))
-)
-
-# - Calculate number of events and total risk scores for each ordered failure time
-for (i in seq_along(vEventTimes)) {
-  # current event time t
-  t <- vEventTimes[i]
-  # Number of events
-  datEventTimes_Haz$n_event[i] <- sum(datCohort$End == t & datCohort$Default_Ind == 1)
-  # Get indices of those at risk at current event time t
-  vAtRisk <- which(datCohort$Start <= t & datCohort$End > t)
-  
-  # Get Total risk scores for subjects at risk at t
-  datEventTimes_Haz$total_risk[i] <- sum(sim_data$RiskScore[vAtRisk])
-}
+prepDat2 <- survQuants.data(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]),
+                            
+                      it=j, numKeys=numSpellKeys, genPath=genPath)
 
 
-# - Match time points to baseline hazard at a specific times
-datCohort <- merge(datCohort, datCHaz[,list(End=time, CHaz_CoxPH = hazard, BaselineHaz)],
-                   by="End", all.x=T)
+### SCRATCH-END -----------------------------------
 
 
+# --- Graphing the event density / probability mass function f(t)
 
-datCohort[, ]
-# Obtain survival probability  as a fundamental quantity
-datCohort[, Predicted_SurvProb := exp(-CHaz), by=list(PerfSpell_Key)]
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datSurv_TFD')) unpack.ffdf(paste0(genPath,"datSurv_TFD"), tempPath);gc()
+if (!exists('datSurv')) unpack.ffdf(paste0(genPath,"datSurv_KM_FirstSpell"), tempPath);gc()
+setDT(datSurv_TFD, key="End")
 
-# - Obtain incremental baseline hazards h_0 from cumulative baseline hazard H_0
-# Note: h_0(t) is the derivative of H_0(t) over t. In obtaining this numerically,
-# we can use finite (forward) differencing as an approximation as H_0(t_{i+1}) - H_0(t_i) / (t_{i+1} - t_i)
-datCohort[, Hazard_Predicted := c(diff(CHaz_CoxPH),NA), by=list(PerfSpell_Key)]
-#datCohort[, Hazard_Predicted2 := BaselineHaz * Risk_Score] # Wrong definition somehow
-# Conduct distributional analyses
-describe(datCohort$Predicted_SurvProb); hist(datCohort$Predicted_SurvProb)
-describe(datCohort$Hazard_Predicted); hist(datCohort$Hazard_Predicted)
-describe(datCohort$Hazard_Actual); hist(datCohort$Hazard_Actual)
-plot(datCohort[PerfSpell_Age<=300, Hazard_Actual], type="b")
-#describe(datCohort$Hazard_Predicted2); hist(datCohort$Hazard_Predicted2)
-### RESULTS: Different distributions of hazard functions
+# - Determine population average survival and event rate across loans per time period
+datAggr <- datSurv_TFD[, list(EventRate = mean(EventProb,na.rm=T), Freq=.N),by=list(End)]
+plot(datAggr[End <= sMaxSpellAge, End], datAggr[End <= sMaxSpellAge, EventRate], type="b")
 
-# --- Data filtration and aggregation
+# - Fitting natural cubic regression splines
+sDf_Act <- 10; sDf_Exp <- 10
+smthEventRate_Act <- lm(EventRate ~ ns(Time, df=sDf_Act), data=datSurv[Time <= sMaxSpellAge,])
+smthEventRate_Exp <- lm(EventRate ~ ns(End, df=sDf_Exp), data=datAggr[End <= sMaxSpellAge])
+summary(smthEventRate_Act); summary(smthEventRate_Exp)
 
-# Filter for outlying spell ages, as determined in earlier analyses ()
-datCohort_sub <- datCohort %>% subset(PerfSpell_Age <= sMaxSpellAge)
-percent(datCohort_sub[, .N] / datCohort[,.N], accuracy=0.01)
-### RESULTS: Still 100% of data
+# - Render predictions based on fitted smoother, with standard errors for confidence intervals
+vPredSmth_Act <- predict(smthEventRate_Act, newdata=datSurv, se=T)
+vPredSmth_Exp <- predict(smthEventRate_Exp, newdata=datAggr, se=T)
 
-# - Get unique event times, 
-vEventTimes <- unique(datCohort_sub[, End])
+# - Add smoothed estimate to graphing object
+datSurv[, EventRate_spline := vPredSmth_Act$fit]
+datAggr[, EventRate_spline := vPredSmth_Exp$fit]
 
-
-# --- Fitting regression splines as way to summarise point-estimates at each event time t
-# - Fit cubic regression splines to actual hazard for graphing purposes
-sKnots_Act <- 10
-splHazard_Act <- lm(Hazard_Actual ~ bs(Hazard_Actual, knots=sKnots_Act, degree=3), data=datCohort)
-summary(splHazard_Act)
-datCohort[!is.na(Hazard_Actual),, Hazard_Actual_Spline := predict(splHazard_Act, newx=Hazard_Actual)]
-
-# - Fit cubic regression splines to expected hazard for graphing purposes
-sKnots_Exp <- 10
-splHazard_Exp <- lm(Hazard_Predicted ~ bs(Hazard_Predicted, knots=sKnots_Exp, degree=3), data=datCohort)
-summary(splHazard_Exp)
-datCohort[!is.na(Hazard_Predicted), Hazard_Predicted_Spline := predict(splHazard_Exp, newx=Hazard_Predicted)]
-
-
-# --- Data aggregation and graphing preparation
-# - Select and pivot dataset to long format for graphing purposes
-datAggr <- subset(datCohort, select=c ("PerfSpell_Key", "End", "PerfSpellResol_Type_Hist", "PerfSpell_Age",
-                                "CHaz", "CHaz_CoxPH", "Hazard_Actual", "BaselineHaz", "Hazard_Predicted",
-                                "Hazard_Actual_Spline", "Hazard_Predicted_Spline")) %>% 
-  setorder(PerfSpell_Key, End) %>%
-  pivot_longer(cols=!(c("PerfSpell_Key", "End", "PerfSpellResol_Type_Hist", "PerfSpell_Age")), 
-               names_to = "Type", values_to = "Value") %>% as.data.table()
-check2 <- subset(datAggr, PerfSpell_Key %in% unique(datCohort[,PerfSpell_Key])[1])
+# - Create graphing data object
+datGraph <- rbind(datSurv[,list(Time, EventRate, Type="a_Actual")],
+                  datSurv[,list(Time, EventRate=EventRate_spline, Type="b_Actual_spline")],
+                  datAggr[, list(Time=End, EventRate, Type="c_Expected")],
+                  datAggr[, list(Time=End, EventRate=EventRate_spline, Type="d_Expected_spline")]
+                  )
 
 # - Create different groupings for graphing purposes
-datAggr[, ColourVar1 := paste0(Type, "_Line")]
-datAggr[, ColourVar2 := paste0(Type, "_Point")]
+datGraph[Type %in% c("a_Actual","c_Expected"), EventRatePoint := EventRate ]
+datGraph[Type %in% c("b_Actual_spline","d_Expected_spline"), EventRateLine := EventRate ]
 
-
-# --- Creating the main graph
-
-# - Graphing parameters
-vSelected <- c("Hazard_Actual", "Hazard_Actual_Spline", "Hazard_Predicted", "Hazard_Predicted_Spline")
+# - Aesthetic engineering
 vCol_Point <- brewer.pal(8, "Pastel1")[c(1,2)]
 vCol_Line <- brewer.pal(8, "Set1")[c(1,2)]
 mainEventName <- "Default"
-chosenFont <- "Cambria"
-vLabel <- c("Actual Probability", "Actual Probability Cubic Spline")
-vLabel2 <- c("A_Actual_Line"="Spline: Actual", "B_Predicted_Line"="Spline: Scored",
-             "A_Actual_Point"="Case: Actual", "B_Predicted_Point"="Case: Scored")
-vValues <- c("A_Actual_Line"=vCol_Line[1], "B_Predicted_Line"=vCol_Line[2],
-             "A_Actual_Point"=vCol_Point[1], "B_Predicted_Point"=vCol_Point[2])
 
-ggplot(subset(datAggr, Type %in% vSelected & PerfSpell_Age <= 300), aes(y=Value, x=End, group=Type)) + theme_minimal() +
-  geom_point(aes(y=Value, color=ColourVar2))
+# - Graphing parameters
+vCol <- brewer.pal(10, "Paired")[c(3,4,1,2)]
+vLabel2 <- c("b_Actual_spline"=paste0("Actual natural spline (df=",sDf_Act,")"), 
+             "d_Expected_spline"=paste0("Scored natural spline (df=", sDf_Exp,")"),
+             "a_Actual"="Actual", "c_Expected"="Scored")
+vSize <- c(0.5,0.5,0.5,0.5)
+vLineType <- c("dashed", "solid", "dashed", "solid")
+
+# - Create main graph 
+(gsurv_ft <- ggplot(datGraph[Time <= sMaxSpellAge,], aes(x=Time, y=EventRate, group=Type)) + theme_minimal() +
+    labs(y=bquote(plain(Event~probability~~italic(f(t))*" ["*.(mainEventName)*"]"*"")), 
+         x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
+    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    # Main graph
+    geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1) + 
+    geom_line(aes(y=EventRateLine, colour=Type, linetype=Type, linewidth=Type)) + 
+    # Scales and options
+    scale_colour_manual(name="", values=vCol, labels=vLabel2) + 
+    scale_linewidth_manual(name="", values=vSize, labels=vLabel2) + 
+    scale_linetype_manual(name="", values=vLineType, labels=vLabel2) + 
+    scale_shape_discrete(name="", labels=vLabel2) + 
+    scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma)
+  )
+
+# - Save plot
+dpi <- 180 # reset
+ggsave(gsurv_ft, file=paste0(genFigPath, "TFD/EventProb-", mainEventName,"_SpellLevel_FirstSpell_ActVsExp.png"),
+       width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 
+
+
+
+### AB: First test concept before merging back
+
+# - Merge results back to main credit dataset
+datCredit_valid_TFD <- merge(datCredit_valid_TFD, datSurv, by=c("PerfSpell_Key", "End"), all.x=T) %>%
+  relocate(End, CHaz, Survival, Hazard, EventProb, .after=Start)
+setDT(datCredit_valid_TFD, key=c("LoanID","Date"))
+
+
+
+
+
+# ---- SCRATCH
+
+ptm <- proc.time() #IGNORE: for computation time calculation
+survFit_pred <- survfit(cox_TFD, centered=F, newdata=datCredit_valid_TFD, id=PerfSpell_Key)
+proc.time() - ptm # 86m
+
+
+
+vOnes <- which(survFit_pred$time == 1)
+matSurv <- matrix(NA, nrow=max(survFit_pred$time), ncol=length(vOnes))
+k <-2
+t <- 1
+for (i in 1:length(survFit_pred$time)) {
+  if (i < vOnes[k] ) {
+    matSurv[t,k-1] <- survFit_pred$surv[i]
+    t <- t+1
+  } else {
+    k <- k+1
+    t <- 1
+    matSurv[t,k-1] <- survFit_pred$surv[i]
+  }
+}
+
+
+testCase1 <- matSurv[,1]; testCase1 <- testCase1[!is.na(testCase1)]
+plot(testCase1)
+testCase2 <- datSurv_TFD[PerfSpell_Key==unique(datCredit_valid_TFD$PerfSpell_Key)[1],]
+plot(testCase2$Survival)
+### RESULTS: Not exactly the same
+
+# Test event density (average) and compare
 

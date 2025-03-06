@@ -45,6 +45,8 @@ vecChange <- function(mat,Remove=FALSE,Add=FALSE){
   return(m)
 }
 
+
+
 # --- Function to detect significant correlations (abs(cor) > 0.6) between vectors.
 # Input:  [data], Dataset containing the variables in varlist to dertermine correlations.
 #         [varlist], list of variable names to determine correlations.
@@ -148,6 +150,7 @@ concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_K
 }
 
 
+
 # --- Function to calcualte the complement of the KS test statistic "B-statistic"
 # Inputs: [formula]: Cox regression formula object; [data_train]: training data
 #         [fldSpellID]: Field name of spell-level ID; [vEvents]: spell-level vector of event indicators
@@ -175,6 +178,7 @@ calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, 
   bStat <- 1 - round(suppressWarnings(ks.test(vCS,vExp))$statistic,4)
   return(bStat)
 }
+
 
 
 # --- Function to extract the B-statistic from a range of models built on a list of variables based on a time definition.
@@ -275,7 +279,211 @@ csTable <- function(data_train, variables, TimeDef="TFD", seedVal=1, numIt=5,
 
 
 
+# --- Function to calculate various survival-related quantities for a given loan history
+# Input:    [datGiven]: given loan history; [coxGiven]: fitted cox PH model; [it]: current iteration index; 
+#           [numKeys]: total keys; [genPath]: path of reporting log
+# Output:   Survival probability, cumulative hazard, hazard, and event probability
+survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
+  # datGiven <- subset(test,PerfSpell_Key == vSpellKeys[2]); coxGiven <- cox_TFD
+  # it=1; numKeys <- numSpellKeys
+  
+  # - Compute individual survival curve from fitted Cox model
+  survFit_pred <- survfit(coxGiven, centered=F, newdata=datGiven, id=PerfSpell_Key)
+  
+  cat("\n\t", it, "of", numKeys, "| Estimation completed for spell key:", unique(datGiven$PerfSpell_Key),
+      file=paste0(genPath,"survQuants_log.txt"), append=T)
+  
+  datSurv <- data.table(PerfSpell_Key = unique(datGiven$PerfSpell_Key), End=datGiven$End, # composite key
+                        CHaz=survFit_pred$cumhaz, #RiskSetSize=survFit_pred$n.risk,
+                        #NumEvents=survFit_pred$n.event, NumCensored=survFit_pred$n.censor,
+                        Survival=round(survFit_pred$surv,digits=15))
+  # plot(survFit_pred)
+  
+  # - Approximate baseline hazard h_0(t) from cumulative baseline hazard H_0(t)
+  datSurv[, Hazard := c(datSurv$CHaz[1]/datSurv$End[1], diff(datSurv$CHaz) / diff(datSurv$End))]
+  #plot(datSurv[, Time], datSurv[, Hazard_base], type="b") # mean survival probability over time
+  datSurv[, EventProb := Hazard * shift(Survival,n=1,type="lag",fill=1)] # f(t|X) = S(t-1|X) . h(t|X)
+  
+  # - Render survival predictions: risk scores exp(\beta . x) and calculate hazard and survival probability
+  #datSurv[, RiskScore := predict(coxGiven, newdata=datGiven, type="risk")]
+  #datSurv[, Hazard := Hazard_base * RiskScore] # by definition of Cox regression model
+  
+  return(datSurv)
+}
+
+
+# --- Function to calculate various survival-related quantities for a given loan history
+# Input:    [datGiven]: given loan history; [coxGiven]: fitted cox PH model; [it]: current iteration index; 
+#           [numKeys]: total keys; [genPath]: path of reporting log
+# Output:   Survival probability, cumulative hazard, hazard, and event probability
+survQuants.data <- function(datGiven, vars, beta, vStartTimes, vStopTimes, vStatus, id, centered = F, datBaselineHaz,
+                            it=1, numKeys, genPath="") {
+  # datGiven <- subset(test,PerfSpell_Key == vSpellKeys[2]); coxGiven <- cox_TFD
+  # it=1; numKeys <- numSpellKeys; centered <- T
+  # vars <- vecVars_TFD; beta <- cox_TFD$coefficients
+  #X <- as.matrix(datGiven[, mget(vars)])
+  
+  # Compute linear predictors and risk scores, depending on centering
+  if (centered==F) {
+    lp <- (X %*% beta)
+  } else {
+    lp_sample <- colMeans(X) %*% beta # assuming only numeric covariates; 0 for categorical
+    lp_indiv <- (X %*% beta)
+    lp <- lp_indiv - as.numeric(lp_sample)
+  }
+  risk_scores <- exp(lp)  # exp(Xβ)
+  
+  # --- Calculate baseline cumulative hazard | Breslow estimate
+  
+  ### AB: Draft further from here, by removing the dependence on coxGiven.
+  # X <- as.matrix(datCredit_train_TFD[, mget(vars)])
+  datHaz <- baseHaz.coxph.data(X=as.matrix(datCredit_train_TFD[, mget(vars)]), beta=beta, vStartTimes=datCredit_train_TFD$Start, vStopTimes=datCredit_train_TFD$End, 
+                               vStatus=datCredit_train_TFD$Default_Ind, id=datCredit_train_TFD$PerfSpell_Key, centered=F, ties="Breslow")
+  datHaz[1:6,]
+  
+  # - Compute individual survival curve from fitted Cox model
+  survFit_pred <- survfit(coxGiven, centered=F, newdata=datGiven, id=PerfSpell_Key)
+  
+  cat("\n\t", it, "of", numKeys, "| Estimation completed for spell key:", unique(datGiven$PerfSpell_Key),
+      file=paste0(genPath,"survQuants_log.txt"), append=T)
+  
+  (datSurv <- data.table(PerfSpell_Key = unique(datGiven$PerfSpell_Key), End=datGiven$End, # composite key
+                        CHaz=survFit_pred$cumhaz, RiskSetSize=survFit_pred$n.risk,
+                        NumEvents=survFit_pred$n.event, NumCensored=survFit_pred$n.censor,
+                        Survival=round(survFit_pred$surv,digits=15)))
+  # plot(survFit_pred)
+  
+  # - Approximate baseline hazard h_0(t) from cumulative baseline hazard H_0(t)
+  datSurv[, Hazard := c(datSurv$CHaz[1]/datSurv$End[1], diff(datSurv$CHaz) / diff(datSurv$End))]
+  #plot(datSurv[, Time], datSurv[, Hazard_base], type="b") # mean survival probability over time
+  datSurv[, EventProb := Hazard * shift(Survival,n=1,type="lag",fill=1)] # f(t|X) = S(t-1|X) . h(t|X)
+  
+  # - Render survival predictions: risk scores exp(\beta . x) and calculate hazard and survival probability
+  #datSurv[, RiskScore := predict(coxGiven, newdata=datGiven, type="risk")]
+  #datSurv[, Hazard := Hazard_base * RiskScore] # by definition of Cox regression model
+  
+  return(datSurv)
+}
+
+
+baseHaz.coxph.data <- function(X, beta, vStartTimes, vStopTimes, vStatus, id, centered = F, ties="Breslow",
+                               vStrata=NULL) {
+  # - Testing conditions
+  # X=as.matrix(datCredit_train_TFD[, mget(vars)]); beta <- cox_TFD$coefficients
+  # X=as.matrix(datGiven[, mget(vars)])
+  # vStartTimes=datCredit_train_TFD$Start; vStopTimes=datCredit_train_TFD$End
+  # vStatus=datCredit_train_TFD$Default_Ind; id=datCredit_train_TFD$PerfSpell_Key; centered=F; ties="Breslow"; vStrata=NULL
+  
+  # Compute linear predictors and risk scores, depending on centering
+  if (centered==F) {
+    lp <- (X %*% beta)
+  } else {
+    lp_sample <- colMeans(X) %*% beta # assuming only numeric covariates; 0 for categorical
+    lp_indiv <- (X %*% beta)
+    lp <- lp_indiv - as.numeric(lp_sample)
+  }
+  
+  risk_scores <- exp(lp)  # exp(Xβ)
+  
+  lp2 <- predict(cox_TFD, type="lp", centered=T)
+  head(X)
+  head(lp); head(lp2)
+  all.equal(as.numeric(risk_scores), exp(lp2))
+  risk_scores <- as.matrix(exp(lp2))
+  
+  # Compute mean linear predictor for centering
+  mean_lp <- mean(lp)
+  
+  # Identify stratification (if applicable)
+  if (all(!is.null(vStrata))) {
+    strata_levels <- unique(vStrata)
+    strata_indices <- rep(strata_levels, length(vStrata))
+  } else {
+    strata_indices <- rep("Main", length(vStartTimes))
+  }
+  
+  # Initialize storage for baseline hazards
+  baseline_hazard_list <- list()
+  
+  # Loop over strata to compute baseline hazard separately
+  for (stratum in unique(strata_indices)) {
+    # stratum <- strata_indices[1]
+    
+    # Filter data for the current stratum
+    stratum_mask <- strata_indices == stratum
+    vStartTimes_s <- vStartTimes[stratum_mask]
+    vStopTimes_s <- vStopTimes[stratum_mask]
+    status_s <- vStatus[stratum_mask]
+    risk_scores_s <- risk_scores[stratum_mask]
+    
+    # Further subset for individuals with a single event (vStatus == 1)
+    event_mask <- (status_s == 1)
+    
+    if (sum(event_mask) == 0) {
+      next  # Skip this stratum since no events occurred
+    }
+    
+    # Unique failure times for event status
+    #event_times <- sort(unique(vStopTimes_s[event_mask]))
+    event_times <- sort(unique(vStopTimes_s)) # corresponds with basehaz(), and therefore includes censoring times
+    
+    # Initialize cumulative baseline hazard & related quantities
+    H0 <- numeric(length(event_times))
+    riskSetSize <- numeric(length(event_times))
+    numEvents <- numeric(length(event_times))
+    
+    # Compute hazard at each failure time using Breslow's method
+    for (i in seq_along(event_times)) {
+      # i <- 2
+      t_i <- event_times[i]
+      
+      # Identify individuals who had an event at t_i
+      vEventIDs <- id[vStopTimes == t_i & status_s == 1]
+      d_i <- length(vEventIDs) # number of events at t_i
+      numEvents[i] <- d_i
+      
+      # Risk set: sum of exp(Xβ) for individuals still at risk at t_i
+      risk_set_ind <- vStartTimes_s < t_i & vStopTimes_s >= t_i & !(id %in% vEventIDs & vStopTimes < t_i)
+      (riskSetSize[i] <- sum(risk_set_ind)) # same as sum(vStartTimes_s < t_i) when not handling ids
+      risk_set <- sum(risk_scores_s[vStartTimes_s < t_i])
+      (risk_set <- sum(risk_scores_s[risk_set_ind]))
+      
+      # Calculate the Efron adjustment for ties
+      if (d_i > 1 & ties=="Efron") {
+        # Adjust for ties at the event time using Efron estimator
+        tied_contribution <- sum(risk_scores_s[vStartTimes_s < t_i & vStopTimes_s == t_i]) / risk_set
+        risk_set <- risk_set + tied_contribution
+      }
+      
+      # Efron estimator: \delta(t) = d_i / risk_set
+      H0[i] <- (ifelse(i > 1, H0[i-1], 0)) + (d_i / risk_set)
+    }
+    
+    # Apply centering correction if requested
+    if (centered) {
+      H0 <- H0 * exp(-mean_lp)
+    }
+    
+    # Store results
+    baseline_hazard_list[[stratum]] <- data.frame(
+      time = event_times,
+      CHaz = H0,
+      RiskSetSize = riskSetSize,
+      NumEvents = numEvents,
+      strata = stratum
+    )
+  }
+  
+  # Combine all strata into a single dataframe
+  baseline_hazard_df <- do.call(rbind, baseline_hazard_list)
+  
+  return(baseline_hazard_df)
+}
+
+
+
 # HW BS: Comment better the spline function
+### AB: Marked for deletion, rather use lm(output ~ ns(input, df=3), data=dat) from the splines package
 # -- Cubic spline function
 spline_estimation <- function(times, hazard, nknots, degree) {
   n <- length(times)  # Number of observations
@@ -529,152 +737,3 @@ cph_schoen <- function(cph, var=NULL, dat_train, id, time, status, verbose=T, ma
 ### RESULTS:~ TRUE
 # - Plot comparison for categorical variable
 # par(mfcol=c(1,2)); plot(x=rownames(cph_bres_scaled_schoenfeld), y=cph_bres_scaled_schoenfeld[,8], xlim=c(0,240)); plot(x=return$data$Time, y=return$data$Sch_Res_slc_pmnt_method_Suspense, xlim=c(0,240))
-
-
-# --- function to return the time-dependent ROC curve and time-dependent AUC value (Incidence/ Dynamic) of a Cox survival model
-# Input:  dat_explain - The dataset containing the required variables for time-dependent ROC and AUC computation
-#         predict.time - Time point for valuation
-#         Input_Names - A vector containing the names in dat_explain
-#             First element is the name of the column containing the event time
-#             Second element is the name of the column containing the event indicator
-#          marker - A vector containing the predictions of the Cox Model on the records in dat_explain
-#             Third element is the name of the column containing the marker values (predictions); we work specifically with the linear prediction
-# Output: A list containing time-dependent marker values, TPs, FPs, and AUCs.
-risksetROC_helper <- function(dat_explain, Input_Names = c("TimeInPerfSpell", "DefaultStatus1"), marker = cph_lp, predict.time=12) {
-  risksetROC::risksetROC(Stime        = dat_explain[[Input_Names[1]]],  
-                         status       = dat_explain[[Input_Names[2]]],                 
-                         marker       = marker,                             
-                         entry        = dat_explain[[Input_Names[1]]]-1,                              
-                         predict.time = predict.time,
-                         method       = "Cox",
-                         plot = FALSE)
-}
-
-
-
-
-### AB [2024-11-28]: Similarly, I am unsure of this part's utility
-
-# --- function for identifying FALSE default spells in a given dataset
-# Input: dat_given - The dataset in which false default spells should be identified
-#        LoanID - Name of the account ID
-#        PerfSpellID - Name of the performance spell ID of an account
-#        DefSpellID - Name of the default spell ID of an account
-#        Counter - Name of the counter variable (counts the observation of a account)
-#        PerfSpell_Counter - Name of the counter variable for an assocaited performance spell
-#        DefSpell_Counter - Name of the counter variable for an assocaited default spell
-#        DefSpellResol_Type_Hist - Name of variable indicating how the default spell was resolved
-#        PerfSpell_Max_Date - Name of variable indicating the last observed date of the assocaited performance spell (optional)
-#        DefSpell_Max_Date - Name of variable indicating the last observed date of the assocaited performance spell (optional)
-# Output: dat_given - The dataset conatining the variable identifying FALSE default spells
-False_Perf_Def <- function(dat_given, LoanID=NA, Date=NA, PerfSpellID=NA, DefSpellID=NA, Counter=NA, PerfSpell_Counter=NA, DefSpell_Counter=NA,
-                           PerfSpell_Max_Date=NA, DefSpell_Max_Date=NA){
-  # --- Unit test parameters:
-  # dat_given <- copy(datCredit_smp); LoanID <- "LoanID"; Date <- "Date"; PerfSpellID <- "PerfSpell_Key"; DefSpellID <- "DefSpell_Key"
-  # Counter <- "Counter"; PerfSpell_Counter <- "PerfSpell_Counter"; DefSpell_Counter <- "DefSpell_Counter"; DefSpell_Max_Date <- "DefSpell_Max_Date"; PerfSpell_Max_Date <- "PerfSpell_Max_Date"
-  
-  # --- Arranging the dataset according to the LoanID and Date
-  dat_given <- arrange(dat_given, get(deparse(substitute(LoanID))), get(deparse(substitute(Date)))) %>% setDT(key=c(get(deparse(substitute(LoanID))), get(deparse(substitute(Date)))))
-  
-  # --- Creating a subset containing only the required column names
-  colnames <- c(LoanID, Date, PerfSpellID, DefSpellID, Counter, PerfSpell_Counter, DefSpell_Counter,
-                ifelse(!is.na(DefSpell_Max_Date), DefSpell_Max_Date, NA), ifelse(!is.na(PerfSpell_Max_Date), PerfSpell_Max_Date, NA))
-  dat_sub <- subset(dat_given, select=colnames[!is.na(colnames)])
-  
-  # --- Renaming the columns to enable easier coding
-  colnames_new <- c("LoanID", "Date", "PerfSpellID", "DefSpellID", "Counter", "PerfSpell_Counter", "DefSpell_Counter",
-                    ifelse(!is.na(DefSpell_Max_Date), "DefSpell_Max_Date", NA), ifelse(!is.na(PerfSpell_Max_Date), "PerfSpell_Max_Date", NA))
-  colnames(dat_sub) <- colnames_new[!is.na(colnames_new)]
-  
-  # --- Creating a variable showing the previous/ next counter value
-  dat_sub[, Counter_Prev := as.numeric(shift(x=Counter, n=1, type="lag")), by=LoanID] # Creating a temporary variable for checking if the next observation of the account is in the dataset (exists)
-  dat_sub[, Counter_Next := as.numeric(shift(x=Counter, n=1, type="lead")), by=LoanID] # Creating a temporary variable for checking if the next observation of the account is in the dataset (exists)
-  
-  # --- Creating variables for indicating whether the previous/ next record of an account exists
-  dat_sub[, Prev_Exist := Counter_Prev==Counter-1]
-  dat_sub[is.na(Prev_Exist), Prev_Exist := F] # Checking whether this variable is missing (should then be FALSE)
-  
-  dat_sub[, Next_Exist := Counter_Next==Counter+1]
-  dat_sub[is.na(Next_Exist), Next_Exist := F] # Checking whether this variable is missing (should then be FALSE)
-  
-  # --- Creating a variable for identifying whether a performance/ default spell should be included in an subsequent analysis
-  dat_sub[!is.na(DefSpellID) & !(is.na(PerfSpellID)) & Prev_Exist==F, PerfSpell_F := T] # Identifying all instances where a loan is in default (and performance) and the previous observation doesn't exist
-  dat_sub[!is.na(DefSpellID) & !is.na(PerfSpellID) & Next_Exist==F, DefSpell_F := T] # Identifying all instances where a loan is in default (and performance) and the next observation doesn't exist
-  
-  # - Amending the variables for identifying FALSE performance/ default spells
-  dat_sub[is.na(PerfSpell_F), PerfSpell_F := F] # Correcting for all other instances of performance spells (since the FALSE ones have already been identified)
-  dat_sub[is.na(DefSpell_F), DefSpell_F := F]
-  
-  # - Amending the default variable for single observation default spells
-  dat_sub[DefSpell_Counter==1 & Date==DefSpell_Max_Date & Prev_Exist==T, DefSpell_F := F] #  Because of the overlap, this one observation will be in both the training and validation dataset. This ensures that only one of the observations is chosen to take into account.
-  
-  # --- Subsetting dat_sub to only include the required variables (that which is to be returned)
-  dat_sub <- subset(dat_sub, select=c("LoanID", "Date", "PerfSpell_F", "DefSpell_F")) %>% setDT(key=c("LoanID", "Date"))
-  
-  # --- Adding the false performance- and default variables to the given dataset
-  dat_given <- cbind(dat_given, dat_sub[, list(PerfSpell_F, DefSpell_F)])
-  
-  # --- Amending the dataset so that FALSE performance- and default spells do not have an associated spell key, counter, and max date (enables easier subsettin)
-  dat_given[PerfSpell_F==T, c((PerfSpellID), (PerfSpell_Counter), (PerfSpell_Max_Date)) := lapply(.SD, function(x) {x=NA}), .SDcols = c((PerfSpellID), (PerfSpell_Counter), (PerfSpell_Max_Date))]
-  dat_given[DefSpell_F==T, c((DefSpellID), (DefSpell_Counter), (DefSpell_Max_Date)) := lapply(.SD, function(x) {x=NA}), .SDcols = c((DefSpellID), (DefSpell_Counter), (DefSpell_Max_Date))]
-
-  # --- Returning the dataset
-  return(dat_given)
-
-}
-
-# --- Checks
-# dat_train1 <- False_Pef_Def(dat_train1, LoanID="LoanID", Date="Date", PerfSpellID="PerfSpell_Key", DefSpellID="DefSpell_Key",
-#                             Counter="Counter", PerfSpell_Counter="PerfSpell_Counter", DefSpell_Counter="DefSpell_Counter",
-#                             DefSpell_Max_Date="DefSpell_Max_Date", PerfSpell_Max_Date="PerfSpell_Max_Date", DefSpellResol_Type_Hist="DefSpellResol_Type_Hist")
-# dat_valid1 <- False_Pef_Def(dat_valid1, LoanID="LoanID", Date="Date", PerfSpellID="PerfSpell_Key", DefSpellID="DefSpell_Key",
-#                             Counter="Counter", PerfSpell_Counter="PerfSpell_Counter", DefSpell_Counter="DefSpell_Counter",
-#                             DefSpell_Max_Date="DefSpell_Max_Date", PerfSpell_Max_Date="PerfSpell_Max_Date", DefSpellResol_Type_Hist="DefSpellResol_Type_Hist")
-# 
-# lookup_IDs <- unique(datCredit_real[PerfSpell_Num>=5, LoanID])
-# 
-# lookup <- datCredit_real[LoanID=="3000002499333", ]
-# lookup_t <- dat_train1[LoanID=="3000002499333", ]
-# lookup_v <- dat_valid1[LoanID=="3000002499333", ]
-# lookup_sub <- dat_sub[LoanID==lookup_IDs[200], ]
-# 
-# # - Overlaps
-# overlaps <- which(dat_train2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key] %in% dat_valid2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key])
-# 
-# lookup_IDs <- str_sub(dat_train2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key][overlaps], start=1, end=-3)
-# 
-# lookup <- datCredit_real[LoanID==lookup_IDs[10], ]
-# lookup_t <- dat_train2[LoanID==lookup_IDs[10], ]
-# lookup_v <- dat_valid2[LoanID==lookup_IDs[10], ]
-
-
-# --- Checks
-# dat_train1 <- False_Pef_Def(dat_train1, LoanID="LoanID", Date="Date", PerfSpellID="PerfSpell_Key", DefSpellID="DefSpell_Key",
-#                             Counter="Counter", PerfSpell_Counter="PerfSpell_Counter", DefSpell_Counter="DefSpell_Counter",
-#                             DefSpell_Max_Date="DefSpell_Max_Date", PerfSpell_Max_Date="PerfSpell_Max_Date", DefSpellResol_Type_Hist="DefSpellResol_Type_Hist")
-# dat_valid1 <- False_Pef_Def(dat_valid1, LoanID="LoanID", Date="Date", PerfSpellID="PerfSpell_Key", DefSpellID="DefSpell_Key",
-#                             Counter="Counter", PerfSpell_Counter="PerfSpell_Counter", DefSpell_Counter="DefSpell_Counter",
-#                             DefSpell_Max_Date="DefSpell_Max_Date", PerfSpell_Max_Date="PerfSpell_Max_Date", DefSpellResol_Type_Hist="DefSpellResol_Type_Hist")
-# 
-# lookup_IDs <- unique(datCredit_real[PerfSpell_Num>=5, LoanID])
-# 
-# lookup <- datCredit_real[LoanID=="3000002499333", ]
-# lookup_t <- dat_train1[LoanID=="3000002499333", ]
-# lookup_v <- dat_valid1[LoanID=="3000002499333", ]
-# lookup_sub <- dat_sub[LoanID==lookup_IDs[200], ]
-# 
-# # - Performance spells
-# # The start of default spells overlaps with the end of performance spells. When sub-setting for performance spells, those overlaps are including (although the entire performance spell is not included, only the last observation).
-# # Need to identify the observations with no further performance spell history as they are false.
-# 
-#
-# # - Overlaps
-# overlaps <- which(dat_train2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key] %in% dat_valid2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key])
-# 
-# lookup_IDs <- str_sub(dat_train2[DefSpell_Counter==1 & DefSpell_F==F, DefSpell_Key][overlaps], start=1, end=-3)
-# 
-# lookup <- datCredit_real[LoanID==lookup_IDs[10], ]
-# lookup_t <- dat_train2[LoanID==lookup_IDs[10], ]
-# lookup_v <- dat_valid2[LoanID==lookup_IDs[10], ]
-
-

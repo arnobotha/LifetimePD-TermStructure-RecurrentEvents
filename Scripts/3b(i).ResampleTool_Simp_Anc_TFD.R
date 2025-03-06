@@ -27,12 +27,10 @@
 #   - datCredit_TFD | Prepared from script 3a.Data_Fusion2.
 #
 # -- Outputs:
-#   - Series of graphs for testing the time-dependent sampling bias of the chosen (simple clustered sampling)
-#     resampling scheme and inner sampling technique:
-#       - Frequency analysis of strata size graph (stratification specified as the inner sampling technique);
-#       - Resolution rates for spell entry (for first performance spells);
-#       - Resolution rates for spell entry (for all performance spells);
-#       - Resolution rates for spell exit/ stop.
+#   - Frequency analysis of strata size graph (stratification specified as the inner sampling technique);
+#   - Resolution rates for spell entry (for first performance spells);
+#   - Resolution rates for spell entry (for all performance spells);
+#   - Resolution rates for spell exit/ stop.
 # ------------------------------------------------------------------------------------------------------------
 
 
@@ -324,11 +322,10 @@ if (all(!is.na(stratifiers))){
         scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
   
   # - Save graph
-  ggsave(g1, file=paste0(genFigPath, "/TFD/Sample Rep/StrataDesign_Train_", round(datCredit_smp[,.N]/1000),"k.png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
+  ggsave(g1, file=paste0(genFigPath, "/TFD/StrataDesign_Train_", round(datCredit_smp[,.N]/1000),"k.png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
   
   # --- Clean up
   rm(datStrata, datStrata_aggr, selectionVar_train, vCol, vFill, chosenFont, g1)
-  
   
   ### CONCLUSION: Minimum strata sizes constantly violated. We will therefore amend the stratification design to 1-way
 }
@@ -448,7 +445,7 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 
 # - Save graph
 dpi <- 200
-ggsave(g2, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_te_Subsample_", 
+ggsave(g2, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_te_Subsample_", 
                        round(datCredit_smp[,.N]/1000),"k.png"), width=1200/(dpi), height=1800/(dpi), dpi=dpi, bg="white")
 
 
@@ -505,7 +502,7 @@ datAggr_cohorts[, Facet:=paste0('"', Spell_Resol, ' (', sprintf("%.2f", Prior*10
 
 # - Save graph
 dpi <- 200
-ggsave(g3, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_te_FULL_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), 
+ggsave(g3, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_te_FULL_ANCIL_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), 
        width=1200/dpi, height=1800/dpi, dpi=dpi, bg="white")
 
 # - Cleanup
@@ -551,7 +548,7 @@ resolPerf_levels <- unique(datFacetsProp$Spell_Resol2) # Get the unique factors 
 
 # Enrich aggregated dataset with prior probabilities
 datAggr_cohorts <- merge(datAggr_cohorts, datFacetsProp, by="Spell_Resol2")
-datAggr_cohorts[, Facet:=paste0('"', Spell_Resol2, ' (', sprintf("%.2f", Prior*100), '%)"')] # Facetting purposes
+datAggr_cohorts[, Facet:=paste0('"', Spell_Resol2, ' (', sprintf("%.2f", Prior*100), '%): TFD-technique"')] # Facetting purposes
 
 # - Pivot aggregated dataset to wider based on the combination field of Sample & Spell_Resol
 datAggr_cohorts2 <- datAggr_cohorts %>% pivot_wider(id_cols = c(timeVar), names_from = c(Sample, Spell_Resol2), values_from = Prop) %>% data.table()
@@ -634,14 +631,17 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 
 # - Save graph
 dpi <- 180
-ggsave(g4, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_ts_Subsample_", 
+ggsave(g4, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_ts_Subsample_", 
                        round(datCredit_smp[,.N]/1000),"k.png"), width=1200/(dpi), height=1600/(dpi), dpi=dpi, bg="white")
 
 # --- Create graph: Single-facet
 if (!is.na(resolType2_Val)){
+  
+  # - Cap dates for graphing purposes
+  sDateMax <- max(datAggr_cohorts$timeVar) %m-% months(1)
 
-  (g5 <- ggplot(datAggr_cohorts[Spell_Resol2==resolType2_Val,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
-     labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa))) +
+  (g5 <- ggplot(datAggr_cohorts[Spell_Resol2==resolType2_Val & timeVar <= sDateMax,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
+     labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa)==1)) +
      theme(text=element_text(family=chosenFont),legend.position = "bottom",
            axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
            strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -660,8 +660,8 @@ if (!is.na(resolType2_Val)){
      scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
   
   # Save graph
-  dpi <- 170
-  ggsave(g5, file=paste0(genFigPath, "TFD/Sample Rep/", "ResolutionRates_Perf_ts_Subsample_Single_Facet-", 
+  dpi <- 200
+  ggsave(g5, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_ts_Subsample_Single_Facet-", 
                          round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 }

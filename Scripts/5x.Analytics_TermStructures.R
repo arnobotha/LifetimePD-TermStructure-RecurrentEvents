@@ -1,7 +1,6 @@
-# ========================= INVESTIGATING SURVIVALROC() ==========================
-# As a proof of concept, we shall compare various functions from various packages
-# in conducting time-dependent ROC-analyses on the same fitted Cox regression model,
-# having used the prepared credit data
+# ========================= ANALYTICS: TERM-STRUCTURE ==========================
+# Derive the term-structure of default risk across time from the various Cox
+# regression models.
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha (AB)
@@ -88,7 +87,9 @@ summary(cox_PWP)
 
 
 
-# ----------------- 3. Actual & Expected Term structure for a chosen cohort
+# ----------------- 3. Term-structure of default risk
+# Implement the preferred (and tested) approach towards deriving the term structure
+
 
 # ------ Time to first Default (TFD) definition
 
@@ -119,29 +120,6 @@ proc.time() - ptm; # 54h
 pack.ffdf(paste0(genPath,"datSurv_TFD"), datSurv_TFD)
 
 
-
-
-
-
-
-### SCRATCH -----------------------------------
-test <- subset(datCredit_valid_TFD, LoanID %in% unique(datCredit_valid_TFD[PerfSpell_Age > 5 & PerfSpell_Num > 2,LoanID])[1:3],
-               select=c("LoanID", "Date", vecVars_TFD, "PerfSpell_Key", "PerfSpell_Num","PerfSpell_Counter","Start", "End", "Default_Ind"))
-numSpellKeys <- length(unique(test$PerfSpell_Key))
-vSpellKeys <- unique(test$PerfSpell_Key)
-j <- 1
-# Compare outputs
-(prepDat <- survQuants(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]), coxGiven = cox_TFD,
-                      it=j, numKeys=numSpellKeys, genPath=genPath))
-
-prepDat2 <- survQuants.data(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]),
-                            
-                      it=j, numKeys=numSpellKeys, genPath=genPath)
-
-
-### SCRATCH-END -----------------------------------
-
-
 # --- Graphing the event density / probability mass function f(t)
 
 # - Confirm prepared datasets are loaded into memory
@@ -154,7 +132,7 @@ datAggr <- datSurv_TFD[, list(EventRate = mean(EventProb,na.rm=T), Freq=.N),by=l
 plot(datAggr[End <= sMaxSpellAge, End], datAggr[End <= sMaxSpellAge, EventRate], type="b")
 
 # - Fitting natural cubic regression splines
-sDf_Act <- 10; sDf_Exp <- 10
+sDf_Act <- 12; sDf_Exp <- 18
 smthEventRate_Act <- lm(EventRate ~ ns(Time, df=sDf_Act), data=datSurv[Time <= sMaxSpellAge,])
 smthEventRate_Exp <- lm(EventRate ~ ns(End, df=sDf_Exp), data=datAggr[End <= sMaxSpellAge])
 summary(smthEventRate_Act); summary(smthEventRate_Exp)
@@ -177,86 +155,54 @@ datGraph <- rbind(datSurv[,list(Time, EventRate, Type="a_Actual")],
 # - Create different groupings for graphing purposes
 datGraph[Type %in% c("a_Actual","c_Expected"), EventRatePoint := EventRate ]
 datGraph[Type %in% c("b_Actual_spline","d_Expected_spline"), EventRateLine := EventRate ]
+datGraph[, FacetLabel := "Time to First Default (TFD) model"]
 
 # - Aesthetic engineering
+chosenFont <- "Cambria"
 vCol_Point <- brewer.pal(8, "Pastel1")[c(1,2)]
 vCol_Line <- brewer.pal(8, "Set1")[c(1,2)]
 mainEventName <- "Default"
+
+# - Calculate MAE between event rates
+datFusion <- merge(datSurv[Time <= sMaxSpellAge], 
+                   datAggr[End <= sMaxSpellAge,list(Time=End, EventRate_Exp=EventRate)], by="Time")
+MAE_eventProb <- mean(abs(datFusion$EventRate - datFusion$EventRate_Exp), na.rm=T)
 
 # - Graphing parameters
 vCol <- brewer.pal(10, "Paired")[c(3,4,1,2)]
 vLabel2 <- c("b_Actual_spline"=paste0("Actual natural spline (df=",sDf_Act,")"), 
              "d_Expected_spline"=paste0("Scored natural spline (df=", sDf_Exp,")"),
              "a_Actual"="Actual", "c_Expected"="Scored")
-vSize <- c(0.5,0.5,0.5,0.5)
+vSize <- c(0.5,0.75,0.5,0.75)
 vLineType <- c("dashed", "solid", "dashed", "solid")
 
 # - Create main graph 
 (gsurv_ft <- ggplot(datGraph[Time <= sMaxSpellAge,], aes(x=Time, y=EventRate, group=Type)) + theme_minimal() +
     labs(y=bquote(plain(Event~probability~~italic(f(t))*" ["*.(mainEventName)*"]"*"")), 
          x=bquote(Discrete~time~italic(t)*" (months) in spell: First-spell")) + 
-    theme(text=element_text(family=chosenFont),legend.position="bottom") + 
+    theme(text=element_text(family=chosenFont),legend.position = "bottom",
+          axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
     # Main graph
     geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1) + 
-    geom_line(aes(y=EventRateLine, colour=Type, linetype=Type, linewidth=Type)) + 
+    geom_line(aes(y=EventRate, colour=Type, linetype=Type, linewidth=Type)) + 
+    # Annotations
+    annotate("text", y=0.006,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
+             size = 3) + 
     # Scales and options
+    facet_grid(FacetLabel ~ .) + 
     scale_colour_manual(name="", values=vCol, labels=vLabel2) + 
     scale_linewidth_manual(name="", values=vSize, labels=vLabel2) + 
     scale_linetype_manual(name="", values=vLineType, labels=vLabel2) + 
     scale_shape_discrete(name="", labels=vLabel2) + 
     scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
     scale_x_continuous(breaks=breaks_pretty(n=8), label=comma)
-  )
+)
 
 # - Save plot
 dpi <- 180 # reset
 ggsave(gsurv_ft, file=paste0(genFigPath, "TFD/EventProb-", mainEventName,"_SpellLevel_FirstSpell_ActVsExp.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
-
-
-
-
-### AB: First test concept before merging back
-
-# - Merge results back to main credit dataset
-datCredit_valid_TFD <- merge(datCredit_valid_TFD, datSurv, by=c("PerfSpell_Key", "End"), all.x=T) %>%
-  relocate(End, CHaz, Survival, Hazard, EventProb, .after=Start)
-setDT(datCredit_valid_TFD, key=c("LoanID","Date"))
-
-
-
-
-
-# ---- SCRATCH
-
-ptm <- proc.time() #IGNORE: for computation time calculation
-survFit_pred <- survfit(cox_TFD, centered=F, newdata=datCredit_valid_TFD, id=PerfSpell_Key)
-proc.time() - ptm # 86m
-
-
-
-vOnes <- which(survFit_pred$time == 1)
-matSurv <- matrix(NA, nrow=max(survFit_pred$time), ncol=length(vOnes))
-k <-2
-t <- 1
-for (i in 1:length(survFit_pred$time)) {
-  if (i < vOnes[k] ) {
-    matSurv[t,k-1] <- survFit_pred$surv[i]
-    t <- t+1
-  } else {
-    k <- k+1
-    t <- 1
-    matSurv[t,k-1] <- survFit_pred$surv[i]
-  }
-}
-
-
-testCase1 <- matSurv[,1]; testCase1 <- testCase1[!is.na(testCase1)]
-plot(testCase1)
-testCase2 <- datSurv_TFD[PerfSpell_Key==unique(datCredit_valid_TFD$PerfSpell_Key)[1],]
-plot(testCase2$Survival)
-### RESULTS: Not exactly the same
-
-# Test event density (average) and compare
 

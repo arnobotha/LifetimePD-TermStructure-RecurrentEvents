@@ -58,7 +58,7 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
 # Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
 #         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
 #                     with the unit exponential distribution function.
-GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), fileName=NA,
+GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), panelTitle="", fileName=NA,
                             fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
                             dpi=350, chosenFont="Cambria") {
   # - Testing conditions
@@ -114,16 +114,17 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), file
                                y = y1[D_location],yend = y2[D_location],type="Difference")
     
     # - Aesthetic engineering
-    dpi <- 220; chosenFont <- "Cambria"
+    chosenFont <- "Cambria"
     vCol <- brewer.pal(8,"Set1")[c(2,3)]
     vLabel <- c("1_Cox-Snell"=bquote("Adjusted Cox-Snell Residuals "*italic(r)^(CS)),
                 "2_Unit_Exponential"="Unit Exponential")
+    datGraph[, FacetLabel := panelTitle]
     
     # Plot the ECDFs with ggplot2
     gg <- ggplot(datGraph,aes(x=x,group=type)) + theme_minimal() + 
-        theme(text = element_text(family="Cambria"), legend.position.inside=legPos,
-              legend.position = "inside",
-              legend.background = element_rect(fill="snow2", color="black", linetype="solid")) +
+        theme(text=element_text(family=chosenFont),legend.position = "bottom",
+              strip.background=element_rect(fill="snow2", colour="snow2"),
+              strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) +
         labs(x = bquote(italic(x)), y = bquote("Cumulative Distribution Function "*italic(F(x)))) +
         stat_ecdf(aes(color=type,linetype=type)) + 
         geom_segment(data=datSegment,aes(x = x, xend = xend, y = y, yend = yend),
@@ -131,8 +132,10 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), file
                      arrow=arrow(type="closed", ends="both",length=unit(0.08,"inches"))) +
         annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
                  label = paste("D =", percent(KS)), hjust = -0.2, vjust = 0.5, fill="white", alpha=0.6) +
-        scale_color_manual(name = "Distributions", values = vCol, labels=vLabel) +
-        scale_linetype_discrete(name = "Distributions",labels=vLabel) +
+        # Scales and options
+        facet_grid(FacetLabel ~ .) +   
+        scale_color_manual(name = "", values = vCol, labels=vLabel) +
+        scale_linetype_discrete(name = "",labels=vLabel) +
         scale_y_continuous(label=percent) + 
         scale_x_continuous(lim=c(NA,10))
     

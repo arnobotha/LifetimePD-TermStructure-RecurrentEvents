@@ -87,7 +87,7 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
 #         [var], Single variable name
 TimeDef_Form <- function(TimeDef="TFD", vars){
   # Create formula based on time definition of the dataset.
-  if(TimeDef=="TFD"){# Formula for time to first default time defintion (containing only the fist performance spell).
+  if(TimeDef=="TFD" | TimeDef=="AG"){# Formula for time to first default time defintion (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                                  paste(vars,collapse=" + ")))
   }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
@@ -99,7 +99,7 @@ TimeDef_Form <- function(TimeDef="TFD", vars){
 
 
 # --- Function to fit a given formula within a Cox regression model towards extracting Harrell's C-statistic and related quantities
-calc_HarrellC <- function(formula, data_train, data_valid, variable="", it=NA, logPath="") {
+calc_HarrellC <- function(formula, data_train, data_valid, variable="", it=NA, logPath="", fldSpellID="PerfSpell_Key") {
   model <- coxph(formula,id=get(fldSpellID), data = data_train) # Fit Cox model
   if (!is.na(it)) {
     cat(paste0("\n\t ", it,") Single-factor survival model built. "),
@@ -124,7 +124,8 @@ calc_HarrellC <- function(formula, data_train, data_valid, variable="", it=NA, l
 concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_Key",
                       TimeDef="TFD", numThreads=6, genPath) {
   # - Testing conditions
-  # data_valid <- datCredit_valid_TFD; TimeDef="TFD"' numThreads=6
+  # data_valid <- datCredit_valid_AG; TimeDef="AG"; numThreads=6
+  # fldEventInd<-"Default_Ind"
   
   # - Iterate across loan space using a multi-threaded setup
   ptm <- proc.time() #IGNORE: for computation time calculation
@@ -133,12 +134,12 @@ concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_K
       file=paste0(genPath,"HarrelsC_log.txt"), append=F)
   
   results <- foreach(j=1:length(variables), .combine='rbind', .verbose=F, .inorder=T,
-                                 .packages=c('data.table', 'survival'), .export=c('calc_HarrellC')) %dopar%
+                                 .packages=c('data.table', 'survival'), .export=c('calc_HarrellC', 'TimeDef_Form')) %dopar%
     { # ----------------- Start of Inner Loop -----------------
       # - Testing conditions
       # j <- 1
       calc_HarrellC(formula=TimeDef_Form(TimeDef,variables[j]), variable=variables[j],
-                    data_train=data_train, data_valid=data_valid, it=j, logPath=genPath)
+                    data_train=data_train, data_valid=data_valid, it=j, logPath=genPath,  fldSpellID=fldSpellID)
     } # ----------------- End of Inner Loop -----------------
   stopCluster(cl.port); proc.time() - ptm  
   
@@ -192,7 +193,7 @@ csTable <- function(data_train, variables, TimeDef="TFD", seedVal=1, numIt=5,
                     numThreads=6, genPath=NA){
   
   # - Testing conditions
-  # data_train <- datCredit_train_TFD; variables<-vars2; TimeDef<-"TFD"; seedVal<-1; numIt<-5; 
+  # data_train <- datCredit_train_AG; variables<-vars2; TimeDef<-"AG"; seedVal<-1; numIt<-5; 
   # fldLstRowInd="PerfSpell_Exit_Ind";  fldSpellID="PerfSpell_Key"; fldEventInd="Default_Ind"; numThreads=6
   
   # - Initialize results
@@ -218,7 +219,7 @@ csTable <- function(data_train, variables, TimeDef="TFD", seedVal=1, numIt=5,
       
       { # ----------------- Start of Inner Loop -----------------
         # - Testing conditions
-        # var <- variables[1]
+        # var <- variables[1]; j<-1
         calcBStat(formula=TimeDef_Form(TimeDef,variables[j]), data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
                   seedVal=seedVal, it=j, logPath=genPath)
         

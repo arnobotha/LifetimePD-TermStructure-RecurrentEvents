@@ -1,5 +1,5 @@
-# ============================================ INPUT SPACE =========================================
-# Divide data into thematic groups and perform data analysis on them to compile an input space for the TTFD model
+# ============================================ INPUT SPACE: TFD ========================================
+# Divide data into thematic groups and perform data analysis on them to compile an input space for the TFD model
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
 # SCRIPT AUTHOR(S): Bernard Scheepers
@@ -17,8 +17,8 @@
 #   - 3c.Data_Fusion2.R
 
 # -- Inputs:
-#   - datCredit_train_TFD | Prepared from script 3b
-#   - datCredit_valid_TFD | Prepared from script 3b
+#   - datCredit_train_TFD | Prepared from script 3c
+#   - datCredit_valid_TFD | Prepared from script 3c
 
 #
 # -- Outputs:
@@ -1224,17 +1224,17 @@ csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numI
 # Results are, however, very close one another such that meaningful analysis is not possible
 
 # Test accuracy using Harrell's c-statistic over single-factor models
-concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, vars2, 
+concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, variables=vars2, 
                            fldSpellID="PerfSpell_Key", TimeDef="TFD", genPath=genPath)
 ### RESULTS: Top x single-factor models (>80%):
 # Arrears + PerfSpell_g0_Delinq_Num + TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  
 
 # - Combine results into a single object
-Table_TFD <- left_join(csTable_TFD$Table, concTable_TFD, by="Variable")
+Table_TFD <- left_join(csTable_TFD$Results, concTable_TFD, by="Variable")
 
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
-GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4),
-                fileName = paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")) # 0.6372
+GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
+                fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6414
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
 # Save objects
@@ -1242,4 +1242,4 @@ pack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), Table_TFD)
 pack.ffdf(paste0(genPath,"TFD_Cox_Model"), cox_TFD)
 
 # - Cleanup
-rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD); gc()
+rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD, c); gc()

@@ -81,86 +81,54 @@ rm(datAggr,datAggr2,lookup,g1);gc()
 
 
 
-# ----------------- 2. Risk Events according to different performance spells
-# Evaluate the rate at which loans move between different performance spells over time
+# ----------------- 2. Default resolution rate over time per numbered spell | Cohort-end
 
-# Create temporary dataset for graphing that excludes the last month's data. A large proportion of loans are censored in the last month and would then distort the graphs.
-datAggr2 <- datCredit_real %>% subset(!is.na(PerfSpell_Key) & Date != as.Date("2022-12-31"),
-                                      select=c("Date","LoanID","PerfSpell_Key","PerfSpell_Num",
-                                               "DefaultStatus1","PerfSpell_Censored","Event_Type"))
+# --- Merge datasets together for graphing purposes, subset necessary fields, and rename columns for graphing ease
+datGraph <- rbind(datCredit_real[PerfSpell_Num==1, list(Date, LoanID, PerfSpell_Key, PerfSpell_Num, 
+                                                        PerfSpellResol_Type_Hist, Sample="Spell 1")],
+                  datCredit_real[PerfSpell_Num==2, list(Date, LoanID, PerfSpell_Key, PerfSpell_Num, 
+                                                        PerfSpellResol_Type_Hist, Sample="Spell 2")],
+                  datCredit_real[PerfSpell_Num>=3, list(Date, LoanID, PerfSpell_Key, PerfSpell_Num, 
+                                                        PerfSpellResol_Type_Hist, Sample="Spell 3+")])
 
-# Create a new variable to indicate the risk event that occurred.
-datAggr2 <- datAggr2[,RiskEvent := 
-                       ifelse(DefaultStatus1 == 1 & !is.na(PerfSpell_Key),"Defaulted",
-                              ifelse(PerfSpell_Censored==1 & 
-                                       Event_Type %in% c("SETTLE","WOFF"),"Competed",
-                                     ifelse(PerfSpell_Censored==1, "Censored",NA)))]
+# - Creating spell-level min/max date variables as stratifiers
+datGraph[, PerfSpellDate_End := Date[.N], by=list(Sample, PerfSpell_Key)]
 
-# Calculate the number of risk events that occurred for each spell.
-datAggr2[!is.na(RiskEvent), RiskEvent_Num := .N,
-         by=list(Date,PerfSpell_Num,RiskEvent)]
+# - Setting some aggregation parameters, purely to facilitate graphing aesthetics
+StartDte <- min(datCredit_real$Date, na.rm=T)
+EndDte <- max(datCredit_real$Date, na.rm=T)
+maxDate <- EndDte %m-% months(1)# A post-hoc filter, used for graphing purposes - left as the end of the sampling window
+minDate <- StartDte  #+ month(1) # A post-hoc filter, used for graphing purposes - set as one month after the sampling window
 
-datAggr2 <- datAggr2[complete.cases(datAggr2),list(Date,PerfSpell_Num,RiskEvent,
-                                                   RiskEvent_Num)] %>% unique()
+# - Fixing to spell entry-time, we aggregate to monthly level and observe the time series up to given point
+datAggr_cohorts <- merge(datGraph[Date==PerfSpellDate_End, list(Sum_Total = .N), by=list(Sample,Date)],
+                         datGraph[Date==PerfSpellDate_End, list(Sum_Resol = .N), by=list(Sample,Date,PerfSpellResol_Type_Hist)],
+                         by=c("Sample", "Date"))[Date >= minDate & Date <= maxDate,]
+datAggr_cohorts[, Prop := Sum_Resol/Sum_Total]
 
-# Sanity Check
-sum(datAggr2[PerfSpell_Num == 1 & Date == as.Date("2007-02-28"),RiskEvent_Num]) ==
-  datCredit_real[PerfSpell_Num == 1 & Date == "2007-02-28",sum(DefaultStatus1,PerfSpell_Censored)] # Should be TRUE
+# - Graphing parameters
+chosenFont <- "Cambria"
+vCol <- brewer.pal(9, "Set1")
 
-# Calculate the total and pecentage risk events for each event type and performance spell
-datAggr2[,RiskEvent_Total := sum(RiskEvent_Num), by=list(PerfSpell_Num)]
-datAggr2[,RiskEventPerc := sum(RiskEvent_Num)/RiskEvent_Total, by=list(PerfSpell_Num,RiskEvent)]
+(g1 <- ggplot(datAggr_cohorts[PerfSpellResol_Type_Hist=="Defaulted",], aes(x=Date, y=Prop)) + theme_minimal() + 
+    labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y="Default resolution rate (%)") +
+    theme(text=element_text(family=chosenFont),legend.position = "bottom",
+          axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
+    # main line graph with overlaid points
+    geom_line(aes(colour=Sample, linetype=Sample)) + 
+    geom_point(aes(colour=Sample, shape=Sample), size=1) + 
+    # scale options
+    scale_colour_manual(name="", values=vCol) + 
+    scale_shape_discrete(name="") + scale_linetype_discrete(name="") + 
+    scale_y_continuous(breaks=pretty_breaks(), label=percent) + 
+    scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
 
-# Sanity Check
-sum(datAggr2[PerfSpell_Num == 1, unique(RiskEventPerc)]) == 1 # Should be TRUE
-sum(unique(datAggr2[,RiskEvent_Total])) ==
-  datCredit_real[!is.na(PerfSpell_Key) & Date!=as.Date("2022-12-31"),
-                 sum(PerfSpell_Censored,DefaultStatus1)] # Should be TRUE
-
-# - Aesthetic engineering
-chosenFont <- "Cambria"; dpi <- 200; vCol <- brewer.pal(8,"Set1")[c(3,2,1)]
-vLabel <- c("Censored","Competed","Defaulted")
-maxSpell <- max(datAggr2[Date!=as.Date("2022-12-31"),PerfSpell_Num])
-
-# Create a custom label for each facet
-label <- pivot_wider(unique(datAggr2[,list(PerfSpell_Num,RiskEvent,RiskEventPerc)]),
-                     names_from=RiskEvent, values_from=RiskEventPerc) %>%
-          replace_na(list(Competed  = 0, Defaulted  = 0, Censored = 0)) %>%
-          mutate(Label:=paste0("Defaulted: ",percent(Defaulted,accuracy=0.1),
-                               ", Competed: ", percent(Competed,accuracy=0.1),
-                               ", Censored: ", percent(Censored,accuracy=0.1))) %>%
-          subset(select=c(PerfSpell_Num,Label))
-datAggr2 <- merge(datAggr2,label,by="PerfSpell_Num")
-datAggr2[, PerfSpell_Num := paste0("Spell: ", PerfSpell_Num)]
-
-# - Graph
-(g2 <- ggplot(datAggr2, aes(x=Date,y=RiskEvent_Num,fill=factor(RiskEvent))) +
-    theme_minimal() + 
-    theme(text=element_text(family=chosenFont), axis.text.x=element_text(angle=90),
-          strip.background = element_rect(fill="snow2", colour="snow2"),
-          legend.position = "inside",legend.position.inside=c(0.1,0.15),
-          legend.background=element_rect(fill="snow2"),
-          strip.text=element_text(colour="black")) + 
-    labs(y="Number of Risk Events", x=bquote("Cohort Date ("*italic(mmm)*" "*italic(ccyy)*")")) + 
-    geom_col() + geom_text(aes(x=as.Date("2008-01-31"),family=chosenFont,y=Inf,label=Label),
-                           vjust=1, hjust=-0.35, size=2.6, color="snow4") +
-    facet_wrap(PerfSpell_Num ~ ., scales="free_y",nrow=maxSpell, strip.position="right") +
-    scale_fill_manual(name="Risk Type", values=vCol, labels=vLabel) +
-    scale_y_continuous(breaks=pretty_breaks(n=4)) +#, labels=label_number(accuracy=1)) +
-    scale_x_date(date_labels = "%b %y", date_breaks = "6 months",
-                 limits = c(as.Date("2007-01-31"),as.Date("2022-12-31"))))
-### RESULTS:  1)  The default behavior of the first performance spell is different from that of the rest, since it 
-#                 significant competing risks are present.
-#             2)  As the Performance Spell number increase the sample size decreases. This poses a problem if models are
-#                 to be built on the performance spells. This can be remedied by binning some of the later performance spells together.
 
 # - Save graph
-ggsave(g2, file=paste0(genFigPath, "/FULL SET/Performance Spell Risk Events.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
-
-# House keeping
-rm(datAggr2, censored, g2, datCredit_real, label);gc()
-
-### CONCLUSION: Group all spells greater than 4 together
+dpi <- 220
+ggsave(g1, file=paste0(genFigPath, "FULL SET/DefResolRate_SpellNumber.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 
 
@@ -209,7 +177,7 @@ vLabels2 <- c(paste0("a_Settlement"="Settlement (", round(Resol_Type2.props[1]*1
 (g1_Densities_Resol_Type <- ggplot(datSurv[PerfSpell_Age<=500,], aes(x=PerfSpell_Age, group=Resol_Type)) + theme_minimal() + 
     labs(y=bquote(plain(Empirical~failure*' time histogram & density ')~italic(f(t))), 
          x=bquote("Performing spell ages (months)"*~italic(T[ij]))) + 
-    theme(text=element_text(family=chosenFont),legend.position=c(0.785,0.2), 
+    theme(text=element_text(family=chosenFont),legend.position.inside=c(0.785,0.2), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
           strip.text = element_text(size=8, colour="gray50"), strip.text.y.right = element_text(angle=90)) + 
     # Graphs

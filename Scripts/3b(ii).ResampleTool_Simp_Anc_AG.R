@@ -537,7 +537,7 @@ datAnnotate[seq(from=4, to=4*anno_n, by=4),
 datAnnotate <- merge(datAnnotate, unique(datAggr_cohorts[, .(Spell_Resol2, Facet)]), by="Spell_Resol2")
 
 # - Graphing parameters
-chosenFont <- "Cambria"; dpi <- 340
+chosenFont <- "Cambria"
 vCol <- brewer.pal(9, "Set1")
 vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
             "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_AG[,.N]/1000))*"k)"),

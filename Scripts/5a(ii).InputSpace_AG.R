@@ -2,7 +2,7 @@
 # Divide data into thematic groups and perform data analysis on them to compile an input space for the AG model
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers
+# SCRIPT AUTHOR(S): Bernard Scheepers (BS)
 # ------------------------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -14,7 +14,7 @@
 #   - 2e.Data_Prepare_Macro.R
 #   - 2f.Data_Fusion1.R
 #   - 3a(i).Data_Transform.R
-#   - 3c.Data_Fusion2.R
+#   - 3c(ii).Data_Fusion2_AG.R
 
 # -- Inputs:
 #   - datCredit_train_AG | Prepared from script 3c
@@ -43,52 +43,7 @@ varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Nu
 #=========================================================================================
 
 
-
-# ------ 1.1 Which time window length is the best in calculating Delinquency volatility?
-
-# Initialize variables to be tested
-vars <- c("g0_Delinq_SD_4", "g0_Delinq_SD_5", "g0_Delinq_SD_6", "g0_Delinq_SD_9", "g0_Delinq_SD_12")
-
-# Goodness of fit test
-csTable(datCredit_train_AG,vars)
-#         Variable     B
-# Variable B_Statistic
-# 1  g0_Delinq_SD_4      0.6186
-# 5 g0_Delinq_SD_12      0.6157
-# 2  g0_Delinq_SD_5      0.6101
-# 4  g0_Delinq_SD_9      0.5955
-# 3  g0_Delinq_SD_6      0.5901
-
-### RESULTS:  [g0_Delinq_SD_4] fits the data the best, slightly better than [g0_Delinq_SD_5]
-
-# Accuracy test
-concTable(datCredit_train_AG, datCredit_valid_AG, vars)
-#           Variable Concordance           SD LR_Statistic
-# 1:  g0_Delinq_SD_4   0.9928422 0.0004451396        84702
-# 2:  g0_Delinq_SD_5   0.9908799 0.0007682680        91976
-# 3:  g0_Delinq_SD_6   0.9753519 0.0015888086        91431
-# 4:  g0_Delinq_SD_9   0.9531019 0.0021947146        87688
-# 5: g0_Delinq_SD_12   0.9238008 0.0026908258        81014
-
-### RESULTS: As the SD period increase, there is a slight decrease in concordance.
-### NOTE: Concordance is extremely high with low variability
-
-### Conclusion: Larger window are less influenced by large changes therefore significant changes
-###             are less pronounced. Include [g0_Delinq_SD_4] in the varlist.
-
-varlist <- vecChange(varlist,Remove="PerfSpell_g0_Delinq_SD",Add=data.table(vars=c("g0_Delinq_SD_4"), vartypes=c("acc")))
-
-# ------ 1.2 Which variables are highly correlated?
-
-# Correlation analysis
-corrAnalysis(datCredit_train_AG, varlist[vartypes!="cat"]$vars, corrThresh = 0.6, method = 'spearman') # Obtain correlation groups
-
-### RESULTS:  1) [g0_Delinq_Any_Aggr_Prop] and [g0_Delinq_Ave] with a correlation of 1
-###           2) [g0_Delinq] and [Arrears]
-
-### CONCLUSION: A single variable from each group must be retained while the rest are removed.
-
-
+### AB: I suspect very strongly that PWP_ST can be copied, pasted here, and rerun accordingly
 
 
 

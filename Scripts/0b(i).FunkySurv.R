@@ -91,7 +91,7 @@ TimeDef_Form <- function(TimeDef="TFD", vars){
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                                  paste(vars,collapse=" + ")))
   }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
-    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Grp + ",
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ strata(PerfSpell_Num) + ",
                                  paste(vars,collapse=" + ")))
   }
 }

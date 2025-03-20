@@ -42,7 +42,7 @@ if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_val
 vars <- c("g0_Delinq_SD_4", "g0_Delinq_SD_5", "g0_Delinq_SD_6", "g0_Delinq_SD_9", "g0_Delinq_SD_12")
 
 # Goodness of fit test
-csTable(datCredit_train_PWPST,vars)
+csTable(datCredit_train_PWPST,vars, TimeDef="PWPW_ST")
 #           Variable B_Statistic
 # 5 g0_Delinq_SD_12      0.6463
 # 1  g0_Delinq_SD_4      0.6458

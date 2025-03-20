@@ -30,21 +30,6 @@
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
 
-# ### AB: This [Removed]-variable already exists as [PerfSpell_Exit_Ind], created in script 3a(i).. Remove removed from all subsequent scripts. ;-)
-# datCredit_train_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-# ### AB: At this point, we really don't want to perform data preparation and feature engineering within the modelling scripts.
-# # By doing so, we are breaking our own "mould"/pattern. Move these into the appropriate section within script 3c.
-# 
-# datCredit_valid_TFD[,Removed := ifelse(Date==PerfSpell_Max_Date,T,F)]
-# datCredit_valid_TFD[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
-# datCredit_valid_TFD[,TimeInDelinqState_Lag_1 := shift(TimeInDelinqState,fill=0),by=LoanID]
-# ### AB: Same comment here as before
-# 
-# datCredit_train_TFD[,slc_acct_roll_ever_24_imputed_med_f := factor(slc_acct_roll_ever_24_imputed_med)]
-# ### AB: This variable is created but seemingly never used?
-# 
-# ### AB [2024-12-01]: I moved the function definitions to the most appropriate script, i.e., script 0b(i).
-# # Please go and craft decent comments for them, i.e., inputs and outputs, as one would do with any function
 
 #============================================================================================
 # ------ 1. Delinquency measures
@@ -1217,7 +1202,7 @@ c <- coefficients(cox_TFD)
 #11:              M_Inflation_Growth_6    5.69091286677
 #12:               M_RealIncome_Growth  -19.61119748306
 
-# -T Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
+# -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
 csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numIt=10,
                        fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
 ### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 

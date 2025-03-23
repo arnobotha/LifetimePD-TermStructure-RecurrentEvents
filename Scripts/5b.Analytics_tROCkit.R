@@ -348,14 +348,17 @@ for (i in 1:length(vecPercTimepoint)) {
 
 # -- Graph a combined ROC-graph across prediction times t
 # - Aesthetic parameters
+datGraph[, FacetLabel := "Time to First Default (TFD) model"]
 vCol <- brewer.pal(8,"Set1")
 vLabels_F <- setNames(vLabels, vecPercTimepoint)
 chosenFont <- "Cambria"
 
 # - Create ROC-graph
 (gg <- ggplot(datGraph, aes(x=x,y=y,group=PredictTime)) + theme_minimal() + 
-    theme(text = element_text(family=chosenFont), legend.position="inside", 
-          legend.position.inside = c(0.75,0.25),
+    theme(text = element_text(family=chosenFont), legend.position="inside",
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90),
+          legend.position.inside = c(0.65,0.3),
           legend.background = element_rect(fill="snow2", color="black",
                                            linetype="solid", linewidth=0.1)) +
     labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
@@ -367,6 +370,7 @@ chosenFont <- "Cambria"
     geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.5) + 
     geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.5) +
     # Facets and scales
+    facet_grid(FacetLabel ~ .) +  
     scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
     scale_linetype_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
     scale_shape_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
@@ -374,7 +378,7 @@ chosenFont <- "Cambria"
 
 
 # - Save graph
-dpi <- 200
+dpi <- 250
 ggsave(gg, file=paste0(paste0(genFigPath, "TFD/DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence.png")), 
        width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 

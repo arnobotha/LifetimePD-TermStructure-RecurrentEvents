@@ -170,10 +170,10 @@ MAE_eventProb <- mean(abs(datFusion$EventRate - datFusion$EventRate_Exp), na.rm=
 
 # - Graphing parameters
 vCol <- brewer.pal(10, "Paired")[c(3,4,1,2)]
-vLabel2 <- c("b_Actual_spline"=paste0("Actual natural spline (df=",sDf_Act,")"), 
-             "d_Expected_spline"=paste0("Scored natural spline (df=", sDf_Exp,")"),
+vLabel2 <- c("b_Actual_spline"=paste0("Actual spline (df=",sDf_Act,")"), 
+             "d_Expected_spline"=paste0("Scored spline (df=", sDf_Exp,")"),
              "a_Actual"="Actual", "c_Expected"="Scored")
-vSize <- c(0.5,0.75,0.5,0.75)
+vSize <- c(0.5,0.6,0.5,0.6)
 vLineType <- c("dashed", "solid", "dashed", "solid")
 
 # - Create main graph 
@@ -185,7 +185,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
           strip.background=element_rect(fill="snow2", colour="snow2"),
           strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
     # Main graph
-    geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1) + 
+    geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1.25) + 
     geom_line(aes(y=EventRate, colour=Type, linetype=Type, linewidth=Type)) + 
     # Annotations
     annotate("text", y=0.006,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
@@ -197,12 +197,13 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
     scale_linetype_manual(name="", values=vLineType, labels=vLabel2) + 
     scale_shape_discrete(name="", labels=vLabel2) + 
     scale_y_continuous(breaks=breaks_pretty(), label=percent) + 
-    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma)
+    scale_x_continuous(breaks=breaks_pretty(n=8), label=comma) + 
+    guides(color=guide_legend(nrow=2))
 )
 
 # - Save plot
-dpi <- 180 # reset
-ggsave(gsurv_ft, file=paste0(genFigPath, "TFD/EventProb-", mainEventName,"_SpellLevel_FirstSpell_ActVsExp.png"),
+dpi <- 260 # reset
+ggsave(gsurv_ft, file=paste0(genFigPath, "TFD/EventProb-", mainEventName,"_SpellLevel_FirstSpell_ActVsExp_TFD.png"),
        width=1200/dpi, height=1000/dpi,dpi=dpi, bg="white")
 
 

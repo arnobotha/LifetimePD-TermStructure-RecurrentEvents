@@ -47,7 +47,7 @@ macro_data_q <- as.data.table(read_sas(paste0(genRawPath,"macro_data_quarterly.s
 # --- 3. Mortgage credit dataset
 ptm <- proc.time() # for runtime calculations (ignore)
 # Import, then recast data into a more pliable data.table object for greater memory efficiency
-dat.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_final_sub.sas7bdat")), stringsAsFactors=T) 
+dat.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_final.sas7bdat")), stringsAsFactors=T) 
 proc.time() - ptm # IGNORE: elapsed runtime
 
 # - Save to disk(zip) for quick disk-based retrieval later
@@ -58,7 +58,7 @@ pack.ffdf(paste0(genPath, "creditdata_final1"), dat.raw); gc()
 
 ptm <- proc.time()# for runtime calculations (ignore)
 # Import, then recast data into a more pliable data.table object for greater memory efficiency
-datInput.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_input_sub.sas7bdat")), stringsAsFactors=T) 
+datInput.raw <- as.data.table(read_sas(paste0(genRawPath, "creditdata_input.sas7bdat")), stringsAsFactors=T) 
 proc.time() - ptm # IGNORE: elapsed runtime
 
 # - Save to disk (zip) for quick disk-based retrieval later

@@ -97,17 +97,17 @@ if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-mac
   # - Common path for saving important analytics and figures
   genFigPath <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Figures/"
   
-} else if (Sys.getenv("USERNAME") == "R8873885") { # Bernard Scheepers
+} else if (Sys.getenv("USERNAME") == "w8873885") { # Bernard Scheepers
   # - Common path for saving large R-objects as back-up and/or as reusable checkpoints
-  genPath <- "C:/BMI Data/LifetimePD-TermStructure-RecurrentEvents_Data/"
+  genPath <- "C:/Data/LifetimePD-TermStructure-RecurrentEvents_Data/"
   # - Common path from which raw big datasets are imported
-  genRawPath <- "C:/BMI Data/"
+  genRawPath <- "C:/Data/"
   # - Common path for sourcing R-scripts in main codebase
-  path_cust <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  path_cust <- "C:/Users/w8873885/Desktop/Article/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
   # - Common path for storing important (but small!) R-objects as back-up
-  genObjPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  genObjPath <- "C:/Users/w8873885/Desktop/Article/LifetimePD-TermStructure-RecurrentEvents/Objects/"
   # - Common path for saving important analytics and figures
-  genFigPath <- "C:/Users/R8873885/OneDrive - FRG/Documents/LifetimePD-TermStructure-RecurrentEvents/Figures/"
+  genFigPath <- "C:/Users/w8873885/Desktop/Article/LifetimePD-TermStructure-RecurrentEvents/Figures/"
 }
 
 

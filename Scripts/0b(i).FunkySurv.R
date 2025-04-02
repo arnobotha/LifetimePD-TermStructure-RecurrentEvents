@@ -16,27 +16,11 @@
 
 # ----------------- 1. Functions related to the modelling process------------------
 
-# --- Function to ensure that the column is indeed part of the given dataset.
-# Input:  [cols], Vector containing the column names to be checked if they exist in the dataset.
-#         [dataset], Dataset to check on if the columns exist.
-# Output: print on whether the columns are in the dataset or which columns are not in the dataset.
-colCheck <- function(cols, dataset) {
-  # Check if all columns exist in the dataset
-  missing_cols <- cols[!(cols %in% colnames(dataset))]
-  
-  if (length(missing_cols) == 0) { # All columns are in the dataset.
-    paste0("SAFE: All columns are in the dataset")
-  } else { # List columns not in the dataset.
-    warning("WARNING: Some columns are not in the dataset.")
-    paste0("Columns not in the dataset: ", paste(missing_cols, collapse = ", "))
-  }
-}
 
 
-
-# --- Function to add and/or remove certain values from a vector
-# Input:  [mat], (2 x n) Matrix on which changes will be made. The first column contains the variable names (vars) and the second their respective variable type (vartypes)
-#         [Remove], Vector containing the entries to be removed.
+# --- Function to add and/or remove certain values from a vector (Improves readability of code)
+# Input:  [mat]: (2 x n) Matrix on which changes will be made. The first column contains the variable names (vars) and the second their respective variable type (vartypes);
+#         [Remove]: Vector containing the entries to be removed.
 # Output:        [m], Updated matrix.
 vecChange <- function(mat,Remove=FALSE,Add=FALSE){
   m <- mat
@@ -48,16 +32,14 @@ vecChange <- function(mat,Remove=FALSE,Add=FALSE){
 
 
 # --- Function to detect significant correlations (abs(cor) > 0.6) between vectors.
-# Input:  [data], Dataset containing the variables in varlist to dertermine correlations.
-#         [varlist], list of variable names to determine correlations.
-#         [corrThresh], the absolute correlation threshold above which correlations are deemed significant.
-#         [method], the method by which correlations are determined.
-#         [Remove], Vector containing the entries to be removed.
+# Input:  [data_train]: Training data; [variables]: List of variables used in correlation analysis;
+#         [corrThresh]: Absolute correlation threshold above which correlations are deemed significant;
+#         [method]: Correlation method.
 # Output: <graph>  Upper half of correlation matrix.
 #         <print> Text indicating the variable pairs with high correlation.
-corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
+corrAnalysis <- function(data_train, variables, corrThresh = 0.6, method = 'spearman') {
   # Compute the correlation matrix
-  corrMat <- as.data.table(data) %>% subset(select = varlist) %>% cor(method = method)
+  corrMat <- as.data.table(data_train) %>% subset(select = variables) %>% cor(method = method)
   
   # Visualize the correlation matrix
   corrplot(corrMat, type = 'upper', addCoef.col = 'black', tl.col = 'black', diag=FALSE,
@@ -83,46 +65,56 @@ corrAnalysis <- function(data, varlist, corrThresh = 0.6, method = 'spearman') {
 
 
 # --- Function to return the appropriate formula object based on the time definition.
-#         [TimeDef], Time definition on which the cox ph models are based on.
-#         [var], Single variable name
-TimeDef_Form <- function(TimeDef="TFD", vars){
+#         [TimeDef]: Time definition incorporated;
+#         [variables]: List of variables used to build single-factor models;
+TimeDef_Form <- function(TimeDef, variables){
   # Create formula based on time definition of the dataset.
-  if(TimeDef=="TFD" | TimeDef=="AG"){# Formula for time to first default time defintion (containing only the fist performance spell).
+  if(TimeDef=="TFD"){# Formula for time to first default time defintion (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                 paste(variables,collapse=" + ")))
+    
+  }else if(TimeDef=="AG"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
                                  paste(vars,collapse=" + ")))
+    
   }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ strata(PerfSpell_Num) + ",
-                                 paste(vars,collapse=" + ")))
-  }
+                                 paste(vars,collapse=" + ")))}
 }
 
 
 
 # --- Function to fit a given formula within a Cox regression model towards extracting Harrell's C-statistic and related quantities
-calc_HarrellC <- function(formula, data_train, data_valid, variable="", it=NA, logPath="", fldSpellID="PerfSpell_Key") {
+#         [formula]: Cox regression formula object; [data_train]: Training data;
+#         [data_valid]: Validation data; [variables]: List of variables used to build single-factor models;
+#         [it]: Number of variables being compared; [logPath], Optional path for log file for logging purposes;
+#         [fldSpellID]: Field name of spell-level ID.
+calc_HarrellC <- function(formula, data_train, data_valid, variables="", it=NA, logPath="", fldSpellID="PerfSpell_Key") {
   model <- coxph(formula,id=get(fldSpellID), data = data_train) # Fit Cox model
-  if (!is.na(it)) {
+  
+  if (!is.na(it)) {# Output the number of models built, where the log is stored in a text file afterwards.
     cat(paste0("\n\t ", it,") Single-factor survival model built. "),
         file=paste0(logPath,"HarrelsC_log.txt"), append=T)
   }
+  
   c <- concordance(model, newdata=data_valid) # Calculate concordance of the model based on the validation set.
   conc <- as.numeric(c[1])# Extract concordance
-  sd <- sqrt(c$var)# Extract concordance variability
+  sd <- sqrt(c$var)# Extract concordance variability as a standard deviation
   lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
+  
   # Return results as a data.table
-  return(data.table(Variable = variable, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
+  return(data.table(Variables = variables, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
 }
 
 
 
 # --- Function to extract the concordances (Harrell's C) from single-factor models
-# Input:  [data_train], Training dataset on which the models are built on.
-#         [data_valid], Validation dataset on which the models' concordance is validated on.
-#         [variables], Vector containing a list of the variables for the models.
-#         [TimeDef], Time definition on which the cox ph models are based on.
-# Output: [matResults]  Table containing the concordance, se(concordance) and log ratio of the singular models.
+# Input:  [data_train]: Training data; [data_valid]: Validation data;
+#         [variables]: List of variables used to build single-factor models;
+#         [fldSpellID]: Field name of spell-level ID; [TimeDef]: Time definition incorporated.
+# Output: [matResults]: Result matrix.
 concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_Key",
-                      TimeDef="TFD", numThreads=6, genPath) {
+                      TimeDef, numThreads=6, genPath) {
   # - Testing conditions
   # data_valid <- datCredit_valid_AG; TimeDef="AG"; numThreads=6
   # fldEventInd<-"Default_Ind"
@@ -153,10 +145,10 @@ concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_K
 
 
 # --- Function to calcualte the complement of the KS test statistic "B-statistic"
-# Inputs: [formula]: Cox regression formula object; [data_train]: training data
+# Inputs: [formula]: Cox regression formula object; [data_train]: Training data;
 #         [fldSpellID]: Field name of spell-level ID; [vEvents]: spell-level vector of event indicators
 #         [seedVal]: Seed value for random number generation; [it]: optional iteration parameter for logging purposes;
-#         [logPath]: Optional path for log file for logging purposes
+#         [logPath]: Optional path for log file for logging purposes.
 # Outputs: b-statistic (single value)
 calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, seedVal, it=NA, logPath=NA) {
   # Fit Model
@@ -183,12 +175,13 @@ calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, 
 
 
 # --- Function to extract the B-statistic from a range of models built on a list of variables based on a time definition.
-# Input:  [data_train], Training dataset on which the models are built on.
-#         [seedVal], Seed value to ensure results are reproducible.
-#         [numIt], Number of simulations to calculate the B-statistic.
-#         [TimeDef], Time definition on which the cox ph models are based on.
-# Output: [Results]  Table containing the concordance, se(concordance) and log ratio of the singular models.
-csTable <- function(data_train, variables, TimeDef="TFD", seedVal=1, numIt=5, 
+# Input:  [data_train]: Training data; [seedVal]: Seed value for random number generation;
+#         [numIt]: Number of iterations; [TimeDef], Time definition incorporated.
+#         [fldSpellID]: Field name of spell-level ID; [fldLstRowInd]: Indicates the end of a performance spell;
+#         [fldEventInd]: Indicates whether the target event occured; [numThreads]: Number of threads;
+#         [genPath]: Optional path for log file for logging purposes.
+# Output: [Results]:  Results table.
+csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5, 
                     fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
                     numThreads=6, genPath=NA){
   
@@ -552,39 +545,6 @@ survQuants.data <- function(datGiven_train, datGiven_score, vars, beta, fldID="P
   return(datSurvSet)
 }
 
-
-
-### AB: Marked for deletion, rather use lm(output ~ ns(input, df=3), data=dat) from the splines package
-# -- Cubic spline function
-spline_estimation <- function(times, hazard, nknots, degree) {
-  n <- length(times)  # Number of observations
-  
-  # Calculate quantiles for knot placement
-  qtiles <- (1:nknots + 1) / (nknots + 2)  # Generate nknots evenly spaced quantiles
-  knots <- quantile(times, probs = qtiles, na.rm = TRUE)
-  
-  # Construct the T matrix efficiently
-  matT <- cbind(
-    sapply(0:degree, function(j) times^j),                           # Polynomial terms
-    sapply(knots, function(k) pmax(0, (times - k)^degree))           # Truncated power basis
-  )
-  
-  # Ordinary Least Squares: Compute the parameter estimates
-  coef <- solvet(crossprod(matT), tol=1e-15) %*% crossprod(matT, hazard)  # More efficient than t(T) %*% T and t(T) %*% y
-  
-  # Polynomial terms: ∑_{j=0}^{d} α_j * t^j
-  poly_terms <- sapply(0:degree, function(j) coef[j + 1] * times^j)
-  
-  # Truncated power basis terms: ∑_{p=1}^{r} α_{p+d} * (t - K_p)^d_+
-  truncated_terms <- sapply(1:nknots, function(p) {
-    coef[1 + degree + p] * pmax(0, (times - knots[p])^degree)
-  })
-  
-  # Combine polynomial and truncated power terms
-  y <- rowSums(poly_terms) + rowSums(truncated_terms)
-  y <- pmax(y,0)
-  return(y)
-}
 
 
 

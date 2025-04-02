@@ -97,8 +97,6 @@ pack.ffdf(paste0(genPath,"creditdata_final_TFD"), datCredit_TFD)
 rm(datCredit_TFD); gc()
 
 
-# BS: I think for the article we have to ascertain whether the Age_Adj is the best method to capute the timing component.
-### AB: If we want to know the "true age" of a loan at any t, then [Age_Adj] is the best we have. [Age] is the base but flawed variable that we corrected into [Age_Adj]
 # --- 3.2 Anderson-Gill (AG) time definition
 datCredit_AG <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = Age_Adj-1, End = Age_Adj,
@@ -110,7 +108,6 @@ pack.ffdf(paste0(genPath,"creditdata_final_AG"), datCredit_AG)
 rm(datCredit_AG); gc()
 
 
-# BS: I think for the article we have to ascertain whether the Age_Adj is the best method to capute the timing component.
 # - 3.3 Prentice-Williams-Peterson (PWP) Total-time  definition
 datCredit_PWPTT <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = Age_Adj-1, End = Age_Adj,

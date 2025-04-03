@@ -76,7 +76,6 @@ smp_perc <- smp_size/length(unique(datCredit_TFD[,get(clusVar)]))
 smp_frac <- 0.7 # sampling fraction for resampling scheme
 minStrata_size <- 0 # Minimum strata size specified for subsample, used in strata analysis
 timeDef_TFD <- T # Special logic during resampling for "TFD". 
-### AB: VERY IMPORTANT: Switch off [timeDef_TFD] when translating this script to other time definition scripts!!
 
 
 

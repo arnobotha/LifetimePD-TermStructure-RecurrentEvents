@@ -84,6 +84,63 @@ TimeDef_Form <- function(TimeDef, variables){
 
 
 
+# --- Function to fit a given formula within a Cox regression model towards extracting Akaike Information Criterion (AIC) and related quantities
+#         [formula]: Cox regression formula object; [data_train]: Training data;
+#         [data_valid]: Validation data; [variables]: List of variables used to build single-factor models;
+#         [it]: Number of variables being compared; [logPath], Optional path for log file for logging purposes;
+#         [fldSpellID]: Field name of spell-level ID.
+calc_AIC <- function(formula, data_train, variables="", it=NA, logPath="", fldSpellID="PerfSpell_Key") {
+  model <- coxph(formula,id=get(fldSpellID), data = data_train) # Fit Cox model
+  
+  if (!is.na(it)) {# Output the number of models built, where the log is stored in a text file afterwards.
+    cat(paste0("\n\t ", it,") Single-factor survival model built. "),
+        file=paste0(logPath,"AIC_log.txt"), append=T)
+  }
+  
+  AIC <- AIC(model) # Calculate AIC of the model.
+ 
+  # Return results as a data.table
+  return(data.table(Variables = variables, AIC = AIC))
+}
+
+
+
+# --- Function to extract the Akaike Information Criterion (AIC) from single-factor models
+# Input:  [data_train]: Training data; [data_valid]: [variables]: List of variables used to build single-factor models;
+#         [fldSpellID]: Field name of spell-level ID; [TimeDef]: Time definition incorporated.
+#         [numThreads]: Number of threads used; [genPath]: Optional path for log file. 
+# Output: [matResults]: Result matrix.
+AICTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
+                      TimeDef, numThreads=6, genPath) {
+  # - Testing conditions
+  # data_train <- datCredit_train_TFD; TimeDef="TFD"; numThreads=6
+  # fldSpellID<-"PerfSpell_Key"; variables<-"g0_Delinq_SD_4";
+  
+  # - Iterate across loan space using a multi-threaded setup
+  ptm <- proc.time() #IGNORE: for computation time calculation
+  cl.port <- makeCluster(round(numThreads)); registerDoParallel(cl.port) # multi-threading setup
+  cat("New Job: Estimating AIC for each variable as a single-factor survival model ..",
+      file=paste0(genPath,"AIC_log.txt"), append=F)
+  
+  results <- foreach(j=1:length(variables), .combine='rbind', .verbose=F, .inorder=T,
+                     .packages=c('data.table', 'survival'), .export=c('calc_AIC', 'TimeDef_Form')) %dopar%
+    { # ----------------- Start of Inner Loop -----------------
+      # - Testing conditions
+       j <- 1
+      calc_AIC(formula=TimeDef_Form(TimeDef,variables[j]), variables=variables[j],
+                    data_train=data_train, it=j, logPath=genPath,  fldSpellID=fldSpellID)
+      } # ----------------- End of Inner Loop -----------------
+  stopCluster(cl.port); proc.time() - ptm  
+  
+  # Sort by concordance in ascending order.
+  setorder(results, AIC)
+  
+  # Return resulting table.
+  return(results)
+}
+
+
+
 # --- Function to fit a given formula within a Cox regression model towards extracting Harrell's C-statistic and related quantities
 #         [formula]: Cox regression formula object; [data_train]: Training data;
 #         [data_valid]: Validation data; [variables]: List of variables used to build single-factor models;
@@ -179,7 +236,7 @@ calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, 
 #         [numIt]: Number of iterations; [TimeDef], Time definition incorporated.
 #         [fldSpellID]: Field name of spell-level ID; [fldLstRowInd]: Indicates the end of a performance spell;
 #         [fldEventInd]: Indicates whether the target event occured; [numThreads]: Number of threads;
-#         [genPath]: Optional path for log file for logging purposes.
+#         [genPath]: Optional path for log file.
 # Output: [Results]:  Results table.
 csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5, 
                     fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
@@ -275,7 +332,7 @@ csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5,
 
 # --- Function to calculate various survival-related quantities for a given loan history
 # Input:    [datGiven]: given loan history; [coxGiven]: fitted cox PH model; [it]: current iteration index; 
-#           [numKeys]: total keys; [genPath]: path of reporting log
+#           [numKeys]: total keys; [genPath]: Optional path for log file.
 # Output:   Survival probability, cumulative hazard, hazard, and event probability
 survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
   # datGiven <- subset(test,PerfSpell_Key == vSpellKeys[2]); coxGiven <- cox_TFD
@@ -308,7 +365,7 @@ survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
 
 # --- Function to calculate various survival-related quantities for a given loan history
 # Input:    [datGiven]: given loan history; [coxGiven]: name of fitted cox PH model to be unpacked; [it]: current iteration index; 
-#           [numKeys]: total keys; [genPath]: path of reporting log
+#           [numKeys]: total keys; [genPath]: Optional path for log file.
 # Output:   Survival probability, cumulative hazard, hazard, and event probability
 survQuants.unpack <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
   # datGiven <- subset(test,PerfSpell_Key == vSpellKeys[2]); coxGiven <- "cox_TFD"

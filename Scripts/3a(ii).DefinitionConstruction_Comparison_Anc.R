@@ -52,12 +52,7 @@ datCredit_TFD1[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 datCredit_TFD2 <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = PerfSpell_Counter-1, End = PerfSpell_Counter,
          Default_Ind = DefaultStatus1)
-### AB: Using the "_Counter" variety is incorrect since it refers simply to the row index within a spell, i.e.,
-# 1, ..., <Spell_Length>. Instead, one should rather use the "timeInPerfSpell" as the spell period since it
-# accounts for left-truncated spells, which are quite prevalent in our dataset.
-# We should fix this after the close-out and rerun all subsequent analyses/models downstream from this point.
-# It is an important update and the results should shift on some axis, though will perhaps not change in
-# distributional shape.
+
 # Sanity check - Should be TRUE
 datCredit_TFD2[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
 
@@ -99,15 +94,15 @@ all.equal(datCredit_TFD1[,Start], datCredit_TFD3[,Start]) # FALSE
 # -- Investigate distribution of differences
 # Perform distributional analysis on difference in [Start] variables.
 describe(datCredit_TFD3$Start - datCredit_TFD2$Start)
-# Mean of 23.69 with a percentile distribution [0.05, 0.95] of [0; 138]
+# Mean of 23.79 with a percentile distribution [0.05, 0.95] of [0; 138]
 
 hist(datCredit_TFD3$Start - datCredit_TFD2$Start, breaks='FD')
-# Extremely skewed distribution with significant extreme values (a maximum of 1216).
+# Extremely skewed distribution with significant extreme values (a maximum of 1357).
 
 # -- Investigate distribution of differences given the loans are left-truncated.
 # Perform distributional analysis on difference in [Start] variables.
 describe(datCredit_TFD3[PerfSpell_LeftTrunc==1, Start] - datCredit_TFD1[PerfSpell_LeftTrunc==1, Start])
-# Mean of 52.34 with a percentile distribution [0.05, 0.95] of [2; 167], with a minimum of 1
+# Mean of 52.52 with a percentile distribution [0.05, 0.95] of [3; 167], with a minimum of 1
 
 hist(datCredit_TFD3[PerfSpell_LeftTrunc==1, Start] - datCredit_TFD1[PerfSpell_LeftTrunc==1, Start], breaks='FD')
 # Skewed distribution with significant extreme values

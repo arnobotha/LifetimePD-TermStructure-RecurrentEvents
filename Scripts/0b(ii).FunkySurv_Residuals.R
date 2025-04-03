@@ -54,7 +54,7 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
 # and a random unit exponential distribution. The similarity degree is summarised by
 # using the complement of the Kolmogorov-Smirnov test statistic (1-KS), which becomes
 # our similarity measure; higher values = greater similarity = better fit.
-# Input: [cox]: A fitted Cox proportional hazard model; [data_train]:
+# Input: [cox]: A fitted Cox proportional hazard model; [data_train]: Training data;
 # Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
 #         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
 #                     with the unit exponential distribution function.

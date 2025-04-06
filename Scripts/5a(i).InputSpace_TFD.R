@@ -571,28 +571,14 @@ varlist <- vecChange(varlist,Remove=c("Term"))
 vars <- c("Principal", "LN_TPE")
 
 # Goodness of fit test
-csTable(datCredit_train_TFD, vars, TimeDef="TFD") # [] has the lowest KS-statistic
-#HERE
-aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the lowest AIC
-#       Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: Undrawn_Amt      0.6474      0.6479      0.6505      0.6484      0.6453 0.64790
-# 2:      LN_TPE      0.6466      0.6449      0.6460      0.6451      0.6481 0.64614
-# 3:   Principal      0.6439      0.6465      0.6455      0.6455      0.6478 0.64584
-# 4:       Range      0.0035      0.0030      0.0050      0.0033      0.0028 0.00352
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Principal] has the lowest AIC
 
-### RESULTS: [Undrawn_Amt] appears to have the best goodness of fit. The other two variables'
-###           vary quite a lot.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Principal] has the highest concordance
 
-# Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#       Variable Concordance           SD LR_Statistic
-# 1: Undrawn_Amt   0.6883511 0.0006726495         2126
-# 2:   Principal   0.5827355 0.0040985952          335
-# 3:      LN_TPE   0.5121296 0.0018064070           29
-
-### RESULTS:  [Undrawn_Amt] appears to have significant more concordance than the other variables.
+### RESULTS:  [Principal] appears to have significant more concordance than the other variables.
 ###           [LN_TPE] could possibly be removed.
 
 # ------ 4.5 What is the predictive power of the variables in a single model?
@@ -604,14 +590,10 @@ coxGen <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
 
 summary(coxGen)# All varaibles are significant (p-value < 0.001)
 
-GoF_CoxSnell_KS(coxGen,datCredit_train_TFD,GraphInd = FALSE) # 0.6485
-### RESULTS: Improved goodness of fit.
-
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+GoF_CoxSnell_KS(coxGen,datCredit_train_TFD,GraphInd = FALSE) # 0.6534
 
 # Accuracy
-concordance(coxGen, newdata=datCredit_valid_TFD) # Concordance= 0.6765 se= 0.003312
-### RESULTS: Good Concordance
+concordance(coxGen, newdata=datCredit_valid_TFD) # Concordance= 0.6159 se= 0.004391
 
 # House keeping
 rm(coxGen)
@@ -620,7 +602,7 @@ rm(coxGen)
 
 #============================================================================================
 
-modelVar <- c(modelVar, "Principal", "Undrawn_Amt", "LN_TPE")
+modelVar <- c(modelVar, "Principal", "LN_TPE")
 
 #============================================================================================
 # ------ 5. Portfolio Level
@@ -640,24 +622,13 @@ corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.
 # Initialize variable
 vars <- c("CuringEvents_Aggr_Prop","NewLoans_Aggr_Prop")
 
-# Goodness of fit test of variables
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                 Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:     NewLoans_Aggr_Prop      0.6471      0.6513      0.6494      0.6486      0.6494 0.64916
-# 2: CuringEvents_Aggr_Prop      0.6512      0.6474      0.6494      0.6455      0.6475 0.64820
-# 3:                  Range      0.0041      0.0039      0.0000      0.0031      0.0019 0.00260
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [NewLoans_Aggr_Prop] has the lowest AIC
 
-### RESULTS:  Both seem to have a good goodness of fit.
-
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                 Variable Concordance          SD LR_Statistic
-# 1:     NewLoans_Aggr_Prop   0.5571220 0.004159613          194
-# 2: CuringEvents_Aggr_Prop   0.5359976 0.004123115           82
-
-## RESULTS: The concordances are not particularly good.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [NewLoans_Aggr_Prop] has the highest concordance
 
 ### CONCOLUSION:  Keep both variables in the model
 
@@ -669,8 +640,7 @@ coxPort <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                       datCredit_train_TFD)
 
 summary(coxPort)
-### RESULS: [CuringEvents_Aggr_Prop] has a high se(coef) ((22)realative to coef (42)
-###         and does not have a significant p-value. [NewLoans_Aggr_Prop] is significant.
+### RESULS: [CuringEvents_Aggr_Prop] has a high se(coef) ((19)realative to coef (-64)
 
 ### CONCLUSION: Remove [CuringEvents_Aggr_Prop]
 
@@ -700,53 +670,41 @@ corrAnalysis(datCredit_train_TFD, varlist$vars[varlist$vartypes != 'cat'],
 # Initialize variables
 vars <- c("M_Emp_Growth", "M_RealGDP_Growth", "M_RealIncome_Growth")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:        M_Emp_Growth      0.6469      0.6484      0.6468      0.6498      0.6474 0.64786
-# 2:    M_RealGDP_Growth      0.6473      0.6463      0.6516      0.6449      0.6489 0.64780
-# 3: M_RealIncome_Growth      0.6445      0.6467      0.6448      0.6509      0.6518 0.64774
-# 4:               Range      0.0028      0.0021      0.0068      0.0060      0.0044 0.00442
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [M_RealGDP_Growth] has the lowest AIC
 
-### RESULTS:  Non-conclusive results as rankings fluctuated too much over 5 iterations.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [M_RealGDP_Growth] has the highest concordance
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#               Variable Concordance          SD LR_Statistic
-# 1: M_RealIncome_Growth   0.5341913 0.003951199           68
-# 2:        M_Emp_Growth   0.5267075 0.003999905           45
-# 3:    M_RealGDP_Growth   0.5211591 0.003910739           18
+### DISCUSS CHANGE FROM [M_RealIncome_Growth] TO [M_RealGDP_Growth]   
 
-### RESULTS:  [M_RealIncome_Growth] has the highest concordance, although the concordances
-###           are not that high.
+### CONCLUSION: Keep [M_RealGDP_Growth] in the model.
 
-### CONCLUSION: Keep M_RealIncome_Growth in the model.
-
-varlist = vecChange(varlist, Remove=c("M_Emp_Growth", "M_RealGDP_Growth"))
+varlist = vecChange(varlist, Remove=c("M_Emp_Growth", "M_RealIncome_Growth"))
 
 
 
 # ------ 6.3 What are the predictive powers of the current variables in the models?
 
 # Initialize variables
-vars <- c("M_DTI_Growth", "M_Inflation_Growth", "M_RealIncome_Growth")
+vars <- c("M_DTI_Growth", "M_Inflation_Growth", "M_RealGDP_Growth")
 
-# Compare goodness of fit of different variables
-csTable(datCredit_train_TFD,vars,seedVal = NA)
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference.
+
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the lowest AIC
 #               Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
 # 1:  M_Inflation_Growth      0.6479      0.6488      0.6452      0.6466      0.6503 0.64776
 # 2: M_RealIncome_Growth      0.6448      0.6474      0.6470      0.6473      0.6471 0.64672
 # 3:        M_DTI_Growth      0.6454      0.6441      0.6466      0.6484      0.6471 0.64632
 # 4:               Range      0.0031      0.0060      0.0037      0.0018      0.0054 0.00400
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
-
 ### RESULTS:  After 5 iterations, there is too much variability in B-statistice, therefore no conclusions can be made.
 
-# Compare concordance of different variables
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the highest concordance
 #               Variable Concordance          SD LR_Statistic
 # 1:        M_DTI_Growth   0.5350355 0.003955393          117
 # 2: M_RealIncome_Growth   0.5341913 0.003951199           68
@@ -763,30 +721,13 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
 vars <- c("M_DTI_Growth_1","M_DTI_Growth_12","M_DTI_Growth_3", "M_DTI_Growth_6",
           "M_DTI_Growth_9","M_DTI_Growth")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#           Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:  M_DTI_Growth_6      0.6481      0.6506      0.6489      0.6497      0.6484 0.64914
-# 2:  M_DTI_Growth_1      0.6526      0.6474      0.6466      0.6499      0.6445 0.64820
-# 3:  M_DTI_Growth_9      0.6466      0.6472      0.6482      0.6496      0.6464 0.64760
-# 4: M_DTI_Growth_12      0.6451      0.6504      0.6480      0.6465      0.6475 0.64750
-# 5:  M_DTI_Growth_3      0.6467      0.6496      0.6456      0.6461      0.6452 0.64664
-# 6:    M_DTI_Growth      0.6482      0.6474      0.6485      0.6446      0.6439 0.64652
-# 7:           Range      0.0075      0.0034      0.0033      0.0053      0.0045 0.00480
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [M_DTI_Growth] has the lowest AIC
 
-### RESULTS: Only [M_DTI_Growth_6], [M_DTI_Growth_1] and [M_DTI_Growth_9] appears to have the best fit.
-
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#           Variable Concordance          SD LR_Statistic
-# 1: M_DTI_Growth_12   0.5660056 0.004260414         1044
-# 2:  M_DTI_Growth_9   0.5563671 0.004283938         1220
-# 3:  M_DTI_Growth_6   0.5447379 0.004238437         1284
-# 4:  M_DTI_Growth_3   0.5361471 0.004117214         1276
-# 5:  M_DTI_Growth_1   0.5360005 0.004008607         1387
-# 6:    M_DTI_Growth   0.5350355 0.003955393         1450
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: Only [M_DTI_Growth_12], [M_DTI_Growth_9] and [M_DTI_Growth_6] appears to have the best fit.
 
@@ -800,30 +741,15 @@ varlist <- vecChange(varlist,Add=data.table(vars=c("M_DTI_Growth_6", "M_DTI_Grow
 vars <- c("M_Inflation_Growth_1","M_Inflation_Growth_12","M_Inflation_Growth_3",
           "M_Inflation_Growth_6","M_Inflation_Growth_9","M_Inflation_Growth")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                 Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:  M_Inflation_Growth_6      0.6484      0.6488      0.6489      0.6482      0.6503 0.64892
-# 2:  M_Inflation_Growth_1      0.6497      0.6467      0.6494      0.6467      0.6498 0.64846
-# 3:  M_Inflation_Growth_3      0.6468      0.6471      0.6485      0.6482      0.6480 0.64772
-# 4: M_Inflation_Growth_12      0.6476      0.6479      0.6495      0.6452      0.6469 0.64742
-# 5:    M_Inflation_Growth      0.6479      0.6478      0.6412      0.6471      0.6463 0.64606
-# 6:  M_Inflation_Growth_9      0.6475      0.6496      0.6469      0.6437      0.6423 0.64600
-# 7:                 Range      0.0029      0.0029      0.0083      0.0045      0.0080 0.00532
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: [M_Inflation_Growth_6], [M_Inflation_Growth_1] and [M_Inflation_Growth_3] appear to have the best fits.
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                 Variable Concordance          SD LR_Statistic
-# 1: M_Inflation_Growth_12   0.5582303 0.004239198          693
-# 2:  M_Inflation_Growth_6   0.5529680 0.004358212         1190
-# 3:  M_Inflation_Growth_9   0.5517474 0.004360946         1009
-# 4:  M_Inflation_Growth_3   0.5432397 0.004326945         1155
-# 5:  M_Inflation_Growth_1   0.5275290 0.004264846          976
-# 6:    M_Inflation_Growth   0.5202318 0.004253188          915
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: [M_Inflation_Growth_12], [M_Inflation_Growth_6] and [M_Inflation_Growth_9] appear to be the most accurate.
 
@@ -837,33 +763,17 @@ varlist <- vecChange(varlist,Add=data.table(vars=c("M_Inflation_Growth_6"),
 vars <- c("M_RealIncome_Growth_1","M_RealIncome_Growth_12","M_RealIncome_Growth_3",
           "M_RealIncome_Growth_6","M_RealIncome_Growth_9","M_RealIncome_Growth")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                   Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:  M_RealIncome_Growth_6      0.6502      0.6457      0.6486      0.6506      0.6488 0.64878
-# 2:  M_RealIncome_Growth_9      0.6495      0.6436      0.6481      0.6487      0.6512 0.64822
-# 3:  M_RealIncome_Growth_3      0.6484      0.6458      0.6470      0.6512      0.6470 0.64788
-# 4:  M_RealIncome_Growth_1      0.6477      0.6474      0.6450      0.6438      0.6491 0.64660
-# 5: M_RealIncome_Growth_12      0.6448      0.6451      0.6472      0.6494      0.6461 0.64652
-# 6:    M_RealIncome_Growth      0.6445      0.6447      0.6441      0.6466      0.6477 0.64552
-# 7:                  Range      0.0057      0.0038      0.0045      0.0074      0.0051 0.00530
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticable difference
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the lowest AIC
 
-### RESULTS: [M_RealIncome_Growth_6], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_3] appear to have the best fits.
+### RESULTS: [M_RealIncome_Growth_12], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_6] appear to have the best fits.
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#     Variable Concordance          SD LR_Statistic
-# 1: M_RealIncome_Growth_12   0.5131676 0.004061662          744
-# 2:  M_RealIncome_Growth_9   0.4960102 0.004007988          456
-# 3:  M_RealIncome_Growth_6   0.4844719 0.003940162          273
-# 4:  M_RealIncome_Growth_3   0.4754604 0.003902888          141
-# 5:  M_RealIncome_Growth_1   0.4681097 0.003925243           62
-# 6:    M_RealIncome_Growth   0.4658087 0.003951199           35
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
-### RESULTS: [M_RealIncome_Growth_12], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_6] appear to be the most accurate,
-###           althoug all of the have extremely weak concordances.
+### RESULTS: [M_RealIncome_Growth_12], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_6] appear to be the most accurate.
 
 ### CONCLUSION: Do not include the lags for [M_RealIncome_Growth].
 
@@ -873,33 +783,20 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
 vars <- c("M_DTI_Growth", "M_Inflation_Growth","M_DTI_Growth_6", "M_DTI_Growth_9",
           "M_Inflation_Growth_6", "M_Inflation_Growth_12", "M_RealIncome_Growth")
 
-# Test Goodness of fit
-csTable(datCredit_train_TFD,vars)
-#               Variable B_Statistic
-# 5 M_Inflation_Growth_6      0.6500
-# 6  M_RealIncome_Growth      0.6481
-# 1         M_DTI_Growth      0.6479
-# 2   M_Inflation_Growth      0.6477
-# 4       M_DTI_Growth_9      0.6461
-# 3       M_DTI_Growth_6      0.6449
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable differences
 
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
-### RESULTS: All variables seem to be relatively good fits with the lowest being 0.6449.
+### RESULTS: [M_DTI_Growth], [M_DTI_Growth_9] and [M_DTI_Growth_6] appear to be the most accurate.
 
-# Test Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                 Variable Concordance          SD LR_Statistic
-# 1: M_Inflation_Growth_12   0.5582303 0.004239198          693
-# 2:        M_DTI_Growth_9   0.5563671 0.004283938         1220
-# 3:  M_Inflation_Growth_6   0.5529680 0.004358212         1190
-# 4:        M_DTI_Growth_6   0.5447379 0.004238437         1284
-# 5:          M_DTI_Growth   0.5350355 0.003955393         1450
-# 6:    M_Inflation_Growth   0.5202318 0.004253188          915
-# 7:   M_RealIncome_Growth   0.4658087 0.003951199           35
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+
+### RESULTS: [M_Inflation_Growth_6], [M_DTI_Growth_9] and [M_DTI_Growth_6] appear to be the most accurate.
 
 ### RESULTS: All variables should be kept in the model. Although [M_RealIncome_Growth]
-###           has a low concordance, it is kept in the model as a proxy for M_Emp_Growth.
+###           has a low concordance, it is kept in the model as a proxy for [M_Emp_Growth].
 
 # ------ 6.6 What is the predictive performance of the current thematic model?
 # Initialize macro-economic thematic variables
@@ -912,13 +809,11 @@ coxMacro <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                   datCredit_train_TFD)
 summary(coxMacro)
 
-### RESULTS: [M_DTI_Growth_6] and [M_DTI_Growth_9] have high p-values and seemingly 
-###           the lowest Goodness of Fit (also opposite signs), therefore they should be removed.
-###           [M_Inflation_Growth_12] has a high p-values and an
-###           opposite signs to M_Inflation_Growth and M_Inflation_Growth_6, therefore they should be removed.
+### RESULTS: [M_DTI_Growth_6] and [M_DTI_Growth_9] have opposite coefficients, which
+###           seems counter intuitive, therefore they should be removed. Similar case 
+###           can be concluded for [M_Inflation_Growth_12].
 
-vars <- c("M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6", "M_RealIncome_Growth",
-          "M_Inflation_Growth_12")
+vars <- c("M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6", "M_RealIncome_Growth")
 
 # Build model based on macro economic variables
 coxMacro <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
@@ -928,24 +823,16 @@ summary(coxMacro)
 
 ### RESULTS:  All values have significant p-value.
 
-# Test Goodness of fit of the single model based on all variables.
-GoF_CoxSnell_KS(coxMacro,datCredit_train_TFD,GraphInd = F) # 0.6499
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
-# Goodness of fit is equal to greatest Goodness of fit univariate model.
+# Test goodness of fit
+GoF_CoxSnell_KS(coxMacro,datCredit_train_TFD,GraphInd = FALSE) # 0.6523
 
-# Test accuracy of the single model based on all variables.
-concordance(coxMacro, newdata=datCredit_valid_TFD)# 0.5509
-# Concordance is much better than that of individual models.
+# Test accuracy
+concordance(coxMacro, newdata=datCredit_valid_TFD) # Concordance= 0.5876 se= 0.004408
 
 #============================================================================================
 
 modelVar <- c(modelVar,"M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth_6",
               "M_RealIncome_Growth")
-
-
-
-
-
 
 #============================================================================================
 # ------ 7. Final Model

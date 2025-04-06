@@ -1,0 +1,8 @@
+New Job: Estimating B-statistic (1-KS) for each variable as a single-factor survival model ..
+	 1) Single-factor survival model built. 
+	 3) Single-factor survival model built. 
+	 4) Single-factor survival model built. 
+	 2) Single-factor survival model built. 
+	 5) Single-factor survival model built. 
+	 6) Single-factor survival model built. 
+	 7) Single-factor survival model built. 

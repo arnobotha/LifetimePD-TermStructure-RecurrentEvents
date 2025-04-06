@@ -42,8 +42,10 @@ corrAnalysis <- function(data_train, variables, corrThresh = 0.6, method = 'spea
   corrMat <- as.data.table(data_train) %>% subset(select = variables) %>% cor(method = method)
   
   # Visualize the correlation matrix
-  corrplot(corrMat, type = 'upper', addCoef.col = 'black', tl.col = 'black', diag=FALSE,
-           tl.srt = 45)
+  if(length(variables) <= 5){
+    corrplot(corrMat, type = 'upper', addCoef.col = 'black', tl.col = 'black', diag=FALSE,
+             tl.srt = 45, cl.pos="n")
+  }
   
   # Find correlation coordinates exceeding the threshold
   corrCoordinates <- which(abs(corrMat) > corrThresh & abs(corrMat) < 1 & upper.tri(corrMat), arr.ind = TRUE)
@@ -110,7 +112,7 @@ calc_AIC <- function(formula, data_train, variables="", it=NA, logPath="", fldSp
 #         [fldSpellID]: Field name of spell-level ID; [TimeDef]: Time definition incorporated.
 #         [numThreads]: Number of threads used; [genPath]: Optional path for log file. 
 # Output: [matResults]: Result matrix.
-AICTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
+aicTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
                       TimeDef, numThreads=6, genPath) {
   # - Testing conditions
   # data_train <- datCredit_train_TFD; TimeDef="TFD"; numThreads=6
@@ -126,7 +128,7 @@ AICTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
                      .packages=c('data.table', 'survival'), .export=c('calc_AIC', 'TimeDef_Form')) %dopar%
     { # ----------------- Start of Inner Loop -----------------
       # - Testing conditions
-       j <- 1
+      # j <- 1
       calc_AIC(formula=TimeDef_Form(TimeDef,variables[j]), variables=variables[j],
                     data_train=data_train, it=j, logPath=genPath,  fldSpellID=fldSpellID)
       } # ----------------- End of Inner Loop -----------------

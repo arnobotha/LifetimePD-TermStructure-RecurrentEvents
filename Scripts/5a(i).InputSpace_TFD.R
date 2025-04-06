@@ -33,6 +33,7 @@ if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid
 
 #============================================================================================
 # ------ 1. Delinquency measures
+# - Vector storing the remaining thematic variable names and type
 varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Num",
                              "Arrears" ,"TimeInDelinqState","g0_Delinq_Any_Aggr_Prop",
                              "g0_Delinq_Ave","slc_acct_arr_dir_3",
@@ -50,28 +51,14 @@ varlist <- data.table(vars=c("g0_Delinq","g0_Delinq_fac","PerfSpell_g0_Delinq_Nu
 vars <- c("g0_Delinq_SD_4", "g0_Delinq_SD_5", "g0_Delinq_SD_6", "g0_Delinq_SD_9", "g0_Delinq_SD_12")
 
 # Goodness of fit test
-csTable(datCredit_train_TFD,vars)
-#         Variable     B
-# Variable B_Statistic
-# 1  g0_Delinq_SD_4      0.6186
-# 5 g0_Delinq_SD_12      0.6157
-# 2  g0_Delinq_SD_5      0.6101
-# 4  g0_Delinq_SD_9      0.5955
-# 3  g0_Delinq_SD_6      0.5901
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # [g0_Delinq_SD_4] has the lowest KS-statistic
 
-### RESULTS:  [g0_Delinq_SD_4] fits the data the best, slightly better than [g0_Delinq_SD_5]
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [g0_Delinq_SD_5] has the lowest AIC
 
 # Accuracy test
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#           Variable Concordance           SD LR_Statistic
-# 1:  g0_Delinq_SD_4   0.9928422 0.0004451396        84702
-# 2:  g0_Delinq_SD_5   0.9908799 0.0007682680        91976
-# 3:  g0_Delinq_SD_6   0.9753519 0.0015888086        91431
-# 4:  g0_Delinq_SD_9   0.9531019 0.0021947146        87688
-# 5: g0_Delinq_SD_12   0.9238008 0.0026908258        81014
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [g0_Delinq_SD_4] has the highest concordance
 
 ### RESULTS: As the SD period increase, there is a slight decrease in concordance.
-### NOTE: Concordance is extremely high with low variability
 
 ### Conclusion: Larger window are less influenced by large changes therefore significant changes
 ###             are less pronounced. Include [g0_Delinq_SD_4] in the varlist.
@@ -95,26 +82,17 @@ corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.
 vars <- c("g0_Delinq_Any_Aggr_Prop", "g0_Delinq_Ave")
 
 # Goodness of fit
-csTable(datCredit_train_TFD,vars,seedVal = NA)
-#                   Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:           g0_Delinq_Ave      0.6482      0.6434      0.6482      0.6493       0.646 0.64702
-# 2: g0_Delinq_Any_Aggr_Prop      0.6436      0.6504      0.6475      0.6476       0.644 0.64662
-# 3:                   Range      0.0046      0.0070      0.0007      0.0017       0.002 0.00320
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [g0_Delinq_Ave] has the lowest AIC
 
-### RESULTS: [g0-Delinq_Ave] seems to have the better goodness of fit over 5 iterations.
+### RESULTS: [g0_Delinq_Ave] seems to have the better goodness of fit.
 
 # Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                   Variable Concordance          SD LR_Statistic
-# 1:           g0_Delinq_Ave   0.5862387 0.004229343         1872
-# 2: g0_Delinq_Any_Aggr_Prop   0.5849507 0.004230491         1840
-
-### RESULTS: [g0-Delinq_Ave] has a slightly better concordance.
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=NA) # [g0_Delinq_Ave] has the highest concordance
 
 ### CONCLUSION: [g0-Delinq_Ave] seems to outperform [g0_Delinq_Any_Aggr_Prop] and therefore is kept in the model
 ###             and [g0_Delinq_Any_Aggr_Prop_Lag_3] is removed along with [g0_Delinq_Any_Aggr_Prop] due to the high correlation
-###             I expect similar results.
 
 varlist <- vecChange(varlist,Remove=c("g0_Delinq_Any_Aggr_Prop"))
 
@@ -140,31 +118,14 @@ datCredit_train_TFD[g0_Delinq!=3 & Default_Ind==1, .N]
 
 varlist <- vecChange(varlist,Remove=c("g0_Delinq","g0_Delinq_fac"))
 
-### INVESTIGATE: Should an indicator version of [g0_Delinq] be included in the model.
-
-# An indicator for when the value is greater than 0
-datCredit_train_TFD[,g0_Delinq_Ind := ifelse(g0_Delinq > 0, 1, 0)]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Ind, id=LoanID, datCredit_train_TFD)
-summary(cox); rm(cox)
-### RESULTS: coef is unstable with high variability.
-datCredit_train_TFD[,g0_Delinq_Ind := NULL]
-
-### INVESTIGATE: Should an lagged version of [g0_Delinq] be included in the model.
-
-# A lag version for [g0_Delinq]
-datCredit_train_TFD[,g0_Delinq_Lag_1 := shift(g0_Delinq,fill=0),by=LoanID]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ g0_Delinq_Lag_1, id=LoanID, datCredit_train_TFD)
-### RESULTS: exp(coef) tends to Inf
-datCredit_train_TFD[,g0_Delinq_Lag_1 := NULL]
-
 # Arrears
 cox <- coxph(Surv(Start,End,Default_Ind) ~ Arrears, id=LoanID, datCredit_train_TFD)
 summary(cox); rm(cox)
 ### RESULTS: Obtained a stable model
 
 ### CONCLUSION: Unable to add [Delinq_0] to the model, since the various forms'
-###             coef is unstable, however, [Arrears] compiles a seemingly stable
-###             model, therefore it can serve as a proxy for g0_Delinq.
+###             coef are unstable, however, [Arrears] fits a seemingly stable
+###             model, therefore it can serve as a proxy for [g0_Delinq.]
 
 # ------ 1.4 How does [PerfSpell_g0_Delinq_Num] compare to [g0_Delinq_SD_4]?
 
@@ -172,21 +133,14 @@ summary(cox); rm(cox)
 vars <- c("PerfSpell_g0_Delinq_Num", "g0_Delinq_SD_4")
 
 # Goodness of fit
-csTable(datCredit_train_TFD,vars,seedVal = NA)
-#                   Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: PerfSpell_g0_Delinq_Num      0.6448      0.6472      0.6486      0.6470      0.6431 0.64614
-# 2:          g0_Delinq_SD_4      0.6175      0.6180      0.6201      0.6176      0.6192 0.61848
-# 3:                   Range      0.0273      0.0292      0.0285      0.0294      0.0239 0.02766
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # [PerfSpell_g0_Delinq_Num] has the lowest KS-statistic
 
-### RESULTS: [PerfSpell_g0_Delinq_Num] seems to have a much better goodness of fit.
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [g0_Delinq_SD_4] has the lowest AIC
 
 # Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                   Variable Concordance           SD LR_Statistic
-# 1:          g0_Delinq_SD_4   0.9928422 0.0004451396        84702
-# 2: PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [g0_Delinq_SD_4] has the highest concordance
 
-### RESULTS: [g0_Delinq_SD_4] seems to have better concordance.
+### DISCUSSION: Conclusion has to change.
 
 ### CONCLUSION: Keep [PerfSpell_g0_Delinq_Num] in the model and remove [g0_Delinq_SD_4] since it 
 ###             such a better fit.
@@ -201,16 +155,10 @@ varlist <- vecChange(varlist,Remove="g0_Delinq_SD_4")
 vars <- c("PerfSpell_g0_Delinq_Num","TimeInDelinqState","g0_Delinq_Ave",
           "slc_acct_arr_dir_3", "Arrears")
 
-# Test Goodness of fit
-csTable(datCredit_train_TFD,vars)
-#                   Variable B_Statistic
-# 3           g0_Delinq_Ave      0.6489
-# 1 PerfSpell_g0_Delinq_Num      0.6475
-# 5                 Arrears      0.6455
-# 2       TimeInDelinqState          NA
-# 4      slc_acct_arr_dir_3          NA
+# Goodness of fit test
+# HERE
+csTable(datCredit_train_TFD, vars, TimeDef="TFD")
 
-### RESULTS: Fits are close to on another.
 ### NOTE: [TimeInDelinqState] ran out of iterations and did not converge
 ### NOTE: [slc_acct_arr_dir_3] exp overflow due to covariates
 
@@ -226,7 +174,7 @@ cox <- coxph(Surv(Start,End,Default_Ind) ~ TimeInDelinqState, id=LoanID, datCred
 datCredit_train_TFD[TimeInDelinqState!=1 & Default_Ind==1, .N]
 ### RESULTS: 0
 datCredit_train_TFD[TimeInDelinqState==1 & Default_Ind==0, .N]
-### RESULTS: 167718
+### RESULTS: 169272
 
 ### CONCLUSION: Quasi-complete separation seems to be present for [g0_Delinq]=3
 ###             and should therefore be removed.
@@ -236,10 +184,7 @@ cox <- coxph(Surv(Start,End,Default_Ind) ~ TimeInDelinqState_Lag_1, id=LoanID,
              datCredit_train_TFD)
 summary(cox); rm(cox)
 
-### CONCLUSION: Replace old variable with new variable
-
-### RESULTS: Variable is significant with a high concordance of 0.942, thus replace
-###           [TimeInDelinqState] with [TimeInDelinqState_Lag_1]
+### CONCLUSION: Replace old variable with new variable, since it fits a stable model.
 
 varlist <- vecChange(varlist,Remove="TimeInDelinqState",
                      Add=data.table(vars="TimeInDelinqState_Lag_1",vartypes="acc"))
@@ -249,35 +194,22 @@ varlist <- vecChange(varlist,Remove="TimeInDelinqState",
 
 describe(datCredit_train_TFD[,slc_acct_arr_dir_3])
 # Value            CURING MISSING_DATA      ROLLING         SAME
-# Proportion        0.015        0.126        0.022        0.837
+# Proportion        0.014        0.125        0.022        0.838
 
 describe(datCredit_train_TFD[Default_Ind==1,slc_acct_arr_dir_3])
 # Value            CURING MISSING_DATA      ROLLING         SAME
-# Proportion        0.007        0.160        0.783        0.049
+# Proportion        0.004        0.157        0.788        0.051
 
 ### RESULTS:  Although the ROLLING level is not dominant in datCredit_train_TFD,
 ###           we can clearly see that it is highly predictive of a default event
 ###           occurring, given its high proportion if Default_Ind == 1.
-
-# Create an indicator function
-datCredit_train_TFD[, slc_acct_arr_dir_3_ROLLING_Ind := 
-                      ifelse(slc_acct_arr_dir_3 == "ROLLING", 1,0)]
-cox <- coxph(Surv(Start,End,Default_Ind) ~ slc_acct_arr_dir_3_ROLLING_Ind,
-             datCredit_train_TFD, id=LoanID)
-### RESULTS: exp overflows
-
-# Make the indicator categorical
-cox <- coxph(Surv(Start,End,Default_Ind) ~ factor(slc_acct_arr_dir_3_ROLLING_Ind),
-             datCredit_train_TFD, id=LoanID)
-### RESULTS: exp overflows
-datCredit_train_TFD[,slc_acct_arr_dir_3_ROLLING_Ind := NULL]
 
 # Use an indicator variable for a change in account
 cox <- coxph(Surv(Start,End,Default_Ind) ~ slc_acct_arr_dir_3_Change_Ind,
              datCredit_valid_TFD, id=LoanID)
 summary(cox); rm(cox)
 
-### CONCLUSION: Replace old variable with new variable
+### CONCLUSION: Replace old variable with new variable, since resulting model is stable.
 
 varlist <- vecChange(varlist,Remove=c("slc_acct_arr_dir_3") ,
                      Add=data.table(vars=c("slc_acct_arr_dir_3_Change_Ind"),
@@ -290,29 +222,36 @@ varlist <- vecChange(varlist,Remove=c("slc_acct_arr_dir_3") ,
 vars <- c("PerfSpell_g0_Delinq_Num","g0_Delinq_Ave", "Arrears",
           "TimeInDelinqState_Lag_1","slc_acct_arr_dir_3_Change_Ind")
 
-# Goodness of fit
-csTable(datCredit_train_TFD,vars)
-#                         Variable B_Statistic
-# 5 slc_acct_arr_dir_3_Change_Ind      0.6501
-# 2                 g0_Delinq_Ave      0.6489
-# 1       PerfSpell_g0_Delinq_Num      0.6475
-# 3                       Arrears      0.6455
-# 4       TimeInDelinqState_Lag_1      0.6385
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD")
 
-### RESULTS: All variables seems to be a good fit.
+#                        Variable      D
+# 2                 g0_Delinq_Ave 0.6540
+# 3                       Arrears 0.6539
+# 1       PerfSpell_g0_Delinq_Num 0.6520
+# 5 slc_acct_arr_dir_3_Change_Ind 0.6514
+# 4       TimeInDelinqState_Lag_1 0.6445
 
-# Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                         Variable Concordance           SD LR_Statistic
-# 1:                       Arrears   0.9568891 0.0017938453        13502
-# 2:       PerfSpell_g0_Delinq_Num   0.9439437 0.0006710513         6307
-# 3:       TimeInDelinqState_Lag_1   0.8933628 0.0031888664        31583
-# 4: slc_acct_arr_dir_3_Change_Ind   0.8722179 0.0014858895        28431
-# 5:                 g0_Delinq_Ave   0.5862387 0.0042293435         1872
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
-### RESULTS: [g0_Delinq_Ave] has significant less concordance than the other variables.
+#                   Variables      AIC
+# 1:       TimeInDelinqState_Lag_1 156436.3
+# 2: slc_acct_arr_dir_3_Change_Ind 160294.1
+# 3:       PerfSpell_g0_Delinq_Num 182572.5
+# 4:                       Arrears 183412.2
+# 5:                 g0_Delinq_Ave 187989.6
 
-### CONCLUSION: Leave all variables in the model (including [g0_Delinq_Ave], since it seems to have the best fit for the data).
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the highest concordance
+
+#                       Variables Concordance           SD LR_Statistic
+# 1:                       Arrears   0.9606159 0.0016931039         6450
+# 2:       PerfSpell_g0_Delinq_Num   0.9468068 0.0006694657         7290
+# 3:       TimeInDelinqState_Lag_1   0.9020457 0.0029892384        33426
+# 4: slc_acct_arr_dir_3_Change_Ind   0.8770983 0.0013364884        29569
+# 5:                 g0_Delinq_Ave   0.5837088 0.0042886285         1873
+
+### CONCLUSION: Leave all variables in the model.
 
 
 
@@ -329,50 +268,16 @@ summary(coxDelinq)
 ### RESULTS: All variables are significant (p-value < 0.001)
 
 # Test goodness of fit
-GoF_CoxSnell_KS(coxDelinq,datCredit_train_TFD,GraphInd = FALSE) # 0.6394
-
-### RESULTS: Goodness of fit is a bit low
+GoF_CoxSnell_KS(coxDelinq,datCredit_train_TFD,GraphInd = FALSE) # 0.6451
 
 # Test accuracy
-concordance(coxDelinq, newdata=datCredit_valid_TFD) # Concordance= 0.9638 se= 0.00161
-
-### RESUTLS: extremely good prediction accuracy.
+concordance(coxDelinq, newdata=datCredit_valid_TFD) # Concordance= 0.9638 se= 0.001422
 
 ### CONCLUSION: Keep all variables in the model
 
 # House keeping
 rm(coxDelinq)
 
-# (0,3) (4,12) (13,24) (0,12) (0,36)
-#timedROC(datCredit_valid_TFD, coxDelinq_valid, month_Start=0, month_End=36,
-         # fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
-         # fld_EndTime="End", numDigits=0, Graph=FALSE)
-# AUC: 0.9760028
-#HW: combine ggplot objects into graph facets
-
-### RESULTS: Graph is extremely accurate with a AUC of 97.6%
-
-# # ------ 1.6 Compare results with that of an algorithm
-# 
-# # My final cox model
-# myCox <- coxph(Surv(Start, End, Default_Ind) ~ g0_Delinq_Ave)
-# 
-# # Cox model with all the other variables.
-# Fullcox <- coxph(Surv(Start, End, Default_Ind) ~
-#                    PerfSpell_g0_Delinq_Num + g0_Delinq_Any_Aggr_Prop +
-#                    g0_Delinq_Ave + g0_Delinq_SD_4 +  g0_Delinq_SD_5 + 
-#                    g0_Delinq_Any_Aggr_Prop + g0_Delinq_Any_Aggr_Prop_Lag_1 + 
-#                    g0_Delinq_Any_Aggr_Prop_Lag_2 + g0_Delinq_Any_Aggr_Prop_Lag_3 + 
-#                    g0_Delinq_Any_Aggr_Prop_Lag_5, datCredit_train_TFD)
-# 
-# compCox <- stepAIC(Fullcox, direction = "backward", trace = TRUE)
-# #                                 Df    AIC
-# # <none>                              98216
-# # - g0_Delinq_Any_Aggr_Prop_Lag_5  1  98218
-# # - g0_Delinq_Any_Aggr_Prop_Lag_1  1  98226
-# # - g0_Delinq_SD_4                 1  98235
-# # - PerfSpell_g0_Delinq_Num        1  98601
-# # - g0_Delinq_SD_5                 1 105649
 #============================================================================================
 
 modelVar <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave",
@@ -397,38 +302,13 @@ corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, co
 # Initialize variables to be tested
 vars <- c("slc_acct_pre_lim_perc_imputed_med", "slc_acct_prepaid_perc_dir_12_imputed_med")
 
-# Compare goodness of fit of different variables
-csTable(datCredit_train_TFD,vars)
-#                                   Variable B_Statistic
-# 1        slc_acct_pre_lim_perc_imputed_med      0.6492
-# 2 slc_acct_prepaid_perc_dir_12_imputed_med          NA
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference found.
 
-### RESULTS:  [slc_acct_prepaid_perc_dir_12_imputed_med] ran out of iterations and did not converge
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [slc_acct_pre_lim_perc_imputed_med] has the lowest AIC
 
-### INVESTIGATE: Why did slc_acct_prepaid_perc_dir_12_imputed_med] ran out of iterations and not converge?
-
-hist(datCredit_train_TFD[,slc_acct_prepaid_perc_dir_12_imputed_med])
-### RESULTS: A significant portion of the values are 0 with possible extreme values.
-
-# Proportion of values being 0
-datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0,.N]/datCredit_train_TFD[,.N]
-# 0.734379
-
-hist(datCredit_train_TFD[Default_Ind==1, slc_acct_prepaid_perc_dir_12_imputed_med])
-### Similar distribution with most of the values being 0, but all values are below 3.5
-
-# Proportion of values being 0 | Default_Ind == 1
-datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0 & Default_Ind == 1,.N]/datCredit_train_TFD[Default_Ind == 1,.N]
-# 0.9980394
-
-# Proportion of values defaulted | slc_acct_prepaid_perc_dir_12_imputed_med == 0
-datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0 & Default_Ind == 1,.N]/datCredit_train_TFD[slc_acct_prepaid_perc_dir_12_imputed_med==0,.N]
-# 0.002991395
-
-# RESULTS: (Default_Ind == 1) => (slc_acct_prepaid_perc_dir_12_imputed_med == 0)
-
-### CONCLUSION: Quasi-complete separation seems to be present for [slc_acct_prepaid_perc_dir_12_imputed_med],
-###             therefore remove it from the varlist
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [slc_acct_pre_lim_perc_imputed_med] has the highest concordance
 
 varlist <- vecChange(varlist,Remove="slc_acct_prepaid_perc_dir_12_imputed_med")
 
@@ -437,20 +317,12 @@ varlist <- vecChange(varlist,Remove="slc_acct_prepaid_perc_dir_12_imputed_med")
 # Initialize variables to be tested
 vars <- c("pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med")
 
-csTable(datCredit_train_TFD,vars)
-#                             Variable B_Statistic
-# 2 slc_acct_pre_lim_perc_imputed_med      0.6489
-# 1                   pmnt_method_grp      0.6461
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # [slc_acct_pre_lim_perc_imputed_med ] has the lowest KS-statistic
 
-### RESULTS:  [slc_acct_pre_lim_perc_imputed_med] fits the better and there is an improvement for [pmnt_method_grp]
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [pmnt_method_grp] has the lowest AIC
 
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                             Variable Concordance           SD LR_Statistic
-# 1:                   pmnt_method_grp   0.7643746 0.0036472739         8864
-# 2: slc_acct_pre_lim_perc_imputed_med   0.6496281 0.0005780128         5558
-
-### RESULTS: [pmnt_method_grp]  has a much better concordance than [slc_acct_pre_lim_perc_imputed_med],
-###           but both concordances are reasonably high.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [pmnt_method_grp] has the highest concordance
 
 ### Conclusion: All values should be kept in the model
 
@@ -467,17 +339,13 @@ coxEngineered <- coxph(Surv(Start, End, Default_Ind) ~ pmnt_method_grp +
                              data=datCredit_train_TFD)
 summary(coxEngineered)
 
-### RESULTS: [slc_acct_pre_lim_perc_imputed_med]  has an insignificant coef of -154
+### RESULTS: [slc_acct_pre_lim_perc_imputed_med]  has a high coef of 59
 
 # Goodness of fit
-GoF_CoxSnell_KS(coxEngineered,datCredit_train_TFD, GraphInd=FALSE) # 0.6421
-
-### RESULTS: slight decrease in goodness of fit, although it could be due to random sampling
+GoF_CoxSnell_KS(coxEngineered,datCredit_train_TFD, GraphInd=FALSE) # 0.6446
 
 # Accuracy
-concordance(coxEngineered,newdata=datCredit_valid_TFD) # Concordance= 0.8112 se= 0.002737
-
-### CONCLUSION: Due to increase in Concordance keep all current variables in the model.
+concordance(coxEngineered,newdata=datCredit_valid_TFD) # Concordance= 0.8111 se= 0.002782
 
 # House keeping
 rm(coxEngineered); gc()
@@ -500,26 +368,15 @@ corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.
 
 ### RESULTS: Correlation of 0.41, therefore no significant correlations.
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, varlist$vars, seedVal=NA)
-#             Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:    InterestRate_Nom      0.6448      0.6499      0.6499      0.6503      0.6483 0.64864
-# 2: InterestRate_Margin      0.6461      0.6481      0.6464      0.6474      0.6520 0.64800
-# 3:               Range      0.0013      0.0018      0.0035      0.0029      0.0037 0.00264
+# Goodness of fit test
+csTable(datCredit_train_TFD, varlist$vars, TimeDef="TFD") # Insignificant difference.
 
-### RESULTS:  [InterestRate_Nom] is a better fit than [InterestRate_Margin]
+aicTable(datCredit_train_TFD, varlist$vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Nom] has the lowest AIC
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, varlist$vars)
-#                 Variable Concordance LR_Statistic
-# 1:    InterestRate_Nom   0.5497724          165
-# 2: InterestRate_Margin   0.5452677          174
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD,  varlist$vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Nom] has the highest concordance
 
-### RESULTS:  [InterestRate_Nom] has a slightly higher concordance than [InterestRate_Margin].
-
-### CONCLUSION: Variables are quite similar in predictive power, however are dissimilar
-###              in correlation, therefore both can be kept in the model.
-
+### CONCLUSION: Keep both variables in the model.
 
 
 # ------ 3.2 How does [InterestRate_Margin] compare with [InterestRate_Margin_imputed_bin]?
@@ -527,21 +384,13 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, varlist$vars)
 # Initialize variables
 vars <- c("InterestRate_Margin", "InterestRate_Margin_imputed_bin")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                           Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: InterestRate_Margin_imputed_bin      0.6483      0.6479      0.6487      0.6495      0.6455 0.64798
-# 2:             InterestRate_Margin      0.6480      0.6461      0.6473      0.6497      0.6453 0.64728
-# 3:                           Range      0.0003      0.0018      0.0014      0.0002      0.0002 0.00078
-### RESULTS: [InterestRate_Margin_imputed_bin] has a better fit than [InterestRate_Margin]
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable differences.
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                           Variable Concordance          SD LR_Statistic
-# 1: InterestRate_Margin_imputed_bin   0.5480786 0.003948766          454
-# 2:             InterestRate_Margin   0.5452677 0.004064693          279
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_imputed_bin] has the lowest AIC
 
-### RESULTS:  [InterestRate_Margin_imputed_bin] has the higher concordance.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_imputed_bin] has the highest concordance
 
 ### CONCLUSIONS: Replace [InterestRate_Margin] with [InterestRate_Margin_imputed_bin]
 
@@ -553,27 +402,13 @@ varlist <- vecChange(varlist, Remove="InterestRate_Margin", Add=data.table(vars=
 
 vars <- c("InterestRate_Margin_imputed_bin", "M_Repo_Rate", "InterestRate_Margin_Aggr_Med")
 
-# Evaluate their correlation
-corrAnalysis(datCredit_train_TFD,vars)
-### RESULTS: no significant correlations were detected between the variables.
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticable differences
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                           Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:    InterestRate_Margin_Aggr_Med      0.6506      0.6491      0.6523      0.6459      0.6472 0.64902
-# 2: InterestRate_Margin_imputed_bin      0.6488      0.6453      0.6488      0.6489      0.6450 0.64736
-# 3:                     M_Repo_Rate      0.6449      0.6489      0.6494      0.6487      0.6438 0.64714
-# 4:                           Range      0.0057      0.0038      0.0035      0.0030      0.0034 0.00388
-### RESULTS:  [InterestRate_Margin_Aggr_Med] seems to be have the best fit.
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [M_Repo_Rate] has the lowest AIC
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                           Variable Concordance          SD LR_Statistic
-# 1:    InterestRate_Margin_Aggr_Med   0.5506784 0.004195174         1198
-# 2: InterestRate_Margin_imputed_bin   0.5480786 0.003948766          454
-# 3:                     M_Repo_Rate   0.5180882 0.004234430         1078
-
-### RESULTS:  [InterestRate_Margin_Aggr_Med] has the highest concordance.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_Aggr_Med] has the highest concordance
 
 ### CONCLUSIONS: Keep [InterestRate_Margin_Aggr_Med] in the model.
 
@@ -583,42 +418,16 @@ varlist <- vecChange(varlist,Remove="InterestRate_Margin_imputed_bin", Add=data.
 # ------ 3.2 Should we add lagging variables to the model?
 
 vars <- c("InterestRate_Margin_Aggr_Med","InterestRate_Margin_Aggr_Med_1",
-          "InterestRate_Margin_Aggr_Med_12","InterestRate_Margin_Aggr_Med_2",
-          "InterestRate_Margin_Aggr_Med_3","InterestRate_Margin_Aggr_Med_4",
-          "InterestRate_Margin_Aggr_Med_5","InterestRate_Margin_Aggr_Med_6",
+          "InterestRate_Margin_Aggr_Med_3","InterestRate_Margin_Aggr_Med_2",
           "InterestRate_Margin_Aggr_Med_9")
 
-# Obtain the B-statistics for goodness of fit tests.
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                           Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: InterestRate_Margin_Aggr_Med_12      0.6449      0.6520      0.6510      0.6472      0.6511 0.64924
-# 2:  InterestRate_Margin_Aggr_Med_3      0.6500      0.6484      0.6492      0.6491      0.6492 0.64918
-# 3:    InterestRate_Margin_Aggr_Med      0.6479      0.6474      0.6485      0.6501      0.6497 0.64872
-# 4:  InterestRate_Margin_Aggr_Med_9      0.6504      0.6476      0.6471      0.6482      0.6495 0.64856
-# 5:  InterestRate_Margin_Aggr_Med_1      0.6477      0.6483      0.6469      0.6506      0.6480 0.64830
-# 6:  InterestRate_Margin_Aggr_Med_5      0.6499      0.6455      0.6463      0.6459      0.6507 0.64766
-# 7:  InterestRate_Margin_Aggr_Med_2      0.6461      0.6460      0.6453      0.6482      0.6490 0.64692
-# 8:  InterestRate_Margin_Aggr_Med_6      0.6464      0.6457      0.6462      0.6475      0.6466 0.64648
-# 9:  InterestRate_Margin_Aggr_Med_4      0.6481      0.6468      0.6434      0.6478      0.6448 0.64618
-# 10:                           Range      0.0055      0.0065      0.0076      0.0047      0.0063 0.00612
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-### RESULTS:  [InterestRate_Margin_Aggr_Med_12] and [InterestRate_Margin_Aggr_Med_3] seems to be better fits than [InterestRate_Margin_Aggr_Med]
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_Aggr_Med] has the lowest AIC
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                           Variable Concordance          SD LR_Statistic
-# 1:  InterestRate_Margin_Aggr_Med_4   0.5611257 0.004199905          104
-# 2:  InterestRate_Margin_Aggr_Med_3   0.5603674 0.004199684          105
-# 3:  InterestRate_Margin_Aggr_Med_2   0.5575290 0.004200634          102
-# 4:  InterestRate_Margin_Aggr_Med_5   0.5566768 0.004176251           99
-# 5:  InterestRate_Margin_Aggr_Med_6   0.5566370 0.004185777           98
-# 6:  InterestRate_Margin_Aggr_Med_1   0.5555107 0.004193798           99
-# 7:  InterestRate_Margin_Aggr_Med_9   0.5546448 0.004170861           85
-# 8:    InterestRate_Margin_Aggr_Med   0.5506784 0.004195174           96
-# 9: InterestRate_Margin_Aggr_Med_12   0.5481947 0.004155018           68
-
-### RESULTS:  [InterestRate_Margin_Aggr_Med_4] seems to have the best concordance, 
-###           with [InterestRate_Margin_Aggr_Med_3] falling close behind.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_Aggr_Med_3] has the highest concordance
 
 ### CONCLUSION: Add [InterestRate_Margin_Aggr_Med_3] to the model since it seems
 ###             to have the second best goodness of fit and concordance.
@@ -632,21 +441,25 @@ varlist <- vecChange(varlist,Add=data.table(vars=c("InterestRate_Margin_Aggr_Med
 
 vars <- c("InterestRate_Nom", "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3")
 
-# Goodness of fit
-csTable(datCredit_train_TFD,vars)
-#                           Variable B_Statistic
-# 1               InterestRate_Nom       0.6479
-# 2   InterestRate_Margin_Aggr_Med       0.6477
-# 3 InterestRate_Margin_Aggr_Med_3       0.6449
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # Not a noticeable difference
+#                     Variable      D
+# 2   InterestRate_Margin_Aggr_Med 0.6540
+# 3 InterestRate_Margin_Aggr_Med_3 0.6540
+# 1               InterestRate_Nom 0.6539
 
-### RESULTS: Variables seem to be a good fit.
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Nom] has the lowest AIC
+#                     Variables      AIC
+# 1:               InterestRate_Nom 188115.5
+# 2:   InterestRate_Margin_Aggr_Med 188595.0
+# 3: InterestRate_Margin_Aggr_Med_3 188678.2
 
-# Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#                         Variable Concordance          SD LR_Statistic
-# 1: InterestRate_Margin_Aggr_Med_3   0.5603674 0.004199684          105
-# 2:   InterestRate_Margin_Aggr_Med   0.5506784 0.004195174           96
-# 3:               InterestRate_Nom   0.5497724 0.004486873          165
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InterestRate_Margin_Aggr_Med_3] has the highest concordance
+#             Variables Concordance          SD LR_Statistic
+# 1: InterestRate_Margin_Aggr_Med_3   0.5871809 0.004424536         1184
+# 2:   InterestRate_Margin_Aggr_Med   0.5859953 0.004457969         1268
+# 3:               InterestRate_Nom   0.5723056 0.004548748         1747
 
 ### RESULTS: Concordances are quite low, this may lead to not including the variables into the model
 
@@ -664,18 +477,12 @@ summary(coxInterest)
 
 ### RESULTS: All variables are significant.
 
-# Kolmogorov-Smirnof of coxDelinq
-GoF_CoxSnell_KS(coxInterest,datCredit_train_TFD,GraphInd = FALSE) # 0.646
-### RESULTS: Good fit
+# Test goodness of fit
+GoF_CoxSnell_KS(coxInterest,datCredit_train_TFD,GraphInd = FALSE) # 0.6539
 
 # Accuracy
-concordance(coxInterest, newdata=datCredit_valid_TFD)# Concordance= 0.5638 se= 0.00442
+concordance(coxInterest, newdata=datCredit_valid_TFD)# Concordance= 0.5916 se= 0.004439
 ### RESULTS: Improved accuracy, but not particularly good.
-
-timedROC(datCredit_valid_TFD, coxInterest_valid, month_Start=0, month_End=36,
-         fld_ID="LoanID", fld_Event="Default_Ind",fld_StartTime="Start",
-         fld_EndTime="End", numDigits=0, Graph=FALSE)
-# AUC: 0.5214215
 
 # House keeping
 rm(coxInterest)
@@ -687,9 +494,8 @@ modelVar <- c(modelVar,"InterestRate_Nom", "InterestRate_Margin_Aggr_Med",
 #============================================================================================
 # ------ 4. General
 varlist <- data.table(vars=c("Balance","Instalment",
-                             "Principal","Undrawn_Amt",
-                             "LN_TPE","Term"),
-                      vartypes=c("int", "fin", "fin","int","cat", "int"))
+                             "Principal","LN_TPE","Term"),
+                      vartypes=c("int", "fin", "fin","cat", "int"))
 
 #=========================================================================================
 # ------ 4.1 Which variables are highly correlated in the group?
@@ -704,24 +510,13 @@ corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, corrThresh = 0.
 # Initialize variable
 vars <- c("Balance", "Instalment", "Principal")
 
-# Goodness of fit test of variables
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#     Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: Instalment      0.6469      0.6492      0.6462      0.6506      0.6491 0.64840
-# 2:    Balance      0.6485      0.6453      0.6463      0.6501      0.6482 0.64768
-# 3:  Principal      0.6510      0.6434      0.6471      0.6472      0.6478 0.64730
-# 4:      Range      0.0041      0.0058      0.0009      0.0034      0.0013 0.00310
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable differences.
 
-### RESULTS:  Difficult to make a conclusion with varying B-statistics.
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Principal] has the lowest AIC
 
-# Obtain the concordance for different variables.
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#     Variable Concordance          SD LR_Statistic
-# 1:  Principal   0.5827355 0.004098595          335
-# 2: Instalment   0.5636894 0.004286208           84
-# 3:    Balance   0.5544691 0.004145147          101
-
-## RESULTS: [Principal] has the highest concordance
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Principal] has the highest concordance
 
 ### CONCOLUSION:  Considering Principal has the best concordance, but the worse fit
 ###               complicates the decision.
@@ -732,23 +527,10 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
 vars <- c("Balance", "Instalment", "InstalmentToBalance_Aggr_Prop")
 
 # Goodness of fit test of variables
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                         Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:                    Instalment      0.6478      0.6507      0.6512      0.6501      0.6495 0.64986
-# 2: InstalmentToBalance_Aggr_Prop      0.6510      0.6501      0.6489      0.6497      0.6482 0.64958
-# 3:                       Balance      0.6464      0.6495      0.6457      0.6483      0.6478 0.64754
-# 4:                         Range      0.0046      0.0012      0.0055      0.0018      0.0017 0.00296
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [InstalmentToBalance_Aggr_Prop ] has the lowest AIC
 
-### RESULTS:  From the 5 iterations, [InstalmentToBalance_Aggr_Prop] consistently seems to outfit [Balance]
-
-# Accuracy of variables
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                         Variable Concordance          SD LR_Statistic
-# 1:                    Instalment   0.5636894 0.004286208           84
-# 2:                       Balance   0.5544691 0.004145147          101
-# 3: InstalmentToBalance_Aggr_Prop   0.5146318 0.004341557           18
-
-### RESULTS:  [InstalmentToBalance_Aggr_Prop] has a worse concordance than [Instalment] and [Balance].
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Instalment] has the highest concordance
 
 ### CONCLUSION: [InstalmentToBalance_Aggr_Prop] cannot replace [Instalment] and [Balance].
 
@@ -758,21 +540,10 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
 vars <- c("Balance", "ArrearsToBalance_Aggr_Prop")
 
 # Goodness of fit test of variables
-csTable(datCredit_train_TFD, vars, seedVal=NA)
-#                     Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1:                    Balance      0.6475      0.6519      0.6479      0.6482      0.6483 0.64876
-# 2: ArrearsToBalance_Aggr_Prop      0.6457      0.6440      0.6480      0.6446      0.6470 0.64586
-# 3:                      Range      0.0018      0.0079      0.0001      0.0036      0.0013 0.00294
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [ArrearsToBalance_Aggr_Prop] has the lowest AIC
 
-### RESULTS:  From the 5 iterations, [Balance] seems to have the best fit.
-
-# Test for accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD, vars)
-#                     Variable Concordance          SD LR_Statistic
-# 1:                    Balance   0.5544691 0.004145147          101
-# 2: ArrearsToBalance_Aggr_Prop   0.5367480 0.004126016          118
-
-## RESULTS: [Balance] has the highest concordance.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Balance] has the highest concordance
 
 ### CONCOLUSION:  [ArrearsToBalance_Aggr_Prop] cannot reaplace [Balance]
 
@@ -786,21 +557,10 @@ varlist <- vecChange(varlist,Remove=c("Instalment","Balance"))
 vars <- c("Term", "AgeToTerm_Aggr_Mean")
 
 # Goodness of fit
-csTable(datCredit_train_TFD,vars,seedVal = NA)
-#               Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
-# 1: AgeToTerm_Aggr_Mean      0.6462      0.6514      0.6487      0.6471      0.6509 0.64886
-# 2:                Term      0.6455      0.6458      0.6486      0.6455      0.6465 0.64638
-# 3:               Range      0.0007      0.0056      0.0001      0.0016      0.0044 0.00248
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [AgeToTerm_Aggr_Mean] has the lowest AIC
 
-### RESULTS: [AgeToTerm_Aggr_Mean] seems to consistently outfit [Term].
-
-# Accuracy
-concTable(datCredit_train_TFD, datCredit_valid_TFD,vars)
-#               Variable Concordance          SD LR_Statistic
-# 1: AgeToTerm_Aggr_Mean   0.5091579 0.003670705           24
-# 2:                Term   0.5066915 0.002188255            2
-
-### RESULTS: Both have poor concordance.
+# Accuracy test
+concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [AgeToTerm_Aggr_Mean] has the highest concordance
 
 ### CONCLUSION: Remove [Term].
 
@@ -808,15 +568,19 @@ varlist <- vecChange(varlist,Remove=c("Term"))
 
 # ------ 4.4 What is the predictive power of the variables in univariate models?
 
-vars <- c("Principal", "Undrawn_Amt", "LN_TPE")
+vars <- c("Principal", "LN_TPE")
 
-# Goodness of fit
-csTable(datCredit_train_TFD,vars, seedVal=NA)
+# Goodness of fit test
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # [] has the lowest KS-statistic
+#HERE
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the lowest AIC
 #       Variables Iteration_1 Iteration_2 Iteration_3 Iteration_4 Iteration_5 Average
 # 1: Undrawn_Amt      0.6474      0.6479      0.6505      0.6484      0.6453 0.64790
 # 2:      LN_TPE      0.6466      0.6449      0.6460      0.6451      0.6481 0.64614
 # 3:   Principal      0.6439      0.6465      0.6455      0.6455      0.6478 0.64584
 # 4:       Range      0.0035      0.0030      0.0050      0.0033      0.0028 0.00352
+
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: [Undrawn_Amt] appears to have the best goodness of fit. The other two variables'
 ###           vary quite a lot.
@@ -842,6 +606,8 @@ summary(coxGen)# All varaibles are significant (p-value < 0.001)
 
 GoF_CoxSnell_KS(coxGen,datCredit_train_TFD,GraphInd = FALSE) # 0.6485
 ### RESULTS: Improved goodness of fit.
+
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 # Accuracy
 concordance(coxGen, newdata=datCredit_valid_TFD) # Concordance= 0.6765 se= 0.003312
@@ -880,6 +646,8 @@ csTable(datCredit_train_TFD, vars, seedVal=NA)
 # 1:     NewLoans_Aggr_Prop      0.6471      0.6513      0.6494      0.6486      0.6494 0.64916
 # 2: CuringEvents_Aggr_Prop      0.6512      0.6474      0.6494      0.6455      0.6475 0.64820
 # 3:                  Range      0.0041      0.0039      0.0000      0.0031      0.0019 0.00260
+
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS:  Both seem to have a good goodness of fit.
 
@@ -940,6 +708,8 @@ csTable(datCredit_train_TFD, vars, seedVal=NA)
 # 3: M_RealIncome_Growth      0.6445      0.6467      0.6448      0.6509      0.6518 0.64774
 # 4:               Range      0.0028      0.0021      0.0068      0.0060      0.0044 0.00442
 
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+
 ### RESULTS:  Non-conclusive results as rankings fluctuated too much over 5 iterations.
 
 # Obtain the concordance for different variables.
@@ -971,6 +741,8 @@ csTable(datCredit_train_TFD,vars,seedVal = NA)
 # 3:        M_DTI_Growth      0.6454      0.6441      0.6466      0.6484      0.6471 0.64632
 # 4:               Range      0.0031      0.0060      0.0037      0.0018      0.0054 0.00400
 
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+
 ### RESULTS:  After 5 iterations, there is too much variability in B-statistice, therefore no conclusions can be made.
 
 # Compare concordance of different variables
@@ -1001,6 +773,8 @@ csTable(datCredit_train_TFD, vars, seedVal=NA)
 # 5:  M_DTI_Growth_3      0.6467      0.6496      0.6456      0.6461      0.6452 0.64664
 # 6:    M_DTI_Growth      0.6482      0.6474      0.6485      0.6446      0.6439 0.64652
 # 7:           Range      0.0075      0.0034      0.0033      0.0053      0.0045 0.00480
+
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: Only [M_DTI_Growth_6], [M_DTI_Growth_1] and [M_DTI_Growth_9] appears to have the best fit.
 
@@ -1037,6 +811,8 @@ csTable(datCredit_train_TFD, vars, seedVal=NA)
 # 6:  M_Inflation_Growth_9      0.6475      0.6496      0.6469      0.6437      0.6423 0.64600
 # 7:                 Range      0.0029      0.0029      0.0083      0.0045      0.0080 0.00532
 
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+
 ### RESULTS: [M_Inflation_Growth_6], [M_Inflation_Growth_1] and [M_Inflation_Growth_3] appear to have the best fits.
 
 # Obtain the concordance for different variables.
@@ -1072,6 +848,8 @@ csTable(datCredit_train_TFD, vars, seedVal=NA)
 # 6:    M_RealIncome_Growth      0.6445      0.6447      0.6441      0.6466      0.6477 0.64552
 # 7:                  Range      0.0057      0.0038      0.0045      0.0074      0.0051 0.00530
 
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+
 ### RESULTS: [M_RealIncome_Growth_6], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_3] appear to have the best fits.
 
 # Obtain the concordance for different variables.
@@ -1104,6 +882,8 @@ csTable(datCredit_train_TFD,vars)
 # 2   M_Inflation_Growth      0.6477
 # 4       M_DTI_Growth_9      0.6461
 # 3       M_DTI_Growth_6      0.6449
+
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: All variables seem to be relatively good fits with the lowest being 0.6449.
 
@@ -1150,6 +930,7 @@ summary(coxMacro)
 
 # Test Goodness of fit of the single model based on all variables.
 GoF_CoxSnell_KS(coxMacro,datCredit_train_TFD,GraphInd = F) # 0.6499
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 # Goodness of fit is equal to greatest Goodness of fit univariate model.
 
 # Test accuracy of the single model based on all variables.
@@ -1205,6 +986,7 @@ c <- coefficients(cox_TFD)
 # -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
 csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numIt=10,
                        fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 ### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 
 # Results are, however, very close one another such that meaningful analysis is not possible
 
@@ -1220,6 +1002,7 @@ Table_TFD <- left_join(csTable_TFD$Results, concTable_TFD, by="Variable")
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
                 fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6414
+AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
 # Save objects

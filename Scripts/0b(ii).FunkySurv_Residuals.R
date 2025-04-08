@@ -60,7 +60,7 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
 #                     with the unit exponential distribution function.
 GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), panelTitle="", fileName=NA,
                             fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
-                            dpi=350, chosenFont="Cambria") {
+                            fldSpellID="PerfSpell_Key",dpi=350, chosenFont="Cambria") {
   # - Testing conditions
   # cox <- cox_TFD; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
   # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
@@ -88,6 +88,9 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), pane
   # NOTE: We only desire the KS test statistic in measuring distributional dissimilarity
   # Then, we subtract this from 1 in creating a coherent statistic; greater is better
   bStat <- 1 - round(suppressWarnings(ks.test(vCS, vExp))$statistic,4); names(bStat) <- "B-stat"
+  
+  # - Include Harrell's c
+  conc <- concordance(cox,newdata=)
   
   
   # --- Graphing
@@ -131,7 +134,7 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), pane
                      linetype = "dashed", color = "black", 
                      arrow=arrow(type="closed", ends="both",length=unit(0.08,"inches"))) +
         annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
-                 label = paste("D =", percent(KS)), hjust = -0.2, vjust = 0.5, fill="white", alpha=0.6) +
+                 label = paste("D =", percent(1-bStat)), hjust = -0.2, vjust = 0.5, fill="white", alpha=0.6) +
         # Scales and options
         facet_grid(FacetLabel ~ .) +   
         scale_color_manual(name = "", values = vCol, labels=vLabel) +

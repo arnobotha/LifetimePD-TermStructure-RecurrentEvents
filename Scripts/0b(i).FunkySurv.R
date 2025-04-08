@@ -102,7 +102,7 @@ calc_AIC <- function(formula, data_train, variables="", it=NA, logPath="", fldSp
   AIC <- AIC(model) # Calculate AIC of the model.
  
   # Return results as a data.table
-  return(data.table(Variables = variables, AIC = AIC))
+  return(data.table(Variable = variables, AIC = AIC))
 }
 
 
@@ -162,7 +162,7 @@ calc_HarrellC <- function(formula, data_train, data_valid, variables="", it=NA, 
   lr_stat <- round(2 * (model$loglik[2] - model$loglik[1]),0)# Extract LRT from the model's log-likelihood
   
   # Return results as a data.table
-  return(data.table(Variables = variables, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
+  return(data.table(Variable = variables, Concordance = conc, SD = sd, LR_Statistic = lr_stat))
 }
 
 

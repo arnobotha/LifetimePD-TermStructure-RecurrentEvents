@@ -290,6 +290,8 @@ varlist <- data.table(vars=c("slc_acct_pre_lim_perc_imputed_med",
                              "pmnt_method_grp") ,
                       vartypes=c("prc", "dec", "cat"))
 
+### HW: Remove pmnt_method_grp
+
 #=========================================================================================
 
 # ------ 2.1 Which variables should be removed due to high correlation?
@@ -303,7 +305,7 @@ corGroups <- corrAnalysis(datCredit_train_TFD, varlist[vartypes!="cat"]$vars, co
 vars <- c("slc_acct_pre_lim_perc_imputed_med", "slc_acct_prepaid_perc_dir_12_imputed_med")
 
 # Goodness of fit test
-csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference found.
+csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference found
 
 aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [slc_acct_pre_lim_perc_imputed_med] has the lowest AIC
 
@@ -461,9 +463,8 @@ concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath
 # 2:   InterestRate_Margin_Aggr_Med   0.5859953 0.004457969         1268
 # 3:               InterestRate_Nom   0.5723056 0.004548748         1747
 
-### RESULTS: Concordances are quite low, this may lead to not including the variables into the model
-
-### CONCLUSION: Take note of low concordances, but evaluate the concordance of the full model.
+### CONCLUSION: Since [InterestRate_Nom] and [InterestRate_Margin_Aggr_Med] contains similar information (namely changes in interest rate).
+###             Therefore, InterestRate_Nom is removed from the model, due to its lower concordance.
 
 
 
@@ -496,6 +497,8 @@ modelVar <- c(modelVar,"InterestRate_Nom", "InterestRate_Margin_Aggr_Med",
 varlist <- data.table(vars=c("Balance","Instalment",
                              "Principal","LN_TPE","Term"),
                       vartypes=c("int", "fin", "fin","cat", "int"))
+
+### REMOVE ENTIRE SECTION.
 
 #=========================================================================================
 # ------ 4.1 Which variables are highly correlated in the group?
@@ -608,6 +611,8 @@ modelVar <- c(modelVar, "Principal", "LN_TPE")
 # ------ 5. Portfolio Level
 varlist <- data.table(vars=c("CuringEvents_Aggr_Prop","NewLoans_Aggr_Prop"),
                       vartypes=c("dec", "dec"))
+
+### REMOVE ENTIRE SECTION.
 
 #============================================================================================
 # ------ 5.1 Are the values correlated?
@@ -846,6 +851,10 @@ vars2 <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqS
            "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
            "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
            "M_DTI_Growth","M_Inflation_Growth", "M_Inflation_Growth_6", "M_RealIncome_Growth")
+#================================================================================================
+myvars <- c(vars2, "pmnt_method_grp", "InterestRate_Nom", "Principal",
+            "LN_TPE", "NewLoans_Aggr_Prop")
+#================================================================================================
 
 # - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
@@ -854,43 +863,108 @@ cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2
 summary(cox_TFD)
 ### RESULTS: All variables are statistically significant
 
+#================================================================================================
+mycox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(myvars,collapse=" + "))),
+                 id=LoanID, datCredit_train_TFD, ties="efron")
+summary(mycox_TFD)
+#================================================================================================
+
 c <- coefficients(cox_TFD)
-(c <- data.table(Variable=names(c),Coefficient=c))
+(c <- data.table(Variable=names(c),Coefficient=round(c,6)))
 #                           Variable      Coefficient
-#1:           PerfSpell_g0_Delinq_Num    0.02161846880
-#2:                           Arrears    0.00001902814
-#3:                     g0_Delinq_Ave   -3.72501820111
-#4:           TimeInDelinqState_Lag_1   -0.15598222677
-#5:     slc_acct_arr_dir_3_Change_Ind    3.17379385353
-#6: slc_acct_pre_lim_perc_imputed_med   -8.35458939652
-#7:      InterestRate_Margin_Aggr_Med  215.53208752301
-#8:    InterestRate_Margin_Aggr_Med_3 -334.92074300726
-#9:                      M_DTI_Growth   -7.94197498714
-#10:                M_Inflation_Growth   12.33358076248
-#11:              M_Inflation_Growth_6    5.69091286677
-#12:               M_RealIncome_Growth  -19.61119748306
+# 1:           PerfSpell_g0_Delinq_Num    0.02161846880
+# 2:                           Arrears    0.00001902814
+# 3:                     g0_Delinq_Ave   -3.72501820111
+# 4:           TimeInDelinqState_Lag_1   -0.15598222677
+# 5:     slc_acct_arr_dir_3_Change_Ind    3.17379385353
+# 6: slc_acct_pre_lim_perc_imputed_med   -8.35458939652
+# 7:      InterestRate_Margin_Aggr_Med  215.53208752301
+# 8:    InterestRate_Margin_Aggr_Med_3 -334.92074300726
+# 9:                      M_DTI_Growth   -7.94197498714
+# 10:                M_Inflation_Growth   12.33358076248
+# 11:              M_Inflation_Growth_6    5.69091286677
+# 12:               M_RealIncome_Growth  -19.61119748306
+
+#================================================================================================
+c <- coefficients(mycox_TFD)
+(c <- data.table(Variable=names(c),Coefficient=c))
+#                     Variable          Coefficient
+# 1:           PerfSpell_g0_Delinq_Num   0.0032282448626924
+# 2:                           Arrears   0.0000177042082971
+# 3:                     g0_Delinq_Ave  -4.9125923127529587
+# 4:           TimeInDelinqState_Lag_1  -0.1228542757171900
+# 5:     slc_acct_arr_dir_3_Change_Ind   3.5741025233593362
+# 6: slc_acct_pre_lim_perc_imputed_med -11.3361298519846372
+# 7:      InterestRate_Margin_Aggr_Med -80.6774856108118570
+# 8:    InterestRate_Margin_Aggr_Med_3 122.6228042967790373
+# 9:                      M_DTI_Growth   2.1289068033998384
+# 10:                M_Inflation_Growth   5.2969703488442148
+# 11:              M_Inflation_Growth_6   1.2999227772651893
+# 12:               M_RealIncome_Growth  -1.1374546005516906
+# 13:       pmnt_method_grpMISSING_DATA  -1.3333774091273380
+# 14:    pmnt_method_grpSalary/Suspense   1.1642694625096806
+# 15:          pmnt_method_grpStatement   0.5579770454715598
+# 16:                  InterestRate_Nom  -0.4393896777798967
+# 17:                         Principal  -0.0000000006217954
+# 18:                         LN_TPEWHL   0.1967882553018249
+# 19:                NewLoans_Aggr_Prop -61.4514085355510176
+#================================================================================================
 
 # -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
 csTable_TFD <- csTable(datCredit_train_TFD,vars2, TimeDef="TFD", seedVal=1, numIt=10,
                        fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+diff(range(csTable_TFD[[1]][,2])) # The values' range is 0.0096
 ### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 
 # Results are, however, very close one another such that meaningful analysis is not possible
+
+aicTable_TFD <- aicTable(datCredit_train_TFD, variables=vars2,fldSpellID="PerfSpell_Key",
+                         TimeDef="TFD", genPath=genPath)
+barplot(aicTable_TFD$AIC, names.arg = aicTable_TFD$Variable, las=2, cex.names=0.5)
+### RESULTS: Top 3 single-factor models: TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  + PerfSpell_g0_Delinq_Num 
+# Where the first two results have AIC values significantly different from the rest.
 
 # Test accuracy using Harrell's c-statistic over single-factor models
 concTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, variables=vars2, 
                            fldSpellID="PerfSpell_Key", TimeDef="TFD", genPath=genPath)
+barplot(concTable_TFD$Concordance,names.arg = aicTable_TFD$Variable, las=2, cex.names=0.5)
 ### RESULTS: Top x single-factor models (>80%):
 # Arrears + PerfSpell_g0_Delinq_Num + TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  
 
 # - Combine results into a single object
-Table_TFD <- left_join(csTable_TFD$Results, concTable_TFD, by="Variable")
+Table_TFD <- concTable_TFD[,1:2] %>% left_join(aicTable_TFD, by ="Variable") %>% left_join(data.table(csTable_TFD$Results), by="Variable")
+
+
+#================================================================================================
+# -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
+mycsTable_TFD <- csTable(datCredit_train_TFD,myvars, TimeDef="TFD", seedVal=1, numIt=10,
+                       fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
+diff(range(mycsTable_TFD[[1]][,2])) # The values' range is 0.0096
+### RESULTS: Top 3 single-factor models: LN_TPE + M_Inflation_Growth + M_RealIncome_Growth 
+# Results are, however, very close one another such that meaningful analysis is not possible
+
+myaicTable_TFD <- aicTable(datCredit_train_TFD, variables=myvars,fldSpellID="PerfSpell_Key",
+                         TimeDef="TFD", genPath=genPath)
+barplot(myaicTable_TFD$AIC, names.arg = myaicTable_TFD$Variable, las=2, cex.names=0.5)
+### RESULTS: Top 3 single-factor models: TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  + PerfSpell_g0_Delinq_Num 
+# Where the first two results have AIC values significantly different from the rest.
+
+# Test accuracy using Harrell's c-statistic over single-factor models
+myconcTable_TFD <- concTable(datCredit_train_TFD, datCredit_valid_TFD, variables=myvars, 
+                           fldSpellID="PerfSpell_Key", TimeDef="TFD", genPath=genPath)
+barplot(myconcTable_TFD$Concordance,names.arg = myaicTable_TFD$Variable, las=2, cex.names=0.5)
+### RESULTS: Top x single-factor models (>80%):
+# Arrears + PerfSpell_g0_Delinq_Num + TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  
+
+# - Combine results into a single object
+myTable_TFD <- myconcTable_TFD[,1:2] %>% left_join(myaicTable_TFD, by ="Variable") %>% left_join(data.table(mycsTable_TFD$Results), by="Variable")
+#================================================================================================
 
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
-                fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6414
-AICTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
+                fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6373
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
+
+concordance(cox_TFD) # Concordance= 0.9682 se= 0.0009747
 
 # Save objects
 pack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), Table_TFD)
@@ -898,3 +972,19 @@ pack.ffdf(paste0(genPath,"TFD_Cox_Model"), cox_TFD)
 
 # - Cleanup
 rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD, c); gc()
+
+#================================================================================================
+# - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
+GoF_CoxSnell_KS(mycox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
+                fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6332
+### RESULTS: Goodness of fit for the model seems to be a bit low.
+
+concordance(mycox_TFD) # Concordance= 0.9736 se= 0.0008413
+
+# Save objects
+pack.ffdf(paste0(genObjPath,"myTFD_Univariate_Models"), myTable_TFD)
+pack.ffdf(paste0(genPath,"myTFD_Cox_Model"), mycox_TFD)
+
+# - Cleanup
+rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD, c); gc()
+#================================================================================================

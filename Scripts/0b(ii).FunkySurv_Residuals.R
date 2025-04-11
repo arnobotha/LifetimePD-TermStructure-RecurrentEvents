@@ -43,7 +43,7 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
   # First, get residuals from fitted model
   vResid <- residuals(model,type="martingale",collapse=vIDs)
   # Now, calculate CS-residuals
-  vCS <- vLstRow_Events - vResid + log(2)*(1 - vLstRow_Events) # Add log(2) to all right-censored observations.
+  vCS <- vEvents - vResid + log(2)*(1 - vEvents) # Add log(2) to all right-censored observations.
   return(vCS)
 }
 
@@ -58,12 +58,14 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
 # Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
 #         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
 #                     with the unit exponential distribution function.
-GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), panelTitle="", fileName=NA,
-                            fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
-                            fldSpellID="PerfSpell_Key",dpi=350, chosenFont="Cambria") {
+GoF_CoxSnell_KS <- function(cox, data_train, data_valid, GraphInd=T, legPos=c(0.5,0.5),
+                            panelTitle="", fileName=NA,fldLstRowInd="PerfSpell_Exit_Ind",
+                            fldEventInd="Default_Ind",fldSpellID="PerfSpell_Key",
+                            dpi=350, chosenFont="Cambria") {
   # - Testing conditions
-  # cox <- cox_TFD; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
-  # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
+  # cox <- coxDelinq; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
+  # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png");
+  # fldSpellID="PerfSpell_Key"; data_valid <- datCredit_valid_TFD
   
   # --- Preliminaries
   
@@ -90,7 +92,10 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), pane
   bStat <- 1 - round(suppressWarnings(ks.test(vCS, vExp))$statistic,4); names(bStat) <- "B-stat"
   
   # - Include Harrell's c
-  conc <- concordance(cox,newdata=)
+  conc <- concordance(cox,newdata=data_valid)
+  
+  # - Include AIC
+  AIC <- round(AIC(cox))
   
   
   # --- Graphing
@@ -133,8 +138,15 @@ GoF_CoxSnell_KS <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), pane
         geom_segment(data=datSegment,aes(x = x, xend = xend, y = y, yend = yend),
                      linetype = "dashed", color = "black", 
                      arrow=arrow(type="closed", ends="both",length=unit(0.08,"inches"))) +
-        annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
-                 label = paste("D =", percent(1-bStat)), hjust = -0.2, vjust = 0.5, fill="white", alpha=0.6) +
+        annotate("label", x = x[D_location], y = y1[D_location],
+                 label = paste0("Concordance = ",percent(conc$concordance)),
+                 hjust = -0.1, vjust = 0.5, fill="white", alpha=0.6) +
+        annotate("label", x = x[D_location] + 0.25, y = (y1[D_location] + y2[D_location]) / 2,
+                label = paste0("D = ", percent(1-bStat)),
+                hjust = -0.5, vjust = 0.5, fill="white", alpha=0.6) +
+        annotate("label", x = x[D_location], y = y2[D_location],
+               label = paste0("AIC = ", AIC),
+               hjust = -0.1, vjust = 0.5, fill="white", alpha=0.6) +
         # Scales and options
         facet_grid(FacetLabel ~ .) +   
         scale_color_manual(name = "", values = vCol, labels=vLabel) +
@@ -174,6 +186,7 @@ GoF_CoxSnell_KaplanMeier <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0
   # Subset last row per performing spell for Goodness-of-Fit (GoF) purposes
   datLstRow <- copy(data_train[get(fldLstRowInd)==1,])
   vLstRow_Events <- datLstRow[, get(fldEventInd)]
+  Sys.sleep(2)
   
   
   # --- Calculate KM-based B-statistic (1-KS)

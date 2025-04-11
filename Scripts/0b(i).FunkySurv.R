@@ -77,11 +77,11 @@ TimeDef_Form <- function(TimeDef, variables){
     
   }else if(TimeDef=="AG"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
-                                 paste(vars,collapse=" + ")))
+                                 paste(variables,collapse=" + ")))
     
   }else if(TimeDef=="PWP_ST"){# Formula for Prentice-Williams-Peterson Spell time definition (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ strata(PerfSpell_Num) + ",
-                                 paste(vars,collapse=" + ")))}
+                                 paste(variables,collapse=" + ")))}
 }
 
 
@@ -115,8 +115,8 @@ calc_AIC <- function(formula, data_train, variables="", it=NA, logPath="", fldSp
 aicTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
                       TimeDef, numThreads=6, genPath) {
   # - Testing conditions
-  # data_train <- datCredit_train_TFD; TimeDef="TFD"; numThreads=6
-  # fldSpellID<-"PerfSpell_Key"; variables<-"g0_Delinq_SD_4";
+   # data_train <- datCredit_train_AG; TimeDef="AG"; numThreads=6
+   # fldSpellID<-"PerfSpell_Key"; variables<-"g0_Delinq_SD_4";
   
   # - Iterate across loan space using a multi-threaded setup
   ptm <- proc.time() #IGNORE: for computation time calculation

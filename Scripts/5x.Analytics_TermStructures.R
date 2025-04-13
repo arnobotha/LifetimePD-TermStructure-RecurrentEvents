@@ -55,10 +55,11 @@ setDT(datCredit_valid_PWPST, key="PerfSpell_Key")
 
 # ------ Time to first Default (TFD) definition
 # - Initialize variables | AB-variant
-vecVars_TFD <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
-                 "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-                 "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", "M_DTI_Growth","M_Inflation_Growth",
-                 "M_Inflation_Growth_6", "M_RealIncome_Growth")
+vecVars_TFD <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",      
+                 "slc_acct_arr_dir_3_Change_Ind", "slc_acct_roll_ever_24_imputed_mean",
+                 "slc_acct_pre_lim_perc_imputed_med", "M_DTI_Growth",
+                 "M_RealIncome_Growth","pmnt_method_grp",
+                 "InterestRate_Nom", "Principal")
 
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values

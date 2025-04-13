@@ -101,11 +101,11 @@ summary(km_PWPST)$table # overall summary statistics
 
 # ------ Time to first Default (TFD) definition
 # - Initialize variables | AB-variant
-vecVars_TFD <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
-           "slc_acct_arr_dir_3_Change_Ind", "slc_acct_pre_lim_perc_imputed_med", 
-           "InterestRate_Margin_Aggr_Med", "InterestRate_Margin_Aggr_Med_3", 
-           "Principal", "LN_TPE", "M_DTI_Growth","M_Inflation_Growth",
-           "M_Inflation_Growth_6", "M_RealIncome_Growth")
+vecVars_TFD <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",      
+                "slc_acct_arr_dir_3_Change_Ind", "slc_acct_roll_ever_24_imputed_mean",
+                "slc_acct_pre_lim_perc_imputed_med", "M_DTI_Growth",
+                "M_RealIncome_Growth","pmnt_method_grp",
+                "InterestRate_Nom", "Principal")
 
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
@@ -170,10 +170,10 @@ predictTime <- 3
 objROC1_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=12, logPath=genPath)
 objROC1_TFD$AUC; objROC1_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 91.39%, achieved in 1175.70 secs ( 19.6 mins)
+### RESULTS: AUC up to t: 96.12%, achieved in 214.24  secs ( 3.6 mins)
 
 
 # -- Calculate AUC from given start up to given prediction time in following the CD-approach
@@ -197,10 +197,10 @@ predictTime <- 12
 objROC2_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
                       fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                       graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"),
-                      caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                      caseStudyName=paste0("TFD_", predictTime), numThreads=12, logPath=genPath)
 objROC2_TFD$AUC; objROC2_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 91.21%, achieved in 2232.91 secs (37.22 mins)
+### RESULTS: AUC up to t: 96.14%, achieved in 416.00  secs (6.9 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
@@ -211,10 +211,10 @@ predictTime <- 24
 objROC3_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=12, logPath=genPath)
 objROC3_TFD$AUC; objROC3_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 90.91%, achieved in 3698.95 secs (61.65 mins)
+### RESULTS: AUC up to t: 96.06%, achieved in 649.44  secs (10.8 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
@@ -225,10 +225,10 @@ predictTime <- 36
 objROC4_TFD <- tROC.multi(datGiven=datCredit_valid_TFD, cox=cox_TFD, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-TFD-ROC_Depedendence", genFigPath=paste0(genFigPath, "TFD/"), 
-                          caseStudyName=paste0("TFD_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("TFD_", predictTime), numThreads=12, logPath=genPath)
 objROC4_TFD$AUC; objROC4_TFD$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 90.95%, achieved in 5171.97 secs (86.2 mins)
+### RESULTS: AUC up to t: 96.12%, achieved in 899.20 secs (15 mins)
 
 
 # -- Store experimental objects | Memory optimisation
@@ -239,7 +239,7 @@ pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_36"), objROC
 
 
 
-# ------ Prentice-Williams-Peterson (PWP) Total-time definition
+# ------ Prentice-Williams-Peterson (PWP) Spell-time definition
 
 # --- Package: tROCkit() | custom "package"/function
 # NOTE: Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator and 0/1-kernel
@@ -253,7 +253,7 @@ predictTime <- 3
 objROC1_PWPST <- tROC.multi(datGiven=datCredit_valid_PWPST, cox=cox_PWPST, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-PWPST-ROC_Depedendence", genFigPath=paste0(genFigPath, "PWP ST/"), 
-                          caseStudyName=paste0("PWPST_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("PWPST_", predictTime), numThreads=12, logPath=genPath)
 objROC1_PWPST$AUC; objROC1_PWPST$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 96.16%, achieved in 573.20 secs ( 9.56 mins)
@@ -267,7 +267,7 @@ predictTime <- 12
 objROC2_PWPST <- tROC.multi(datGiven=datCredit_valid_PWPST, cox=cox_PWPST, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2,
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-PWPST-ROC_Depedendence", genFigPath=paste0(genFigPath, "PWP ST/"),
-                          caseStudyName=paste0("PWPST_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("PWPST_", predictTime), numThreads=12, logPath=genPath)
 objROC2_PWPST$AUC; objROC2_PWPST$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 96.01%, achieved in 1044.13 secs (17.40 mins)
@@ -281,7 +281,7 @@ predictTime <- 24
 objROC3_PWPST <- tROC.multi(datGiven=datCredit_valid_PWPST, cox=cox_PWPST, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-PWPST-ROC_Depedendence", genFigPath=paste0(genFigPath, "PWP ST/"), 
-                          caseStudyName=paste0("PWPST_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("PWPST_", predictTime), numThreads=12, logPath=genPath)
 objROC3_PWPST$AUC; objROC3_PWPST$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 95.72%, achieved in 1694.95 secs (28.25 mins)
@@ -295,7 +295,7 @@ predictTime <- 36
 objROC4_PWPST <- tROC.multi(datGiven=datCredit_valid_PWPST, cox=cox_PWPST, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                           fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
                           graphName="DefaultSurvModel-Cox-PWPST-ROC_Depedendence", genFigPath=paste0(genFigPath, "PWP ST/"), 
-                          caseStudyName=paste0("PWPST_", predictTime), numThreads=6, logPath=genPath)
+                          caseStudyName=paste0("PWPST_", predictTime), numThreads=12, logPath=genPath)
 objROC4_PWPST$AUC; objROC4_PWPST$ROC_graph
 proc.time() - ptm
 ### RESULTS: AUC up to t: 95.79%, achieved in 2615.46  secs (43.59 mins)
@@ -358,7 +358,7 @@ chosenFont <- "Cambria"
     theme(text = element_text(family=chosenFont), legend.position="inside",
           strip.background=element_rect(fill="snow2", colour="snow2"),
           strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90),
-          legend.position.inside = c(0.65,0.3),
+          legend.position.inside = c(0.55,0.4),
           legend.background = element_rect(fill="snow2", color="black",
                                            linetype="solid", linewidth=0.1)) +
     labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
@@ -366,9 +366,8 @@ chosenFont <- "Cambria"
     # Add 45-degree line
     geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.2) +
     # Main line graph
-    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.2) + 
-    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.5) + 
-    geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.5) +
+    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.05) + 
+    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.25) + 
     # Facets and scales
     facet_grid(FacetLabel ~ .) +  
     scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
@@ -378,7 +377,7 @@ chosenFont <- "Cambria"
 
 
 # - Save graph
-dpi <- 250
+dpi <- 300
 ggsave(gg, file=paste0(paste0(genFigPath, "TFD/DefaultSurvModel-Cox-TFD-CombinedROC_Depedendence.png")), 
        width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
@@ -426,7 +425,7 @@ chosenFont <- "Cambria"
 # - Create ROC-graph
 (gg <- ggplot(datGraph, aes(x=x,y=y,group=PredictTime)) + theme_minimal() + 
     theme(text = element_text(family=chosenFont), legend.position="inside", 
-          legend.position.inside = c(0.75,0.25),
+          legend.position.inside = c(0.55,0.45),
           legend.background = element_rect(fill="snow2", color="black",
                                            linetype="solid", linewidth=0.1)) +
     labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
@@ -434,8 +433,8 @@ chosenFont <- "Cambria"
     # Add 45-degree line
     geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.2) +
     # Main line graph
-    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.2) + 
-    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.5) +
+    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.05) + 
+    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.25) +
     # Facets and scales
     scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
     scale_linetype_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 

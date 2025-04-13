@@ -930,12 +930,7 @@ modelVar <- c(modelVar,"M_DTI_Growth", "M_Inflation_Growth", "M_Inflation_Growth
 
 
 
-# ------ 7. Final Model
-
-# - Confirm prepared datasets are loaded into memory
-if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
-if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
-
+# ------ 7. Check semi-final model for statistical significance and parsimony
 
 # - Initialize variables
 vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",      
@@ -944,7 +939,6 @@ vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_
            "InterestRate_Margin_Aggr_Med_3","M_DTI_Growth","M_Inflation_Growth",
            "M_Inflation_Growth_6", "M_RealIncome_Growth","pmnt_method_grp",
            "InterestRate_Nom", "Principal","LN_TPE", "NewLoans_Aggr_Prop")
-
 
 # - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
@@ -958,12 +952,35 @@ summary(cox_TFD)
 vars2 <- vars2[!(vars2 %in% c("TimeInDelinqState_Lag_1", "InterestRate_Margin_Aggr_Med",
                             "InterestRate_Margin_Aggr_Med_3","M_Inflation_Growth",
                             "M_Inflation_Growth_6", "LN_TPE", "NewLoans_Aggr_Prop"))]
+# - Build model based on variables
+cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
+                 id=LoanID, datCredit_train_TFD, ties="efron")
+summary(cox_TFD)
+### RESULTS: All variables are significant
 
+#============================================================================================
+
+
+
+
+
+# ------ 8. Final model
+
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
+if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
+
+# - Initialize variables
+vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",      
+           "slc_acct_arr_dir_3_Change_Ind", "slc_acct_roll_ever_24_imputed_mean",
+           "slc_acct_pre_lim_perc_imputed_med", "M_DTI_Growth",
+           "M_RealIncome_Growth","pmnt_method_grp",
+           "InterestRate_Nom", "Principal")
 
 # - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
                  id=LoanID, datCredit_train_TFD, ties="efron")
-
+summary(cox_TFD)
 
 c <- coefficients(cox_TFD)
 (c <- data.table(Variable=names(c),Coefficient=c))

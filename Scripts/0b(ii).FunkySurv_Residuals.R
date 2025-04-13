@@ -139,13 +139,13 @@ GoF_CoxSnell_KS <- function(cox, data_train, data_valid, GraphInd=T, legPos=c(0.
                      linetype = "dashed", color = "black", 
                      arrow=arrow(type="closed", ends="both",length=unit(0.08,"inches"))) +
         annotate("label", x = x[D_location], y = y1[D_location],
-                 label = paste0("Concordance = ",percent(conc$concordance)),
+                 label = paste0("Harrell's c: ",sprintf("%.3f", conc$concordance*100),"%"),
                  hjust = -0.1, vjust = 0.5, fill="white", alpha=0.6) +
-        annotate("label", x = x[D_location] + 0.25, y = (y1[D_location] + y2[D_location]) / 2,
-                label = paste0("D = ", percent(1-bStat)),
-                hjust = -0.5, vjust = 0.5, fill="white", alpha=0.6) +
+        annotate("label", x = x[D_location], y = (y1[D_location] + y2[D_location]) / 2,
+                label = paste0("KS-statistic: ", percent(1-bStat)),
+                hjust = -0.1, vjust = 0.5, fill="white", alpha=0.6) +
         annotate("label", x = x[D_location], y = y2[D_location],
-               label = paste0("AIC = ", AIC),
+               label = paste0("AIC: ", comma(AIC)),
                hjust = -0.1, vjust = 0.5, fill="white", alpha=0.6) +
         # Scales and options
         facet_grid(FacetLabel ~ .) +   

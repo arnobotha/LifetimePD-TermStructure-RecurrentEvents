@@ -3,7 +3,7 @@
 #  used in subsequent Cox regression-based modelling of the default term-structure
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers, Dr Arno Botha (AB)
+# SCRIPT AUTHOR(S): Bernard Scheepers (BS), Dr Arno Botha (AB)
 
 # DESCRIPTION:
 # This script performs the following high-level tasks:
@@ -60,13 +60,13 @@ datCredit_real[is.na(PerfSpell_Key), PerfSpell_Max_Date:= NA]
 datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Min_Date := min(Date, na.rm=T), by=list(PerfSpell_Key)]
 datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
 
-# - Creating an indicator variable variable for when a loan exists a performance spell
+# - Create an indicator variable variable for when a loan exits a performance spell
 datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
 #datCredit_real[,PerfSpell_Exit_Ind2 := with(datCredit_real, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))]
 #all.equal(datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind], datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind2])
 ### RESULTS: TRUE
 
-# - Creating new spell resolution types & relocate 
+# - Create new spell resolution types by grouping competing risks together & relocating variable
 # Performance spells
 datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
                                                                                   PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
@@ -75,18 +75,14 @@ datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_whe
 
 # - Checking the proportions of the newly created variable
 describe(datCredit_real$PerfSpellResol_Type_Hist2)
-#check <- subset(datCredit_real, LoanID %in% unique(datCredit_real[PerfSpell_Num > 2 & PerfSpell_Age == 12, LoanID])[1])
-#check2 <- subset(datCredit_real, LoanID %in% unique(datCredit_real[PerfSpell_Exit_Ind != PerfSpell_Exit_Ind2, LoanID])[1])
 
 
 
 
 # --------- 3. Prepare data according to time definitions
 
-
 # --- 3.1 Time to First Default time definition
-# NOTE: The first spell condition is only enforced during the resampling of data into the training set, since we purposefully
-# would like the validation set to include multiple spells in order to validate certain assumptions.
+# Select performance spells only and create timing variables
 datCredit_TFD <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
          Default_Ind = DefaultStatus1)
@@ -98,6 +94,7 @@ rm(datCredit_TFD); gc()
 
 
 # --- 3.2 Anderson-Gill (AG) time definition
+# Select performance spells only and create timing variables
 datCredit_AG <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = Age_Adj-1, End = Age_Adj,
          Default_Ind = DefaultStatus1)
@@ -108,18 +105,7 @@ pack.ffdf(paste0(genPath,"creditdata_final_AG"), datCredit_AG)
 rm(datCredit_AG); gc()
 
 
-# - 3.3 Prentice-Williams-Peterson (PWP) Total-time  definition
-datCredit_PWPTT <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
-  mutate(Start = Age_Adj-1, End = Age_Adj,
-         Default_Ind = DefaultStatus1)
-datCredit_PWPTT[is.na(PerfSpell_Num),.N] == 0  # TRUE, field created successfully
-# - Save snapshots to disk (zip) for quick disk-based retrieval later
-pack.ffdf(paste0(genPath,"creditdata_final_PWPTT"), datCredit_PWPTT)
-# - Remove from memory as an expedient
-rm(datCredit_PWPTT); gc()
-
-
-# - 3.4 Prentice-Williams-Peterson (PWP) Spell-time definition
+# - 3.3 Prentice-Williams-Peterson (PWP) Spell-time definition
 datCredit_PWPST <- subset(datCredit_real, !is.na(PerfSpell_Num)) %>%
   mutate(Start = TimeInPerfSpell-1, End = TimeInPerfSpell,
          Default_Ind = DefaultStatus1)
@@ -132,5 +118,5 @@ rm(datCredit_PWPST); gc()
 
 
 
-# --------- Housekeeping
+# --------- 4. Housekeeping
 suppressWarnings(rm(datCredit_real, exclusions_all, exclusions_credit)); gc()

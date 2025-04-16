@@ -59,7 +59,7 @@ vecVars_TFD <- c("PerfSpell_g0_Delinq_Num", "Arrears", "g0_Delinq_Ave", "TimeInD
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vecVars_TFD,collapse=" + "))), 
-                 ties="efron", id=LoanID, datCredit_train_TFD)
+                 ties="efron", id=LoanID, datCredit_train_TFD, model=T) # Keep model frame (model=T)
 summary(cox_TFD)
 
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
@@ -357,4 +357,33 @@ datFusion <- merge(datSurv_TFD, datHaz[,list(PerfSpell_Key=Key, End=Time, Surviv
                                              CHaz_custom=CHaz, EventProb_Custom=EventProb)], by=c("PerfSpell_Key", "End"))
 plot(datFusion$Survival, type="b"); plot(datFusion$Survival_custom, col="red", type="b")
 plot(datFusion$Survival-datFusion$Survival_custom, type="b")
+
+
+
+
+
+# ------ Approach 4: Looped individual survfit()-calls by ID (multi-threaded)
+
+# --- Preliminaries
+numSpellKeys <- length(unique(datCredit_valid_TFD$PerfSpell_Key))
+vSpellKeys <- unique(datCredit_valid_TFD$PerfSpell_Key)
+
+rm(datCredit_train_TFD)
+
+# --- Iterate across spell keys and calculate survival-related quantities using survQuants()
+ptm <- proc.time() #IGNORE: for computation time calculation
+cl.port <- makeCluster(round(6)); registerDoParallel(cl.port) # multi-threading setup
+cat("New Job: Estimating various survival quantities at the loan-period level for a given dataset ..",
+    file=paste0(genPath,"survQuants_log.txt"), append=F)
+
+datSurv_TFD2 <- foreach(j=1:numSpellKeys, .combine='rbind', .verbose=F, .inorder=T,
+                       .packages=c('data.table', 'survival'), .export=c('survQuants')) %dopar%
+  { # ----------------- Start of Inner Loop -----------------
+    # - Testing conditions
+    # j <- 1
+    prepDat <- survQuants(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]), coxGiven = cox_TFD,
+                          it=j, numKeys=numSpellKeys, genPath=genPath)
+  } # ----------------- End of Inner Loop -----------------
+stopCluster(cl.port); 
+proc.time() - ptm # 54h
 

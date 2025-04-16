@@ -34,9 +34,6 @@
 
 # ----------------- 1. Load data
 
-# - General parameters
-sMaxSpellAge <- 300 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
-
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_TFD')) unpack.ffdf(paste0(genPath,"creditdata_train_TFD"), tempPath);gc()
 if (!exists('datCredit_valid_TFD')) unpack.ffdf(paste0(genPath,"creditdata_valid_TFD"), tempPath);gc()
@@ -64,7 +61,7 @@ vecVars_TFD <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vecVars_TFD,collapse=" + "))), 
-                 ties="efron", id=LoanID, datCredit_train_TFD)
+                 ties="efron", id=LoanID, datCredit_train_TFD, model=T) # Keep model frame (model=T)
 summary(cox_TFD)
 
 
@@ -81,7 +78,7 @@ vecVars_PWPST <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqSt
 # # Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 cox_PWP <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",paste(vecVars_PWPST,collapse=" + "))), 
-                 ties="efron", id=PerfSpell_Key, datCredit_train_PWPST)
+                 ties="efron", id=PerfSpell_Key, datCredit_train_PWPST, model=T) # Keep model frame (model=T)
 summary(cox_PWP)
 
 
@@ -102,20 +99,20 @@ vSpellKeys <- unique(datCredit_valid_TFD$PerfSpell_Key)
 
 # --- Iterate across spell keys and calculate survival-related quantities using survQuants()
 ptm <- proc.time() #IGNORE: for computation time calculation
-#cl.port <- makeCluster(round(6)); registerDoParallel(cl.port) # multi-threading setup
+cl.port <- makeCluster(8); registerDoParallel(cl.port) # multi-threading setup
 cat("New Job: Estimating various survival quantities at the loan-period level for a given dataset ..",
     file=paste0(genPath,"survQuants_log.txt"), append=F)
 
 datSurv_TFD <- foreach(j=1:numSpellKeys, .combine='rbind', .verbose=F, .inorder=T,
-                   .packages=c('data.table', 'survival'), .export=c('survQuants')) %do%
+                   .packages=c('data.table', 'survival'), .export=c('survQuants')) %dopar%
   { # ----------------- Start of Inner Loop -----------------
     # - Testing conditions
     # j <- 1
     prepDat <- survQuants(datGiven=subset(datCredit_valid_TFD, PerfSpell_Key == vSpellKeys[j]), coxGiven = cox_TFD,
                           it=j, numKeys=numSpellKeys, genPath=genPath)
   } # ----------------- End of Inner Loop -----------------
-#stopCluster(cl.port); 
-proc.time() - ptm; # 54h
+stopCluster(cl.port); 
+proc.time() - ptm; # 42.9h (single-threaded); 8.1h (multi-threaded)
 
 # - Save snapshots to disk (zip) for quick disk-based retrieval later
 pack.ffdf(paste0(genPath,"datSurv_TFD"), datSurv_TFD)
@@ -130,7 +127,11 @@ setDT(datSurv_TFD, key="End")
 
 # - Determine population average survival and event rate across loans per time period
 datAggr <- datSurv_TFD[, list(EventRate = mean(EventProb,na.rm=T), Freq=.N),by=list(End)]
-plot(datAggr[End <= sMaxSpellAge, End], datAggr[End <= sMaxSpellAge, EventRate], type="b")
+plot(datAggr[End <= 300, End], datAggr[End <= 300, EventRate], type="b")
+plot(datSurv[Time <= 300, Time], datSurv[Time <= 300, EventRate], type="b")
+
+# - General parameters
+sMaxSpellAge <- 240 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
 
 # - Fitting natural cubic regression splines
 sDf_Act <- 12; sDf_Exp <- 18
@@ -189,7 +190,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
     geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1.25) + 
     geom_line(aes(y=EventRate, colour=Type, linetype=Type, linewidth=Type)) + 
     # Annotations
-    annotate("text", y=0.006,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
+    annotate("text", y=0.01,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
              size = 3) + 
     # Scales and options
     facet_grid(FacetLabel ~ .) + 

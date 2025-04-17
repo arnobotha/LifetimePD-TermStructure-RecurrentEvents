@@ -462,6 +462,9 @@ cat( (all.equal(datCredit_smp[PerfSpell_Num < 4,PerfSpell_Num], datCredit_smp[Pe
 # - Create indicator variable for specific arrears direction
 datCredit_smp[, slc_acct_arr_dir_3_Change_Ind := ifelse(slc_acct_arr_dir_3 != "SAME", 1,0)]
 
+# - Create binned version of performance spell number
+datCredit_smp[, PerfSpell_Num_binned := ifelse(PerfSpell_Num <= 3, PerfSpell_Num, 4)]
+
 
 
 # --- 6. Feature Engineering: Inflating time-sensitive monetary variables to the latest date

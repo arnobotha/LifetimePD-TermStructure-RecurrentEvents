@@ -488,7 +488,7 @@ tROC <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMetho
 tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, estMethod="NN-0/1", numDigits=2, 
                        fld_ID=NA, fld_Event="MainEvent_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="Stop",
                        Graph=TRUE, graphName="timedROC-Graph", genFigPathGiven=paste0(getwd(),"/"), numThreads=4, 
-                       caseStudyName="Main",reportFlag=T, logPath=paste0(getwd(),"/")) {
+                       caseStudyName="Main",reportFlag=T, logPath=paste0(getwd(),"/"), predType="exp") {
   
   # ------ Preliminaries 
   # -- Testing Conditions
@@ -534,7 +534,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
   # -- Obtain Markers/prediction scores M_i for i=1,...,n cases (not necessarily subjects) and assign as thresholds
   # - Score the given dataset using the given Cox regression model towards obtaining marker 
   # values (option: linear predictors)
-  datGiven[, Marker := round(predict(cox, newdata=datGiven, type="lp"),numDigits)]
+  datGiven[, Marker := round(predict(cox, newdata=datGiven, type=predType),numDigits)]
   # - Let the unique marker values represent our threshold space, which is standard practice in ROC-analysis
   thresholds <- datGiven$Marker %>% unique() %>% sort()
   nThresh <- length(thresholds) # number of such unique thresholds for iteration purposes
@@ -758,7 +758,7 @@ tROC.multi <- function(datGiven, cox, month_Start=0, month_End, sLambda=0.05, es
       datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
       datSegment <- data.frame(x = 0, y = 0, xend = 1, yend = 1)
       # - Annotate with concordance (Harrell's C)
-      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1]))
+      conc=percent(as.numeric(concordance(cox,newdata=datGiven)[1]),accuracy=0.001)
       
       
       # - Aesthetic parameters

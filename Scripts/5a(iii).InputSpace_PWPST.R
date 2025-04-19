@@ -40,8 +40,6 @@ summary(cox_PWPST_empty)
 
 
 # ------ 1. Delinquency-themed variables
-varlist <- data.table(vars=c(NA),vartypes=c(NA))
-
 
 # ------ 1.1 Which time window length is the best in calculating delinquency volatility?
 
@@ -59,7 +57,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 
 ### CONCLUSION: Decreasing trend in Harrell's c across window length (earlier is better). 
 # Best variable: g0_Delinq_SD_4. Variable has >90% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("g0_Delinq_SD_4"), vartypes=c("acc")))
 
 
 
@@ -81,7 +78,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 
 ### CONCLUSION: Decreasing trend in Harrell's c across lag order (earlier is better), though differences are slight at best
 # Best variable: g0_Delinq_Any_Aggr_Prop_Lag_3. Variable has >60% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("g0_Delinq_Any_Aggr_Prop_Lag_3"), vartypes=c("port")))
 
 
 
@@ -103,7 +99,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 
 ### CONCLUSION: Decreasing trend in Harrell's c across lag order (earlier is better)
 # Best variable: g0_Delinq_Any_Aggr_Prop_Lag_3. Variable has >50% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("DefaultStatus1_Aggr_Prop"), vartypes=c("port")))
 
 
 
@@ -123,7 +118,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 
 ### CONCLUSION: 
 # Best variable: g0_Delinq_Ave, ArrearsToBalance_Aggr_Prop. Variable has >60% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("g0_Delinq_Ave", "ArrearsToBalance_Aggr_Prop"), vartypes=c("port")))
 
 
 
@@ -145,14 +139,11 @@ aicTable(datCredit_train_PWPST, vars, TimeDef="PWPST", strataVar="PerfSpell_Num_
 concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", strataVar="PerfSpell_Num_binned", genPath=genObjPath)
 ### RESULTS: Best AIC-results: TimeInDelinqState, slc_acct_roll_ever_24_imputed_mean, Arrears, PerfSpell_g0_Delinq_Num, g0_Delinq_Num
 # Best Harrell's C-statistics: TimeInDelinqState, Arrears, PerfSpell_g0_Delinq_Num, g0_Delinq_Num, slc_acct_roll_ever_24_imputed_mean
-# Following were not statistically significant or led to unstable models: g0_Delinq, g0_Delinq_fac, 
+# Following were not statistically significant or led to unstable models: g0_Delinq, g0_Delinq_fac
 
 ### CONCLUSION: 
 # Best variable: TimeInDelinqState, PerfSpell_g0_Delinq_Num, g0_Delinq_Num, slc_acct_roll_ever_24_imputed_mean
 # Variable has >90% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("TimeInDelinqState", "PerfSpell_g0_Delinq_Num", "Arrears",
-                                                   "g0_Delinq_Num", "slc_acct_roll_ever_24_imputed_mean"), 
-                                            vartypes=c("acc")))
 
 
 
@@ -190,17 +181,20 @@ proc.time() - ptm # IGNORE: elapsed runtime; 32m
 
 # - Domain expertise
 # Model is unstable due to some covariates having zero-values for exp(coef)
-# Add Arrears for account-level delinquency, remove ArrearsToBalance_Aggr_Prop due to its high standard error
+# Add Arrears for account-level delinquency
+# Remove ArrearsToBalance_Aggr_Prop due to its high standard error
+# Remove TimeInDelinqState since it renders model as unstable
 
 # - Final variables
-vars <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+vars <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
           "DefaultStatus1_Aggr_Prop", "g0_Delinq_Num", "Arrears")
 
 cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars,collapse=" + "), 
                                      " + strata(PerfSpell_Num_binned)")),
                    id=PerfSpell_Key, datCredit_train_PWPST, ties="efron")
 summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
-
+### RESULTS: All variables are statistically significant
+# AIC: 124354.4; Harrell's c: 0.9958    
 
 
 
@@ -224,7 +218,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 
 ### CONCLUSION: Decreasing trend in Harrell's c across lag order (earlier is better). 
 # Best variable: InterestRate_Margin_Aggr_Med. Variable has >60% value in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("InterestRate_Margin_Aggr_Med"), vartypes=c("port")))
 
 
 
@@ -251,7 +244,7 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 # ------ 2.3 Combining insights: Delinquency-themed and portfolio-level variables
 
 # - Initialize variables to be tested
-vars.min <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+vars.min <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
           "DefaultStatus1_Aggr_Prop", "g0_Delinq_Num", "Arrears")
 vars <- c("AgeToTerm_Aggr_Mean", "InstalmentToBalance_Aggr_Prop", "PerfSpell_Maturity_Aggr_Mean", "NewLoans_Aggr_Prop")
 
@@ -286,10 +279,9 @@ proc.time() - ptm # IGNORE: elapsed runtime; 32m
 # PerfSpell_Maturity_Aggr_Mean + NewLoans_Aggr_Prop
 
 # - Final variables
-vars <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+vars <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
           "DefaultStatus1_Aggr_Prop", "g0_Delinq_Num", "Arrears", "AgeToTerm_Aggr_Mean",
           "PerfSpell_Maturity_Aggr_Mean", "NewLoans_Aggr_Prop")
-varlist <- vecChange(varlist,Add=data.table(vars=c("AgeToTerm_Aggr_Mean", "PerfSpell_Maturity_Aggr_Mean", "NewLoans_Aggr_Prop"), vartypes=c("port")))
 
 # - Final model
 cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars,collapse=" + "), 
@@ -297,7 +289,7 @@ cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(var
                    id=PerfSpell_Key, datCredit_train_PWPST, ties="efron")
 summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
 ### RESULTS: All variables are statistically significant
-# AIC: 115910.2; Harrell's c: 0.9984  
+# AIC: 123595.8; Harrell's c: 0.9956   
 
 
 
@@ -324,14 +316,13 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: Only certain variables resulted in stable models
 # Best variable: BalanceToPrincipal + pmnt_method_grp + slc_acct_pre_lim_perc_imputed_med + InterestRate_Nom
 # Variables have 64%-77% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("BalanceToPrincipal", "pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med", "InterestRate_Nom"), 
-                                            vartypes=c("acc", "cat", "acc", "acc")))
+
 
 
 # ------ 3.2 Combining insights: Delinquency-themed, portfolio-level, and account-level variables
 
 # - Initialize variables to be tested
-vars.min <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+vars.min <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
               "DefaultStatus1_Aggr_Prop", "g0_Delinq_Num", "Arrears", "AgeToTerm_Aggr_Mean",
               "PerfSpell_Maturity_Aggr_Mean", "NewLoans_Aggr_Prop")
 vars <- c("BalanceToPrincipal", "pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med", "InterestRate_Nom")
@@ -400,7 +391,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: It seems that slightly longer lags fare better than shorter ones, but only up to point (6-months)
 # Best variables: M_Repo_Rate_6, M_Repo_Rate_9
 # Variables have ~63% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_Repo_Rate_6", "M_Repo_Rate_9"),vartypes=c("macro")))
 
 
 
@@ -422,7 +412,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: Aside from 6-month lag, shorter lag orders are better fitting than longer lag orders
 # Best variable: M_Inflation_Growth_6, M_Inflation_Growth_3
 # Variables have ~63% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_Inflation_Growth_6", "M_Inflation_Growth_3"),vartypes=c("macro")))
 
 
 
@@ -444,7 +433,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: An increasing trend appears across lag orders (longer is better)
 # Best variable: M_RealGDP_Growth_12, M_RealGDP_Growth_9
 # Variables have ~62% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_RealGDP_Growth_12", "M_RealGDP_Growth_9"),vartypes=c("macro")))
 
 
 
@@ -466,7 +454,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: An increasing trend appears across lag orders (longer is better)
 # Best variable: M_RealIncome_Growth_12, M_RealIncome_Growth_9
 # Variables have ~60% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_RealIncome_Growth_12", "M_RealIncome_Growth_9"),vartypes=c("macro")))
 
 
 
@@ -488,7 +475,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: A decreasing trend appears across lag orders (shorter is better), but the reverse is true for Harrell's c
 # Best variable: M_DTI_Growth_9, M_DTI_Growth_6, M_DTI_Growth_1
 # Variables have ~64% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_DTI_Growth_9", "M_DTI_Growth_6", "M_DTI_Growth_1"),vartypes=c("macro")))
 
 
 
@@ -510,7 +496,6 @@ concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", s
 ### CONCLUSION: An increasing trend appears across lag orders (longer is better)
 # Best variable: M_Emp_Growth_12, M_Emp_Growth_9
 # Variables have ~60% values in Harrell's c
-varlist <- vecChange(varlist,Add=data.table(vars=c("M_Emp_Growth_12", "M_Emp_Growth_9"),vartypes=c("macro")))
 
 
 
@@ -542,7 +527,7 @@ proc.time() - ptm # IGNORE: elapsed runtime; 12m
 
 # - Initialize variables to be tested
 # No minimum specified deliberately to test domain expertise
-vars <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+vars <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
               "DefaultStatus1_Aggr_Prop", "g0_Delinq_Num", "Arrears", "AgeToTerm_Aggr_Mean",
               "PerfSpell_Maturity_Aggr_Mean", "NewLoans_Aggr_Prop",
           "BalanceToPrincipal", "pmnt_method_grp", "slc_acct_pre_lim_perc_imputed_med", "InterestRate_Nom",
@@ -565,24 +550,67 @@ proc.time() - ptm # IGNORE: elapsed runtime; 167m
 
 # - Using domain expertise to refit model
 # Add repo rate due to structural correlation with inflation rate, which may break down during crises, e.g., covid-19
-# Add performance spell number
-vars <- c("g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
-          "g0_Delinq_Num", "Arrears", "AgeToTerm_Aggr_Mean", "PerfSpell_Maturity_Aggr_Mean", 
-          "BalanceToPrincipal", "pmnt_method_grp", "InterestRate_Nom",
+# Add slc_acct_arr_dir_3_Change_Ind to align with TFD-model's input space
+# Remove (PerfSpell_Maturity_Aggr_Mean, g0_Delinq_Num) due to statistical insignificance
+# Add PerfSpell_Num for strategic purposes
+vars <- c("g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave", #"g0_Delinq_Num", 
+          "Arrears", "PerfSpell_Num", "AgeToTerm_Aggr_Mean", 
+          "BalanceToPrincipal", "pmnt_method_grp", "InterestRate_Nom", "slc_acct_arr_dir_3_Change_Ind",
           "M_DTI_Growth_9", "M_Inflation_Growth_6", "M_Repo_Rate_6")
 
-# - Final model | Stepwise forward selection procedure
-cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(c(vars,vars.min), collapse=" + "), 
+# - Final model
+cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(c(vars), collapse=" + "), 
                                      " + strata(PerfSpell_Num_binned)")),
                    id=PerfSpell_Key, datCredit_train_PWPST, ties="efron", model=T)
 summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
-# AIC: 113704.4 Harrell's C: 0.9985 
+# AIC: 121610.7 Harrell's C: 0.9966     
 
 
 
 
 
-# ------ 5. Final model
+# ------ 5 Stratum-based interaction effects
+
+# ------ 5.1 Which specific interaction effects, chosen by greatest Harrell's c, are best?
+# An interaction effect implies coefficients specific to a given stratum for a given variable
+
+# - Initialize variables to be tested
+vars <- c("factor(PerfSpell_Num_binned) * g0_Delinq_SD_4", "factor(PerfSpell_Num_binned) * Arrears", 
+          "factor(PerfSpell_Num_binned) * BalanceToPrincipal","factor(PerfSpell_Num_binned) * pmnt_method_grp")
+
+# - Single-factor modelling results
+# Goodness-of-fit
+aicTable(datCredit_train_PWPST, vars, TimeDef="PWPST", strataVar="PerfSpell_Num_binned", genPath=genObjPath)
+# Discriminatory power (in-sample)
+concTable(datCredit_train_PWPST, datCredit_valid_PWPST, vars, TimeDef="PWPST", strataVar="PerfSpell_Num_binned", genPath=genObjPath)
+### RESULTS: Best AIC-results: g0_Delinq_SD_4, pmnt_method_grp, Arrears, BalanceToPrincipal
+# Best Harrell's C-statistics: g0_Delinq_SD_4, Arrears, BalanceToPrincipal, pmnt_method_grp
+# Some p-values could not be reliably obtained, indicating model instability
+
+# - Using domain expertise to refit model interactively
+vars <- c("g0_Delinq_SD_4*factor(PerfSpell_Num_binned)", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave",
+          "Arrears", "PerfSpell_Num", "AgeToTerm_Aggr_Mean", 
+          "BalanceToPrincipal", "pmnt_method_grp", "InterestRate_Nom", "slc_acct_arr_dir_3_Change_Ind",
+          "M_DTI_Growth_9", "M_Inflation_Growth_6", "M_Repo_Rate_6")
+
+# - Final model
+cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(c(vars), collapse=" + "), 
+                                     " + strata(PerfSpell_Num_binned)")),
+                   id=PerfSpell_Key, datCredit_train_PWPST, ties="efron")
+summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
+# AIC: 113359.9 Harrell's C: 0.9985  
+### RESULTS: Interacting the stratum with (g0_Delinq_SD_4, Arrears, pmnt_method_grp) 
+# led to an unstable model with statistical insignificance in the affected coefficients
+# However, some factor-levels had some significance for g0_Delinq_SD_4, which suggests that
+# delinquency volatility may have more pronounced effects in subsequent spells; an idea for feature engineering
+
+### CONCLUSION: The model could not be improved with interaction effects
+
+
+
+
+
+# ------ 6. Final model
 
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
@@ -590,58 +618,56 @@ if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_val
 
 # - Initialize variables
 vars2 <- c( # Delinquency-themed
-          "g0_Delinq_SD_4", "TimeInDelinqState", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave", "g0_Delinq_Num", "Arrears",
+          "g0_Delinq_SD_4", "slc_acct_roll_ever_24_imputed_mean", "g0_Delinq_Ave", "Arrears", "PerfSpell_Num",
            # Portfolio-level variables
-          "AgeToTerm_Aggr_Mean", "PerfSpell_Maturity_Aggr_Mean",
+          "AgeToTerm_Aggr_Mean",
           # Loan-level variables
-          "BalanceToPrincipal", "pmnt_method_grp", "InterestRate_Nom",
+          "BalanceToPrincipal", "pmnt_method_grp", "InterestRate_Nom", "slc_acct_arr_dir_3_Change_Ind",
           # Macroeconomic variables
-          "M_DTI_Growth_9", "M_Inflation_Growth_6", "M_Repo_Rate_6"
-          )
+          "M_DTI_Growth_9", "M_Inflation_Growth_6", "M_Repo_Rate_6")
 
 # - Build model based on variables
 cox_PWPST <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "), 
                                    " + strata(PerfSpell_Num_binned)")),
                  id=PerfSpell_Key, datCredit_train_PWPST, ties="efron")
 summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
-### RESULTS: AIC: 113452.3 Harrel's C: 0.9984 
+### RESULTS: AIC: 121610.7 Harrel's C: 0.9966  
+# Warning message disappeared when setting control = coxph.control(eps=1e-01)
 
 c <- coefficients(cox_PWPST)
 (c <- data.table(Variable=names(c),Coefficient=c))
 #                             Variable      Coefficient
-#1:                     g0_Delinq_SD_4   5.977485275349
-#2:                  TimeInDelinqState  -2.156954605630
-#3: slc_acct_roll_ever_24_imputed_mean   0.844575183569
-#4:                      g0_Delinq_Ave  -7.282487126506
-#5:                      g0_Delinq_Num  -0.004771054471
-#6:                            Arrears   0.000008943221
-#7:                AgeToTerm_Aggr_Mean -10.145710497103
-#8:       PerfSpell_Maturity_Aggr_Mean  -0.001052390235
-#9:                 BalanceToPrincipal   0.250641752775
-#10:        pmnt_method_grpMISSING_DATA   1.293278190872
-#11:     pmnt_method_grpSalary/Suspense   0.563691574258
-#12:           pmnt_method_grpStatement   0.289504217928
-#13:                   InterestRate_Nom   5.641774331881
-#14:                     M_DTI_Growth_9  -3.414913986202
-#15:               M_Inflation_Growth_6   6.384420121549
-#16:                      M_Repo_Rate_6 -10.918172783997
+#1:                     g0_Delinq_SD_4   6.79541794518
+#2: slc_acct_roll_ever_24_imputed_mean   0.81657790150
+#3:                      g0_Delinq_Ave  -4.85776130055
+#4:                            Arrears   0.00001009586
+#5:                      PerfSpell_Num   0.27524854829
+#6:                AgeToTerm_Aggr_Mean  -9.05113832335
+#7:                 BalanceToPrincipal   0.28296408030
+#8:        pmnt_method_grpMISSING_DATA   1.21765139500
+#9:     pmnt_method_grpSalary/Suspense   0.70897174172
+#10:           pmnt_method_grpStatement   0.36748073433
+#11:                   InterestRate_Nom   4.75938434319
+#12:      slc_acct_arr_dir_3_Change_Ind   0.91175766502
+#13:                     M_DTI_Growth_9  -3.50095669104
+#14:               M_Inflation_Growth_6   6.37550725725
+#15:                      M_Repo_Rate_6 -11.38848779356
 
 # -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models
 csTable_PWPST <- csTable(datCredit_train_PWPST,vars2, TimeDef="PWPST", strataVar="PerfSpell_Num_binned", seedVal=1, numIt=10,
                        fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind", genPath=genPath)
-### RESULTS: Top single-factor models: Arrears + M_Inflation_Growth_6  + BalanceToPrincipal + PerfSpell_Maturity_Aggr_Mean 
-# Results do not vary much from each other, not meaningfully
+### RESULTS: Top single-factor models: PerfSpell_Num + M_Inflation_Growth_6  + Arrears + AgeToTerm_Aggr_Mean  
+# Results do not vary much from each other, at least not meaningfully
 
 aicTable_PWPST <- aicTable(datCredit_train_PWPST, variables=vars2,fldSpellID="PerfSpell_Key",
                          TimeDef="PWPST", strataVar="PerfSpell_Num_binned", genPath=genPath)
-### RESULTS: Top single-factor models: g0_Delinq_SD_4 + TimeInDelinqState  + slc_acct_roll_ever_24_imputed_mean + Arrears + 
+### RESULTS: Top single-factor models: g0_Delinq_SD_4 + slc_acct_roll_ever_24_imputed_mean + slc_acct_arr_dir_3_Change_Ind  + Arrears
 # Where the first 3 results have AIC values significantly different from the rest.
 
 # Test accuracy using Harrell's c-statistic over single-factor models
 concTable_PWPST <- concTable(datCredit_train_PWPST, datCredit_valid_PWPST, variables=vars2, 
                            fldSpellID="PerfSpell_Key", TimeDef="PWPST", strataVar="PerfSpell_Num_binned", genPath=genPath)
-### RESULTS: Top single-factor models (>90%):
-# g0_Delinq_SD_4 + TimeInDelinqState + Arrears + g0_Delinq_Num + slc_acct_roll_ever_24_imputed_mean
+### RESULTS: Top single-factor models (>85%): g0_Delinq_SD_4 + Arrears + slc_acct_roll_ever_24_imputed_mean + slc_acct_arr_dir_3_Change_Ind
 
 # - Combine results into a single object
 Table_PWPST <- concTable_PWPST[,1:2] %>% left_join(aicTable_PWPST, by ="Variable") %>% 
@@ -657,4 +683,4 @@ pack.ffdf(paste0(genObjPath,"PWPST_Univariate_Models"), Table_PWPST)
 pack.ffdf(paste0(genPath,"PWPST_Cox_Model"), cox_PWPST)
 
 # - Cleanup
-rm(datCredit_train_PWPST, datCredit_valid_PWPST, cox_PWPST); gc()
+rm(datCredit_train_PWPST, datCredit_valid_PWPST, cox_PWPST, cox_PWPST_empty, cox_PWPST_step); gc()

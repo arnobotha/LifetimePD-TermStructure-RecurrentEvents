@@ -55,9 +55,8 @@ require(survivalROC) # for time-dependent ROC-analysis from Heagerty et al.
 #require(timeROC) # for time-dependent ROC-analysis from Blanche2013 (disavowed in script 0b(iii)). DO NOT USE IN CREDIT DOMAIN
 #require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method from Heagerty, P.J., Zheng Y. (2005))
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
-require(discSurv)
+#require(discSurv)
 require(MASS)
-#require(ldatools) ### AB: ??? why necessary?
 
 #for plots
 require(ggplot2)
@@ -69,7 +68,7 @@ require(extrafont) #remotes::install_version("Rttf2pt1", version = "1.3.8"); Sys
 require(survminer)
 require(gridExtra)
 require(corrplot)
-require(Metrics)
+#require(Metrics)
 
 
 

@@ -18,15 +18,15 @@
 #   - 3a(i).Data_Transform.R
 #   - 3c(i).Data_Fusion2_TFD.R
 #   - 5a(i).InputSpace_TFD.R
-#   - 5a(iv).InputSpace_PWPST.R
+#   - 5a(ii).InputSpace_AG.R
+#   - 5a(iii).InputSpace_PWPST.R
 
 # -- Inputs:
 #   - datCredit_train_TFD | Prepared from script 3b
 #   - datCredit_valid_TFD | Prepared from script 3b
-
 #
 # -- Outputs:
-#   - Input_Space
+#   - <Analytics> | tROC-graphs
 # ================================================================================
 
 

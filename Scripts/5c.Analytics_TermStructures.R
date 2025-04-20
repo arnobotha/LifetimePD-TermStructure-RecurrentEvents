@@ -18,15 +18,15 @@
 #   - 3c.Data_Fusion2.R
 #   - 4a(ii).Analysis_PerformanceSpells_HazardRates
 #   - 5a(i).InputSpace_TFD.R
-#   - 5a(iv).InputSpace_PWPST.R
+#   - 5a(ii).InputSpace_AG.R
+#   - 5a(iii).InputSpace_PWPST.R
 
 # -- Inputs:
 #   - datCredit_train_TFD | Prepared from script 3b
-#   - datCredit_valid_TFD | Prepared from script 3b
-
+#   - datCredit_valid_TFD | Prepared from script 3b\
 #
 # -- Outputs:
-#   - Input_Space
+#   - <Analytics> | Term-structure graphs
 # ================================================================================
 
 
@@ -211,6 +211,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
 # - Create dataset containing only the actual term-structure towards creating an inset graph
 datGraph2 <- datGraph %>% subset(Type %in% c("a_Actual", "b_Actual_spline") & Time <= sMaxSpellAge_graph)
 
+# - Create inset graph
 (gsurv_ft_act <- ggplot(datGraph2, aes(x=Time, y=EventRate, group=Type)) + theme_bw() +
     labs(y="", x="", title="Actual Term-structure \n(Kaplan-Meier)") + 
     theme(legend.position=c(0.75,0.40), text=element_text(size=12, family="Cambria"),
@@ -369,6 +370,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
 # - Create dataset containing only the actual term-structure towards creating an inset graph
 datGraph2 <- datGraph %>% subset(Type %in% c("a_Actual", "b_Actual_spline") & Time <= sMaxSpellAge_graph)
 
+# - Create inset graph
 (gsurv_ft_act <- ggplot(datGraph2, aes(x=Time, y=EventRate, group=Type)) + theme_bw() +
   labs(y="", x="", title="Actual Term-structure \n(Kaplan-Meier)") + 
   theme(legend.position=c(0.75,0.40), text=element_text(size=12, family="Cambria"),

@@ -84,7 +84,7 @@ k <- 6 # Probation period
 
 # -- Path variables | User-dependent
 
-if (Sys.getenv("USERNAME") == "Arno Botha") { # Dr Arno Botha | Kralkatorrik-machine
+if (Sys.getenv("USERNAME") %in% c("Arno Botha","arnos")) { # Dr Arno Botha | Kralkatorrik-machine
   # - Common path for saving large R-objects as back-up and/or as reusable checkpoints
   genPath <- "E:/DataDump/RetailMortgages-FNB/LifetimePD-TermStructure-RecurrentEvents_Data/"
   # - Common path from which raw big datasets are imported

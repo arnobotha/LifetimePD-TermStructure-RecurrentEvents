@@ -2,8 +2,7 @@
 # Setting up R environment, parameters, and function definitions
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Roundel Bester, Marcel Muller, Roland Breedt, 
-#                   Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Roland Breedt, Bernard Scheepers
 
 # DESCRIPTION: 
 # This script installs and  loads various libraries and packages, compiles all
@@ -55,7 +54,6 @@ require(survivalROC) # for time-dependent ROC-analysis from Heagerty et al.
 #require(timeROC) # for time-dependent ROC-analysis from Blanche2013 (disavowed in script 0b(iii)). DO NOT USE IN CREDIT DOMAIN
 #require(risksetROC) # for time-dependent ROC-analysis (I/D Cox regression method from Heagerty, P.J., Zheng Y. (2005))
 require(pROC); require(ROCR) # both for cross-sectional ROC-analysis (main:pROC)
-#require(discSurv)
 require(MASS)
 
 #for plots
@@ -124,8 +122,6 @@ source(paste0(path_cust,"TruEnd.R"))
 source(paste0(path_cust,'DelinqM.R'))
 
 # - Custom survival-related functions - generic; 
-### AB: Needs to be dissected a bit and collapsed into other scripts, but only after closeout!
-# I'm not longer sure of its utility if its primary function (Schoenfeld) is implemented in the next/your script
 source(paste0(path_cust,'0b(i).FunkySurv.R'))
 
 # - Custom survival-related functions - Residuals (Cox-Snell, Schoenfeld)

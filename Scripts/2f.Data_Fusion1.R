@@ -3,7 +3,7 @@
 # engineering some basic features that must precede any (non-clustered) subsampling
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Roland Breedt, Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Marcel Muller (MM), Roland Breedt (RB), Bernard Scheepers (BS)
 
 # DESCRIPTION:
 # This script performs the following high-level tasks:

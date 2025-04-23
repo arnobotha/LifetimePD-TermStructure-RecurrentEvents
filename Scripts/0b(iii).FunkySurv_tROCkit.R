@@ -5,30 +5,10 @@
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha (AB), Bernard Scheepers (BS)
-# VERSION: 1.0 (November-2024)
+# VERSION: 2.0 (Apr-2025)
 # ================================================================================
 
 
-
-# ----------------- 0. Preliminaries for unit testing
-# Extract and prepare an example dataset, models for unit tests
-
-# -- Load data and prepare
-force(data(cgd,package="survival"))
-data(cgd) # Load data set
-# Lightly prepare data into a generic format that can span our eventual credit dataset as well
-dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
-  rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
-
-
-# -- Modelling
-# NOTE: 'Best' model was fit interactively by changing input space until statistical significance is obtained.
-# The goal is not to get the best model, but just a baseline upon which ROC-analyses
-
-# - Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
-coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
-                    data=dat, id=ID)
-summary(coxExample)
 
 
 
@@ -976,6 +956,3 @@ ROC_quants.estimator <- function(vMarkers, threshold, vSurvProb, S_mean, nRows, 
   
   return(data.table(Threhsold=threshold, TPR=sTPR, FPR=sFPR))
 }
-
-# House keeping
-rm(cgd, cgd0, coxExample, dat)

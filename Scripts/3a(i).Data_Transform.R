@@ -38,7 +38,7 @@
 
 
 # --------- 1. Preliminaries
-# -- Confirm prepared database is loaded into memory
+# -- Confirm prepared dataset is loaded into memory
 if (!exists('datCredit_real')) unpack.ffdf(paste0(genPath,"creditdata_final4a"), tempPath)
 
 Defcol <- c("DefSpell_Num", "TimeInDefSpell") # Default variables to remove
@@ -52,26 +52,12 @@ ncol(datCredit_real) + length(Defcol) == ncol
 
 
 # --------- 2. Additional (light) feature engineering towards implementing various time definitions
-# - Max date of each performance spell (used as a stratifier)
-datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Max_Date := max(Date, na.rm=T), by=list(PerfSpell_Key)]
-datCredit_real[is.na(PerfSpell_Key), PerfSpell_Max_Date:= NA]
-
-# - Min date of each performance spell (used as a stratifier)
-datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Min_Date := min(Date, na.rm=T), by=list(PerfSpell_Key)]
-datCredit_real[is.na(PerfSpell_Key), PerfSpell_Min_Date:= NA]
-
-# - Create an indicator variable variable for when a loan exits a performance spell
-datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
-#datCredit_real[,PerfSpell_Exit_Ind2 := with(datCredit_real, ave(seq_along(PerfSpell_Key), PerfSpell_Key, FUN = function(x) x == max(x)))]
-#all.equal(datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind], datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Exit_Ind2])
-### RESULTS: TRUE
 
 # - Create new spell resolution types by grouping competing risks together & relocating variable
 # Performance spells
-datCredit_real <- datCredit_real %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
-                                                                                  PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
-                                                                                  TRUE ~ "Settled & Other")) %>%
-  relocate(PerfSpell_Exit_Ind, PerfSpell_Max_Date, PerfSpell_Min_Date,  .after=PerfSpellResol_Type_Hist)
+datCredit_real[, PerfSpellResol_Type_Hist2 := case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
+                             PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
+                             TRUE ~ "Settled & Other")]
 
 # - Checking the proportions of the newly created variable
 describe(datCredit_real$PerfSpellResol_Type_Hist2)

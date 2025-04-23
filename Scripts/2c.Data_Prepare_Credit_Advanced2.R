@@ -2,7 +2,7 @@
 # Apply the TruEnd-procedure, followed by last few data treatments (affected by TruEnd)
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB)
 # ---------------------------------------------------------------------------------------
 # DESCRIPTION:
 # In continuing with script 2b, this script applies the following Advanced Data Treatments:

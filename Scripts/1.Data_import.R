@@ -2,7 +2,7 @@
 # Import credit data and macroeconomic data
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Roelinde Bester
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB)
 
 # DESCRIPTION:
 # This script imports the loan performance credit dataset (SAS) into R, as well

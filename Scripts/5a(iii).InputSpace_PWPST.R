@@ -2,7 +2,7 @@
 # Divide data into thematic groups and perform data analysis on them to compile an input space for the TPWPST model
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB)
 # ------------------------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R

@@ -3,7 +3,7 @@
 # calculating the realised LGD from resolved default spells. TruEnd-procedure applied.
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB)
 # ---------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -602,7 +602,7 @@ suppressWarnings({
   datCredit_real[, `:=`(PerfSpell_Num = NULL, PerfSpell_Key = NULL, PerfSpell_Counter = NULL, TimeInPerfSpell = NULL, 
                         PerfSpell_LeftTrunc = NULL, PerfSpell_Censored = NULL, PerfSpell_Event = NULL, PerfSpell_TimeEnd = NULL, 
                         PerfSpell_Age = NULL, PerfSpell_Desc = NULL, PerfSpellResol_Type_Hist = NULL, 
-                        HasLeftTruncPerfSpell = NULL)]   
+                        HasLeftTruncPerfSpell = NULL, PerfSpell_Exit_Ind = NULL)]   
 })
 
 
@@ -731,6 +731,9 @@ cat ( (check6c_real == 0) %?% "SAFE: No unexpected missingness in [PerfSpellReso
 # - Cleanup
 datCredit_real[, PerfSpell_LastRec := NULL]
 
+# - Create an indicator variable variable for when a loan exits a performance spell
+datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
+
 
 
 # --- 4.5. Reorder new features created thus far
@@ -738,7 +741,7 @@ datCredit_real <- datCredit_real %>%
   # Re-order and group together fields related to terminal events or behavioural dynamics
   relocate(PerfSpell_Num, PerfSpell_Counter, TimeInPerfSpell, PerfSpell_LeftTrunc, PerfSpell_Event, PerfSpell_Censored, 
            PerfSpell_TimeEnd, PerfSpell_Age, PerfSpellResol_Type_Hist, 
-           HasLeftTruncPerfSpell, .after=LossRate_Real) %>%
+           HasLeftTruncPerfSpell, PerfSpell_Exit_Ind, .after=LossRate_Real) %>%
   relocate(PerfSpell_Key, .after=LoanID)
 
 

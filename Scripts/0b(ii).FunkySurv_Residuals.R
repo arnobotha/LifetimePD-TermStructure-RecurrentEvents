@@ -4,32 +4,10 @@
 # Cox regresion model
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers, Dr Arno Botha
-# VERSION: 1.0 (November-2024)
+# SCRIPT AUTHOR(S): Bernard Scheepers (BS), Dr Arno Botha (AB), Marcel Muller (MM)
+# VERSION: 2.0 (Apr-2025)
 # ================================================================================
 
-
-
-
-# ----------------- 0. Dataset and models for conducting unit tests later --------
-# The cgd dataset from the survival package contains survival data from a clinical
-# trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency.
-Test <- FALSE # Toggle for unit tests; Test <- T
-if (Test){
-  force(data(cgd,package="survival"))
-  data(cgd) # Load data set
-  # Lightly prepare data into a generic format that can span our eventual credit dataset as well
-  dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
-            rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
-  # dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
-  #                 start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
-  dat[order(ID),Removed := ifelse(ID != shift(ID,type="lead"),1,0)]
-  dat[is.na(Removed),Removed := TRUE]
-  # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
-  coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
-                      data=dat, id=ID)
-  summary(coxExample)
-}
 
 
 
@@ -169,42 +147,6 @@ GoF_CoxSnell_KS <- function(cox, data_train, data_valid, GraphInd=T, legPos=c(0.
 
 
 
-GoF_CoxSnell_KaplanMeier <- function(cox, data_train, GraphInd=T, legPos=c(0.5,0.5), fileName=NA,
-                            fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
-                            dpi=350, chosenFont="Cambria") {
-  # - Testing conditions
-  # cox <- cox_TFD; data_train <- datCredit_train_TFD; GraphInd<-T; legPos<-c(0.5,0.5)
-  # fileName <- paste0(genFigPath, "TFD/KS_Test-CoxSnellResiduals_Exp", ".png")
-  # fldLstRowInd="PerfSpell_Exit_Ind"; fldEventInd="Default_Ind"
-  
-  # --- Preliminaries
-  
-  # - Sanity checks
-  if (GraphInd & is.na(fileName)) stop("File name not provided. Exiting ..")
-  
-  # - Data preparation
-  # Subset last row per performing spell for Goodness-of-Fit (GoF) purposes
-  datLstRow <- copy(data_train[get(fldLstRowInd)==1,])
-  vLstRow_Events <- datLstRow[, get(fldEventInd)]
-  Sys.sleep(2)
-  
-  
-  # --- Calculate KM-based B-statistic (1-KS)
-  
-  # - Calculate adjusted Cox-Snell Residuals
-  vCS <- calc_CoxSnell_Adj(cox, vIDs=data_train[[fldSpellID]], vEvents=vLstRow_Events)
-  
-  # - Fit Kaplan-Meier curve using residuals as input
-  KM_fit <- survfit(Surv(vCS, vLstRow_Events) ~ 1)
-  # Mills2012 (ch. 7) and Ansin2015 plotting approach
-  vSurv <- KM_fit$surv[KM_fit$time<20]
-  vTime <- KM_fit$time[KM_fit$time<20]
-  plot(vTime, vSurv, xlim=range(vTime), ylim=c(0,1), type="l")
-  t0 <- seq(0,max(vTime), 0.05)
-  lines(t0, exp(-t0), col="red", type="b")
-       
-}
-
 
 
 # ----------------- 2. Functions for estimating Schoenfeld residuals -------------
@@ -304,16 +246,31 @@ sfTest <- function(cox){
 }
 
 
-# r <- residuals(cox,type="schoenfeld")
-# plot(names(r), r)
-# 
-# sr <- residuals(cox,type="scaledsch")
-# plot(names(sr),sr)
-# abline(0,0, col="red")
 
+# The cgd dataset from the survival package contains survival data from a clinical
+# trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency (recurrent event).
+Test <- FALSE # Toggle for unit tests; Test <- T
+if (Test){
+  force(data(cgd,package="survival"))
+  data(cgd) # Load data set
+  # Lightly prepare data into a generic format that can span our eventual credit dataset as well
+  dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weight, inherit, enum, steroids, treat)] %>% 
+    rename(ID=id, Start=tstart,End=tstop,Event_Ind=status)
+  # dat <- survSplit(Surv(Start,End,Default_Ind) ~  .,data=cgd,cut=c(1:max(cgd$End)),
+  #                 start="Start",end="End",event="Default_Ind") %>% as.data.table() # Apply the counting process
+  dat[order(ID),Removed := ifelse(ID != shift(ID,type="lead"),1,0)]
+  dat[is.na(Removed),Removed := TRUE]
+  # --- Fit Cox Regression Model correctly, where observations are clustered around a given ID without assuming independence
+  coxExample <- coxph(Surv(Start,End,Event_Ind) ~ weight + age + enum + steroids + treat,
+                      data=dat, id=ID)
+  summary(coxExample)
+  
+  r <- residuals(cox,type="schoenfeld")
+  plot(names(r), r)
 
-
-# --- House keeping
-if (Test) {
+  sr <- residuals(cox,type="scaledsch")
+  plot(names(sr),sr)
+  abline(0,0, col="red")
+  
   rm(cgd,cgd0,coxExample) 
 }

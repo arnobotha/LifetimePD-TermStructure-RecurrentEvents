@@ -3,8 +3,8 @@
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Marcel Muller, Dr Arno Botha, Bernard Scheepers
+# VERSION: 2.0 (Apr-2025)
 
-# VERSION: 1.0 (July-2023)
 # DESCRIPTION: 
 # This script defines various functions specific to survival modelling
 # that are used elsewhere in this project or, indeed, used across other projects.
@@ -69,14 +69,14 @@ corrAnalysis <- function(data_train, variables, corrThresh = 0.6, method = 'spea
 # --- Function to return the appropriate formula object based on the time definition.
 #         [TimeDef]: Time definition incorporated;
 #         [variables]: List of variables used to build single-factor models;
-TimeDef_Form <- function(TimeDef, variables, strataVar=""){
+TimeDef_Form <- function(TimeDef, variables, strataVar="", timeVar="PerfSpell_Num"){
   # Create formula based on time definition of the dataset.
   if(TimeDef=="TFD"){# Formula for time to first default time definition (containing only the fist performance spell).
     formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                                  paste(variables,collapse=" + ")))
     
   } else if(TimeDef=="AG"){# Formula for Andersen-Gill (AG) time definition
-    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ PerfSpell_Num + ",
+    formula <- as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",timeVar, " + ",
                                  paste(variables,collapse=" + ")))
     
   } else if(TimeDef=="PWPST"){# Formula for Prentice-Williams-Peterson (PWP) Spell time definition
@@ -127,7 +127,7 @@ calc_AIC <- function(formula, data_train, variables="", it=NA, logPath="", fldSp
 #         [numThreads]: Number of threads used; [genPath]: Optional path for log file. 
 # Output: [matResults]: Result matrix.
 aicTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
-                      TimeDef, numThreads=6, genPath, strataVar="") {
+                      TimeDef, numThreads=6, genPath, strataVar="", timeVar="PerfSpell_Num") {
   # - Testing conditions
    # data_train <- datCredit_train_PWPST; TimeDef="PWPST"; numThreads=6
    # fldSpellID<-"PerfSpell_Key"; variables<-"g0_Delinq_SD_4";
@@ -143,8 +143,8 @@ aicTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
     { # ----------------- Start of Inner Loop -----------------
       # - Testing conditions
       # j <- 1
-      calc_AIC(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar), variables=variables[j],
-                    data_train=data_train, it=j, logPath=genPath,  fldSpellID=fldSpellID)
+      calc_AIC(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar), 
+               variables=variables[j], data_train=data_train, it=j, logPath=genPath,  fldSpellID=fldSpellID)
       } # ----------------- End of Inner Loop -----------------
   stopCluster(cl.port); proc.time() - ptm  
   
@@ -163,7 +163,7 @@ aicTable <- function(data_train, variables, fldSpellID="PerfSpell_Key",
 #         [it]: Number of variables being compared; [logPath], Optional path for log file for logging purposes;
 #         [fldSpellID]: Field name of spell-level ID.
 calc_HarrellC <- function(formula, data_train, data_valid, variables="", it=NA, logPath="", fldSpellID="PerfSpell_Key") {
-  # formula <- TimeDef_Form(TimeDef,variables[j], strataVar=strataVar)
+  # formula <- TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar)
   
   tryCatch({
     model <- coxph(formula,id=get(fldSpellID), data = data_train) # Fit Cox model
@@ -200,7 +200,7 @@ calc_HarrellC <- function(formula, data_train, data_valid, variables="", it=NA, 
 #         [fldSpellID]: Field name of spell-level ID; [TimeDef]: Time definition incorporated.
 # Output: [matResults]: Result matrix.
 concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_Key",
-                      TimeDef, numThreads=6, genPath, strataVar="") {
+                      TimeDef, numThreads=6, genPath, strataVar="", timeVar="PerfSpell_Num") {
   # - Testing conditions
   # data_valid <- datCredit_train_PWPST; TimeDef="PWPST"; numThreads=6
   # fldEventInd<-"Default_Ind"
@@ -216,8 +216,9 @@ concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_K
     { # ----------------- Start of Inner Loop -----------------
       # - Testing conditions
       # j <- 1
-      calc_HarrellC(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar), variable=variables[j],
-                    data_train=data_train, data_valid=data_valid, it=j, logPath=genPath,  fldSpellID=fldSpellID)
+      calc_HarrellC(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar), 
+                    variable=variables[j], data_train=data_train, data_valid=data_valid, it=j, logPath=genPath, 
+                    fldSpellID=fldSpellID)
     } # ----------------- End of Inner Loop -----------------
   stopCluster(cl.port); proc.time() - ptm  
   
@@ -238,7 +239,7 @@ concTable <- function(data_train, data_valid, variables, fldSpellID="PerfSpell_K
 # Outputs: b-statistic (single value)
 calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, seedVal, it=NA, logPath=NA) {
   # - Testing conditions
-  # formula <- TimeDef_Form(TimeDef,variables[j], strataVar=strataVar)
+  # formula <- TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar)
   
   # Fit Model
   tryCatch({
@@ -282,7 +283,7 @@ calcBStat <- function(formula, data_train, fldSpellID="PerfSpell_Key", vEvents, 
 # Output: [Results]:  Results table.
 csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5, 
                     fldSpellID="PerfSpell_Key", fldLstRowInd="PerfSpell_Exit_Ind", fldEventInd="Default_Ind",
-                    numThreads=6, genPath=NA, strataVar=""){
+                    numThreads=6, genPath=NA, strataVar="", timeVar="PerfSpell_Num"){
   
   # - Testing conditions
   # data_train <- datCredit_train_PWPST; variables<-vars2; TimeDef<-"PWPST"; seedVal<-1; numIt<-5; 
@@ -312,7 +313,8 @@ csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5,
       { # ----------------- Start of Inner Loop -----------------
         # - Testing conditions
         # var <- variables[1]; j<-4
-        calcBStat(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar), data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
+        calcBStat(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar), 
+                  data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
                   seedVal=seedVal, it=j, logPath=genPath)
         
       } # ----------------- End of Inner Loop -----------------
@@ -349,8 +351,8 @@ csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5,
         { # ----------------- Start of Inner Loop -----------------
           # - Testing conditions
           # var <- variables[1]
-          calcBStat(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar), data_train=data_train, fldSpellID=fldSpellID, vEvents=vLstRow_Events,
-                    seedVal=seedVal*it, it=j, logPath=genPath)
+          calcBStat(formula=TimeDef_Form(TimeDef,variables[j], strataVar=strataVar, timeVar=timeVar), data_train=data_train, 
+                    fldSpellID=fldSpellID, vEvents=vLstRow_Events, seedVal=seedVal*it, it=j, logPath=genPath)
           
         } # ----------------- End of Inner Loop -----------------
     }
@@ -376,9 +378,18 @@ csTable <- function(data_train, variables, TimeDef, seedVal=1, numIt=5,
 # Input:    [datGiven]: given loan history; [coxGiven]: fitted cox PH model; [it]: current iteration index; 
 #           [numKeys]: total keys; [genPath]: Optional path for log file.
 # Output:   Survival probability, cumulative hazard, hazard, and event probability
-survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
-  # datGiven <- subset(test,PerfSpell_Key == vSpellKeys[2]); coxGiven <- cox_TFD
-  # it=1; numKeys <- numSpellKeys
+survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="", timeVar="End", startVar="Start") {
+  # datGiven <- subset(datCredit_valid_TFD,PerfSpell_Key == vSpellKeys[j]); coxGiven <- cox_TFD
+  # it=1; numKeys <- numSpellKeys; timeVar="End"; startVar="Start"
+  
+  # - Add a row when scoring S(t), merely to facilitate estimation of f(t)
+  if (datGiven[,get(timeVar)][1] > 1) {
+    datAdd <- datGiven[1, ]
+    datAdd[, (startVar) := get(startVar) - 1]
+    datAdd[, (timeVar) := get(timeVar) - 1]
+    datGiven <- rbind(datAdd, datGiven)
+    addedRow <- T
+  } else addedRow <- F
   
   # - Compute individual survival curve from fitted Cox model
   survFit_pred <- survfit(coxGiven, centered=F, newdata=datGiven, id=PerfSpell_Key)
@@ -386,20 +397,39 @@ survQuants <- function(datGiven, coxGiven, it=1, numKeys, genPath="") {
   cat("\n\t", it, "of", numKeys, "| Estimation completed for spell key:", unique(datGiven$PerfSpell_Key),
       file=paste0(genPath,"survQuants_log.txt"), append=T)
   
+  # - Compile survival table
   datSurv <- data.table(PerfSpell_Key = unique(datGiven$PerfSpell_Key), End=datGiven$End, # composite key
                         CHaz=survFit_pred$cumhaz, #RiskSetSize=survFit_pred$n.risk,
                         #NumEvents=survFit_pred$n.event, NumCensored=survFit_pred$n.censor,
                         Survival=round(survFit_pred$surv,digits=15))
   # plot(survFit_pred)
+  # plot(datSurv$Survival, type="b")
+  
+  # - Due to data irregularities, the survival probability can increase again over certain t,
+  # which breaks the axioms of probability since S(t) = 1 - F(t) and F(t) is monotonically increasing by definition
+  # Luckily, these cases seem isolated to the later parts of the spell life
+  # In these cases, force the S(t)-estimate to equal the previous
+  vecErrors <- which(diff(datSurv$Survival) > 0)
+  if (length(vecErrors) > 1) {
+    
+    while (looping==T) {
+      datSurv$Survival[vecErrors[1]+1] <- datSurv$Survival[vecErrors[1]]
+      # Testing end condition
+      vecErrors <- which(diff(datSurv$Survival) > 0)
+      if (length(vecErrors) > 1) {looping=T} else {looping=F}
+    }
+  }
+  # plot(datSurv$Survival, type="b")
   
   # - Approximate baseline hazard h_0(t) from cumulative baseline hazard H_0(t)
-  datSurv[, Hazard := c(datSurv$CHaz[1]/datSurv$End[1], diff(datSurv$CHaz) / diff(datSurv$End))]
-  #plot(datSurv[, Time], datSurv[, Hazard_base], type="b") # mean survival probability over time
-  datSurv[, EventProb := Hazard * shift(Survival,n=1,type="lag",fill=1)] # f(t|X) = S(t-1|X) . h(t|X)
+  #datSurv[, Hazard := c(datSurv$CHaz[1], diff(datSurv$CHaz))]
+  datSurv[, Hazard := (shift(Survival,n=1,type="lag",fill=1) - Survival)/shift(Survival,n=1,type="lag",fill=1)]
+  datSurv[, EventProb := shift(Survival,n=1,type="lag",fill=1) * Hazard] # f(t|X) = S(t-1|X) . h(t|X)
   
-  # - Render survival predictions: risk scores exp(\beta . x) and calculate hazard and survival probability
-  #datSurv[, RiskScore := predict(coxGiven, newdata=datGiven, type="risk")]
-  #datSurv[, Hazard := Hazard_base * RiskScore] # by definition of Cox regression model
+  # - Remove added row (if added)
+  if (addedRow) {
+    datSurv <- datSurv[2:NROW(datSurv),]
+  }
   
   return(datSurv)
 }

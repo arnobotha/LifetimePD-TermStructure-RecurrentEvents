@@ -97,7 +97,13 @@ summary(cox_PWPST); AIC(cox_PWPST); concordance(cox_PWPST)
 
 # --- Preliminaries
 numSpellKeys <- length(unique(datCredit_valid_TFD$PerfSpell_Key))
-vSpellKeys <- unique(datCredit_valid_TFD$PerfSpell_Key)
+vSpellKeys <- unique(datCredit_valid_TFD$PerfSpell_Key) 
+
+# - Testing conditions
+# Get a much smaller sample on which we can test the multithreading setup within reasonable timeframes
+#vSpellKeys <- data.table(PerfSpell_Key=unique(datCredit_valid_TFD$PerfSpell_Key)) %>% slice_sample(prop=0.05)
+#numSpellKeys <- vSpellKeys[,.N]
+# vSpellKeys <- vSpellKeys$PerfSpell_Key
 
 
 # --- Iterate across spell keys and calculate survival-related quantities using survQuants()
@@ -131,16 +137,21 @@ if (!exists('datSurv')) unpack.ffdf(paste0(genPath,"datSurv_KM_FirstSpell"), tem
 setDT(datSurv_TFD, key="End")
 
 # - Determine population average survival and event rate across loans per time period
+describe(datSurv_TFD$EventProb); hist(datSurv_TFD[End<=300, EventProb])
+#test <- unique(subset(datSurv_TFD, EventProb > 1)$PerfSpell_Key)[1]
+#j <- which(vSpellKeys==test)
 datAggr <- datSurv_TFD[, list(EventRate = mean(EventProb,na.rm=T), Freq=.N),by=list(End)]
-plot(datAggr[End <= 300, End], datAggr[End <= 300, EventRate], type="b")
-plot(datSurv[Time <= 300, Time], datSurv[Time <= 300, EventRate], type="b")
+plot(datAggr[End <= 300, End], datAggr[End <= 300, EventRate], type="b") # correct shape
+plot(datSurv[Time <= 300, Time], datSurv[Time <= 300, EventRate], type="b") # correct shape
+cumsum(datAggr$EventRate) # can exceed 1, incorrect
+cumsum(datSurv$EventRate) # approaches 1, correct
 
 # - General parameters
-sMaxSpellAge <- 300 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
-sMaxSpellAge_graph <- 300 # max for [PerfSpell_Age] for graphing purposes
+sMaxSpellAge <- 240 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
+sMaxSpellAge_graph <- 240 # max for [PerfSpell_Age] for graphing purposes
 
 # - Fitting natural cubic regression splines
-sDf_Act <- 12; sDf_Exp <- 18
+sDf_Act <- 12; sDf_Exp <- 12
 smthEventRate_Act <- lm(EventRate ~ ns(Time, df=sDf_Act), data=datSurv[Time <= sMaxSpellAge,])
 smthEventRate_Exp <- lm(EventRate ~ ns(End, df=sDf_Exp), data=datAggr[End <= sMaxSpellAge])
 summary(smthEventRate_Act); summary(smthEventRate_Exp)
@@ -195,7 +206,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
     geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1.25) + 
     geom_line(aes(y=EventRate, colour=Type, linetype=Type, linewidth=Type)) + 
     # Annotations
-    annotate("text", y=0.01,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
+    annotate("text", y=0.0025,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
              size = 3) + 
     # Scales and options
     facet_grid(FacetLabel ~ .) + 
@@ -239,7 +250,7 @@ datGraph2 <- datGraph %>% subset(Type %in% c("a_Actual", "b_Actual_spline") & Ti
 # - Combining the two above plots onto a single graph
 ymin <- diff(ggplot_build(gsurv_ft)$layout$panel_params[[1]]$y.range) * 0.3
 ymax <- max(ggplot_build(gsurv_ft)$layout$panel_params[[1]]$y.range) * 0.99
-(plot.full <- gsurv_ft + annotation_custom(grob = ggplotGrob(gsurv_ft_act), xmin=10, xmax=220, 
+(plot.full <- gsurv_ft + annotation_custom(grob = ggplotGrob(gsurv_ft_act), xmin=15, xmax=205, 
                                            ymin=ymin, ymax=ymax))
 
 # - Save plot
@@ -289,17 +300,18 @@ if (!exists('datSurv')) unpack.ffdf(paste0(genPath,"datSurv_KM_MultiSpell"), tem
 setDT(datSurv_PWPST, key="End")
 
 # - Determine population average survival and event rate across loans per time period
+describe(datSurv_PWPST$EventProb); hist(datSurv_PWPST[End<=300, EventProb])
 datAggr <- datSurv_PWPST[, list(EventRate = mean(EventProb,na.rm=T), Freq=.N),by=list(End)]
 plot(datAggr[End <= 300, End], datAggr[End <= 300, EventRate], type="b")
 plot(datSurv[Time <= 300, Time], datSurv[Time <= 300, EventRate], type="b")
 
 
 # - General parameters
-sMaxSpellAge <- 300 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
-sMaxSpellAge_graph <- 300 # max for [PerfSpell_Age] for graphing purposes
+sMaxSpellAge <- 240 # max for [PerfSpell_Age], as determined in earlier analyses (script 4a(i))
+sMaxSpellAge_graph <- 240 # max for [PerfSpell_Age] for graphing purposes
 
 # - Fitting natural cubic regression splines
-sDf_Act <- 12; sDf_Exp <- 18
+sDf_Act <- 12; sDf_Exp <- 12
 smthEventRate_Act <- lm(EventRate ~ ns(Time, df=sDf_Act), data=datSurv[Time <= sMaxSpellAge,])
 smthEventRate_Exp <- lm(EventRate ~ ns(End, df=sDf_Exp), data=datAggr[End <= sMaxSpellAge])
 summary(smthEventRate_Act); summary(smthEventRate_Exp)
@@ -354,7 +366,7 @@ vLineType <- c("dashed", "solid", "dashed", "solid")
     geom_point(aes(y=EventRatePoint, colour=Type, shape=Type), size=1.25) + 
     geom_line(aes(y=EventRate, colour=Type, linetype=Type, linewidth=Type)) + 
     # Annotations
-    annotate("text", y=0.01,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
+    annotate("text", y=0.0025,x=100, label=paste0("MAE: ", percent(MAE_eventProb, accuracy=0.0001)), family=chosenFont,
              size = 3) + 
     # Scales and options
     facet_grid(FacetLabel ~ .) + 
@@ -398,7 +410,7 @@ datGraph2 <- datGraph %>% subset(Type %in% c("a_Actual", "b_Actual_spline") & Ti
 # - Combining the two above plots onto a single graph
 ymin <- diff(ggplot_build(gsurv_ft)$layout$panel_params[[1]]$y.range) * 0.3
 ymax <- max(ggplot_build(gsurv_ft)$layout$panel_params[[1]]$y.range) * 0.99
-(plot.full <- gsurv_ft + annotation_custom(grob = ggplotGrob(gsurv_ft_act), xmin=10, xmax=220, 
+(plot.full <- gsurv_ft + annotation_custom(grob = ggplotGrob(gsurv_ft_act), xmin=15, xmax=205, 
                                            ymin=ymin, ymax=ymax))
 
 # - Save plot

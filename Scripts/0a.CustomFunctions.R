@@ -2,7 +2,8 @@
 # Defining custom functions used across various projects
 # ------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Roelinde Bester, Marcel Muller
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Marcel Muller (MM)
+# VERSION: 2.0 (Apr-2025)
 
 # DESCRIPTION:
 # This script defines various functions that are used elsewhere in this project

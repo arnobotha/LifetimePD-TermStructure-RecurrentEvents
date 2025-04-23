@@ -728,11 +728,13 @@ cat ( (check6c_real == 0) %?% "SAFE: No unexpected missingness in [PerfSpellReso
         paste0("WARNING: Prevalence of unexpected missingness in [PerfSpellResol_Type_Hist] of ", 
                round(check6c_real,digits=2), "% of records during performing spells.\n"))
 
+# - Create an indicator variable variable for when a loan exits a performance spell
+datCredit_real[!is.na(PerfSpell_Key), PerfSpell_Max_Date := max(Date, na.rm=T), by=list(PerfSpell_Key)]
+datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
+
 # - Cleanup
 datCredit_real[, PerfSpell_LastRec := NULL]
-
-# - Create an indicator variable variable for when a loan exits a performance spell
-datCredit_real[,PerfSpell_Exit_Ind := ifelse(Date==PerfSpell_Max_Date,1,0)]
+datCredit_real[, PerfSpell_Max_Date := NULL]
 
 
 

@@ -19,6 +19,7 @@
 # -- Inputs:
 #   - datCredit_train_TFD | Prepared from script 3c
 #   - datCredit_valid_TFD | Prepared from script 3c
+
 #
 # -- Outputs:
 #   - Input_Space
@@ -225,7 +226,7 @@ varlist <- vecChange(varlist,Remove=c("slc_acct_arr_dir_3") ,
 
 # ------ 1.5.3 What is the performance of current thematic variables in univariate models?
 
-vars <- c("PerfSpell_g0_Delinq_Num","g0_Delinq_Ave", "Arrears",
+vars <- c("g0_Delinq_SD_4","g0_Delinq_Ave", "Arrears",
           "TimeInDelinqState_Lag_1","slc_acct_arr_dir_3_Change_Ind",
           "slc_acct_roll_ever_24_imputed_mean")
 
@@ -426,7 +427,7 @@ varlist <- vecChange(varlist, Remove="InterestRate_Margin", Add=data.table(vars=
 
 
 
-# ------ 3.3 How does [InterestRate_Margin], InterestRate_Margin_Aggr_Med and [M_Repo_Rate] compare with one another?
+# ------ 3.3 How does [InterestRate_Margin_imputed_bin], InterestRate_Margin_Aggr_Med and [M_Repo_Rate] compare with one another?
 
 vars <- c("InterestRate_Margin_imputed_bin", "M_Repo_Rate", "InterestRate_Margin_Aggr_Med")
 
@@ -558,8 +559,7 @@ aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Princi
 # Accuracy test
 concTable(datCredit_train_TFD, datCredit_valid_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [Principal] has the highest concordance
 
-### CONCOLUSION:  Considering Principal has the best concordance, but the worse fit
-###               complicates the decision.
+### CONCOLUSION:  [Principal] outperformed other variables, therefore it should be kept in the model.
 
 
 # ------ 4.2.1 Can [Balance] and [Instalment] be replaced with [InstalmentToBalance_Aggr_Prop]?
@@ -847,7 +847,7 @@ vars <- c("M_RealIncome_Growth_1","M_RealIncome_Growth_12","M_RealIncome_Growth_
 # Goodness of fit test
 csTable(datCredit_train_TFD, vars, TimeDef="TFD") # No noticeable difference
 
-aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath) # [] has the lowest AIC
+aicTable(datCredit_train_TFD, vars, TimeDef="TFD", genPath=genObjPath)
 
 ### RESULTS: [M_RealIncome_Growth_12], [M_RealIncome_Growth_9] and [M_RealIncome_Growth_6] appear to have the best fits.
 
@@ -979,8 +979,7 @@ vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",
 # - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
                  id=LoanID, datCredit_train_TFD, ties="efron")
-summary(cox_TFD); AIC(cox_TFD); concordance(cox_TFD)
-### RESULTS: AIC: 92825.18 Harrell's c: 0.9971
+summary(cox_TFD)
 
 c <- coefficients(cox_TFD)
 (c <- data.table(Variable=names(c),Coefficient=c))
@@ -1022,6 +1021,11 @@ Table_TFD <- concTable_TFD[,1:2] %>% left_join(aicTable_TFD, by ="Variable") %>%
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
                 fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6167
+AIC(cox_TFD)# 92825.18
+### RESULTS: Goodness of fit for the model seems to be a bit low.
+
+
+concordance(cox_TFD) # Concordance= 0.9971 se= 0.0001901
 
 # Save objects
 pack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), Table_TFD)

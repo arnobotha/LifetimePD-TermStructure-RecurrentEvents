@@ -1,4 +1,7 @@
 # LifetimePD-TermStructure-RecurrentEvents
+
+[![DOI](https://zenodo.org/badge/877793851.svg)](https://doi.org/10.5281/zenodo.15314795)
+
 In the pursuit of modelling a loan's probability of default (PD) over its lifetime, repeat default events are often ignored when using Cox Proportional Hazard (PH) models. Excluding such events may produce biased and inaccurate PD-estimates, which can compromise financial buffers against future losses. Accordingly, we investigate a few subtypes of Cox-models that can incorporate recurrent default events. Using South African mortgage data, we explore both the Andersen-Gill (AG) and the Prentice-Williams-Peterson (PWP) spell-time models. These models are compared against a baseline that deliberately ignores recurrent events, called the time to first default (TFD) model. Models are evaluated using Harrell’s c-statistic, adjusted Cox-Sell residuals, and a novel extension of time-dependent receiver operating characteristic (ROC) analysis. From these Cox-models, we demonstrate how to derive a portfolio-level term-structure of default risk, which is a series of marginal PD-estimates at each point of the average loan's lifetime. While the TFD-- and PWP-models do not differ significantly across all diagnostics, the AG-model underperformed expectations. Depending on the prevalence of recurrent defaults, one may therefore safely ignore them when estimating lifetime default risk. Accordingly, our work enhances the current practice of using Cox-modelling in producing timeous and accurate PD-estimates under IFRS 9.
 
 ## Structure

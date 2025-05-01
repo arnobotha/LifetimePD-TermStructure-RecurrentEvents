@@ -2,7 +2,7 @@
 # Divide data into thematic groups and perform data analysis on them to compile an input space for the TFD model
 # ------------------------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Bernard Scheepers
+# SCRIPT AUTHOR(S): Bernard Scheepers (BS)
 # ------------------------------------------------------------------------------------------------------
 # -- Script dependencies:
 #   - 0.Setup.R
@@ -979,7 +979,8 @@ vars2 <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",
 # - Build model based on variables
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
                  id=LoanID, datCredit_train_TFD, ties="efron")
-summary(cox_TFD)
+summary(cox_TFD); AIC(cox_TFD); concordance(cox_TFD)
+### RESULTS: AIC: 92825.18 Harrell's c: 0.9971
 
 c <- coefficients(cox_TFD)
 (c <- data.table(Variable=names(c),Coefficient=c))
@@ -1021,7 +1022,6 @@ Table_TFD <- concTable_TFD[,1:2] %>% left_join(aicTable_TFD, by ="Variable") %>%
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
 GoF_CoxSnell_KS(cox_TFD,datCredit_train_TFD, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
                 fileName = paste0(genFigPath, "TFD/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6167
-AIC(cox_TFD)# 92825.18
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
 

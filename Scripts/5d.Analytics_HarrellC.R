@@ -34,6 +34,7 @@
 
 # - Confirm prepared datasets are loaded into memory
 if (!exists('Table_TFD')) unpack.ffdf(paste0(genObjPath,"TFD_Univariate_Models"), tempPath);gc()
+if (!exists('Table_AG')) unpack.ffdf(paste0(genObjPath,"AG_Univariate_Models"), tempPath);gc()
 if (!exists('Table_PWPST')) unpack.ffdf(paste0(genObjPath,"PWPST_Univariate_Models"), tempPath);gc()
 
 
@@ -45,6 +46,7 @@ if (!exists('Table_PWPST')) unpack.ffdf(paste0(genObjPath,"PWPST_Univariate_Mode
 
 # - Combine metrics across techniques for graphing purposes
 datGraph <- rbind(data.table(subset(Table_TFD, select=c("Variable", "Concordance")), Type="a_TFD"),
+                  data.table(subset(Table_AG, select=c("Variable", "Concordance")), Type="b_AG"),
                   data.table(subset(Table_PWPST, select=c("Variable", "Concordance")), Type="c_PWP"))
 
 # - Rename variables into more readable versions
@@ -64,12 +66,14 @@ vVarLabels <- c("g0_Delinq_SD_4",
   "Principal",
   "PerfSpell_Num"="Spell_Num",
   "AgeToTerm_Aggr_Mean"="AgeToTerm_Avg",
-  "BalanceToPrincipal"
+  "BalanceToPrincipal",
+  "TimeInDelinqState_Lag_1" = "TimeInDelinqState_1",
+  "LN_TPE" = "LoanType"
   )
 
 # -- Graphing parameters
 vCol <- brewer.pal(8, "Set1")
-vlabel <- c("a_TFD"="TFD", "c_PWP"= "PWP")
+vlabel <- c("a_TFD"="TFD","b_AG"="AG", "c_PWP"= "PWP")
 chosenFont <- "Cambria"
 
 # - Create main graph 

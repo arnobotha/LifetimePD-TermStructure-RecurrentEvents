@@ -36,8 +36,9 @@ summary(coxExample2)
 
 
 # ----------------- 2. Investigate survivalROC()-function from survivalROC-package
-# NOTE: Parts hereof must interactively executed after running the corresponding part 
-# in the tROC()-function in script 0b(iii).FunkySurv_tROCkit.R.
+# NOTE: Parts hereof must be interactively executed after running the corresponding part 
+# in the tROC()-function in script 0b(iii).FunkySurv_tROCkit.R, especially when wanting to run
+# the (commented) unit tests (e.g., all.equal() parts)
 
 # --- Assign explicitly the inner quantities found in survivalROC() function
 Stime <- dat2$End; status <- dat2$Event_Ind; entry <- dat2$Start
@@ -115,8 +116,8 @@ describe(marker); hist(marker, breaks="FD")
     t.evaluate <- t.evaluate[t.evaluate <= predict.time]
     
     # AB: UNIT TEST: 
-    #all.equal(vEventTimes_Filtered, t.evaluate) #  IF TRUE, then parity achieved with our function that creates [vEventTimes_Filtered] 
-    #ll.equal(vMarkers, x) #  IF TRUE, then parity achieved with our function that creates [vMarkers] 
+    # all.equal(vEventTimes_Filtered, t.evaluate) #  IF TRUE, then parity achieved with our function that creates [vEventTimes_Filtered] 
+    # all.equal(vMarkers, x) #  IF TRUE, then parity achieved with our function that creates [vMarkers] 
     
     
     # AB: Starting point of the NN-estimator based method for estimating S(t) ------------------------------- 
@@ -262,7 +263,7 @@ describe(marker); hist(marker, breaks="FD")
   survivalROC(Stime=dat2$End, status=dat2$Event_Ind, entry=dat2$Start, 
               method = "NNE", span=0.05, predict.time=predict.time,
               marker=round(predict(coxExample2, type="lp"),2))
-  ### RESULTS: AUC: 67.06% up to time t (CD-approach)
+  ### RESULTS: AUC: 56.15514% up to time t (CD-approach)
   
   
   # --- Cleanup

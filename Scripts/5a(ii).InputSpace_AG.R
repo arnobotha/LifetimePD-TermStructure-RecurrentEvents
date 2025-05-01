@@ -904,7 +904,8 @@ vars2 <- c("PerfSpell_Num","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeIn
 # - Build model based on variables
 cox_AG <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
                  id=LoanID, datCredit_train_AG, ties="efron")
-summary(cox_AG)
+summary(cox_AG); AIC(cox_AG); concordance(cox_AG)
+### RESULTS: AIC: 130465 Harrell's c: 0.9967
 
 c <- coefficients(cox_AG)
 (c <- data.table(Variable=names(c),Coefficient=c))
@@ -935,21 +936,20 @@ csTable_AG <- csTable(datCredit_train_AG,vars2, TimeDef="AG", seedVal=1, numIt=1
 
 aicTable_AG <- aicTable(datCredit_train_AG, variables=vars2,fldSpellID="PerfSpell_Key",
                          TimeDef="AG", genPath=genPath)
-### RESULTS: Top 3 single-factor models: g0_Delinq_SD_4 + slc_acct_roll_ever_24_imputed_mean + TimeInDelinqState_Lag_1   
+### RESULTS: Top 3 single-factor models: g0_Delinq_SD_4 + slc_acct_roll_ever_24_imputed_mean + TimeInDelinqState_Lag_1
 
 # Test accuracy using Harrell's c-statistic over single-factor models
 concTable_AG <- concTable(datCredit_train_AG, datCredit_valid_AG, variables=vars2, 
                            fldSpellID="PerfSpell_Key", TimeDef="AG", genPath=genPath)
 ### RESULTS: Top x single-factor models (>90%):
-# g0_Delinq_SD_4  + PerfSpell_g0_Delinq_Num + TimeInDelinqState_Lag_1 + slc_acct_arr_dir_3_Change_Ind  
+# g0_Delinq_SD_4  + Arrears + TimeInDelinqState_Lag_1 + slc_acct_roll_ever_24_imputed_mean + slc_acct_arr_dir_3_Change_Ind  
 
 # - Combine results into a single object
 Table_AG <- concTable_AG[,1:2] %>% left_join(aicTable_AG, by ="Variable") %>% left_join(data.table(csTable_AG$Results), by="Variable")
 
 # - Test Goodnes-of-fit using Cox-Snell, having measured distance between residual distribution and unit exponential using KS-statistic
-GoF_CoxSnell_KS(cox_AG,datCredit_train_AG, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Time to First Default (TFD) model",
-                fileName = paste0(genFigPath, "AG/KS_Test_CoxSnellResiduals_Exp_TFD", ".png"), dpi=280) # 0.6167
-AIC(cox_AG)# 92825.18
+GoF_CoxSnell_KS(cox_AG,datCredit_train_AG, GraphInd=TRUE, legPos=c(0.6,0.4), panelTitle="Andersen-Gill (AG) model",
+                fileName = paste0(genFigPath, "AG/KS_Test_CoxSnellResiduals_Exp_AG", ".png"), dpi=280) # 0.6167
 ### RESULTS: Goodness of fit for the model seems to be a bit low.
 
 

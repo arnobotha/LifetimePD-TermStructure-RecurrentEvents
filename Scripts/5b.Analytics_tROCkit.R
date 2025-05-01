@@ -78,6 +78,24 @@ cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique eve
 
 
 
+
+# ------ Andersen-Gill (AG) Spell-time definition
+# - Confirm prepared datasets are loaded into memory
+if (!exists('datCredit_train_AG')) unpack.ffdf(paste0(genPath,"creditdata_train_AG"), tempPath);gc()
+if (!exists('datCredit_valid_AG')) unpack.ffdf(paste0(genPath,"creditdata_valid_AG"), tempPath);gc()
+
+# - Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
+# Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
+# All competing events preclude the main event from happening and are therefore considered as censored
+# ID is set as the spell key, with no stratification
+km_AG <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
+                    id=LoanID, data=datCredit_train_AG)
+summary(km_AG)$table # overall summary statistics
+### RESULTS: 62k events, with no median survival probability
+(km_AG_survFitSummary <- surv_summary(km_AG)) # Survival table
+
+
+
 # ------ Prentice-Williams-Peterson (PWP) Spell-time definition
 # - Confirm prepared datasets are loaded into memory
 if (!exists('datCredit_train_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_train_PWPST"), tempPath);gc()
@@ -112,6 +130,21 @@ vecVars_TFD <- c("g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave",
 cox_TFD <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
                                    paste(vecVars_TFD,collapse=" + "))), id=LoanID, ties="efron", datCredit_train_TFD)
 summary(cox_TFD); AIC(cox_TFD); concordance(cox_TFD)
+
+
+
+# ------ Time to first Default (TFD) definition
+# - Initialize variables
+vecVars_AG <- c("PerfSpell_Num","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",
+                "slc_acct_arr_dir_3_Change_Ind", "slc_acct_roll_ever_24_imputed_mean","LN_TPE",
+                "slc_acct_pre_lim_perc_imputed_med","pmnt_method_grp","M_Inflation_Growth",
+                "InterestRate_Nom", "BalanceToPrincipal","AgeToTerm_Aggr_Mean","M_DTI_Growth_9")
+
+# - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
+# NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+cox_AG <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ",
+                                   paste(vecVars_AG,collapse=" + "))), id=LoanID, ties="efron", datCredit_train_AG)
+summary(cox_AG); AIC(cox_AG); concordance(cox_AG)
 
 
 
@@ -242,6 +275,77 @@ pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-TFD-ROC_Depedendence_36"), objROC
 
 
 
+# ------ Andersen-Gill (AG) Spell-time definition
+
+# --- Package: tROCkit() | custom "package"/function
+# NOTE: Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator and 0/1-kernel
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 3 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 3
+objROC1_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=4, 
+                            fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                            graphName="DefaultSurvModel-Cox-AG-ROC_Depedendence", genFigPath=paste0(genFigPath, "AG/"), 
+                            caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
+objROC1_AG$AUC; objROC1_AG$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: 82.83%, achieved in 686.18  secs ( 11.4 mins)
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 12 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 12
+objROC2_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=4,
+                            fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                            graphName="DefaultSurvModel-Cox-AG-ROC_Depedendence", genFigPath=paste0(genFigPath, "AG/"),
+                            caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
+objROC2_AG$AUC; objROC2_AG$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: 95.71%, achieved in 1418.35  secs (23.6 mins)
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 24
+objROC3_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=4, 
+                            fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                            graphName="DefaultSurvModel-Cox-AG-ROC_Depedendence", genFigPath=paste0(genFigPath, "AG/"), 
+                            caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
+objROC3_AG$AUC; objROC3_AG$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: 95.91%, achieved in 2308.32 secs (38.5 mins)
+
+
+# -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
+# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
+# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
+ptm <- proc.time() #IGNORE: for computation time calculation;
+predictTime <- 36
+objROC4_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=predictTime, sLambda=0.05, estMethod="NN-0/1", numDigits=4, 
+                            fld_ID="PerfSpell_Key", fld_Event="PerfSpell_Event", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
+                            graphName="DefaultSurvModel-Cox-AG-ROC_Depedendence", genFigPath=paste0(genFigPath, "AG/"), 
+                            caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
+objROC4_AG$AUC; objROC4_AG$ROC_graph
+proc.time() - ptm
+### RESULTS: AUC up to t: 95.99%, achieved in 3102.89 secs (51.7 mins)
+
+
+# -- Store experimental objects | Memory optimisation
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_03"), objROC1_AG);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_12"), objROC2_AG);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_24"), objROC3_AG);
+pack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_36"), objROC4_AG);
+
+
+
+
 # ------ Prentice-Williams-Peterson (PWP) Spell-time definition
 
 # --- Package: tROCkit() | custom "package"/function
@@ -337,12 +441,12 @@ for (i in 1:length(vecPercTimepoint)) {
   
   # - Create a data object for the current prediction time
   if (i == 1) {
-    datGraph <- data.table(PredictTime=as.character(vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+    datGraph <- data.table(PredictTime=paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
                            x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR)
     
   } else {
     datGraph <- rbind(datGraph, 
-                      data.table(PredictTime= vecPercTimepoint[i], Threshold=vecTROC[[i]]$Thresholds, 
+                      data.table(PredictTime= paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
                                  x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR))
   }
   vLabels[[i]] <- bquote("Prediction time "*italic(t)==.(vecPercTimepoint[i])*"; AUC: "*.(percent(vecTROC[[i]]$AUC, accuracy=0.01)))
@@ -353,7 +457,7 @@ for (i in 1:length(vecPercTimepoint)) {
 # - Aesthetic parameters
 datGraph[, FacetLabel := "Time to First Default (TFD) model"]
 vCol <- brewer.pal(8,"Set1")
-vLabels_F <- setNames(vLabels, vecPercTimepoint)
+vLabels_F <- setNames(vLabels, paste0(letters[1:length(vecPercTimepoint)],"_", vecPercTimepoint))
 chosenFont <- "Cambria"
 
 # - Create ROC-graph
@@ -387,6 +491,76 @@ ggsave(gg, file=paste0(paste0(genFigPath, "TFD/DefaultSurvModel-Cox-TFD-Combined
 
 
 
+# ------ Andersen-Gill (AG) Total-time definition
+
+# - Ensure required objects exist in memory
+if (!exists('objROC1_AG')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_03"), tempPath);gc()
+if (!exists('objROC2_AG')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_12"), tempPath);gc()
+if (!exists('objROC3_AG')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_24"), tempPath);gc()
+if (!exists('objROC4_AG')) unpack.ffdf(paste0(genPath,"DefaultSurvModel-Cox-AG-ROC_Depedendence_36"), tempPath);gc()
+
+# - Set ROC-parameters and initialize data structures
+vecPercTimepoint <- c(3,12,24,36)
+vecTROC <- list(objROC1_AG, objROC2_AG, objROC3_AG, objROC4_AG)
+vLabels <- vector("list", length=length(vecPercTimepoint))
+
+# -- Create a combined data object for plotting purposes
+for (i in 1:length(vecPercTimepoint)) {
+  # i <-1 # testing condition
+  
+  # datGraph <- data.frame(x = vFPR[-(nThresh+1)], y=vTPR[-1])
+  
+  # - Create a data object for the current prediction time
+  if (i == 1) {
+    datGraph <- data.table(PredictTime=paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+                           x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR)
+    
+  } else {
+    datGraph <- rbind(datGraph, 
+                      data.table(PredictTime= paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+                                 x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR))
+  }
+  vLabels[[i]] <- bquote("Prediction time "*italic(t)==.(vecPercTimepoint[i])*"; AUC: "*.(percent(vecTROC[[i]]$AUC, accuracy=0.01)))
+}
+
+
+# -- Graph a combined ROC-graph across prediction times t
+# - Aesthetic parameters
+datGraph[, FacetLabel := "Andersen-Gill (AG) spell-time model"]
+vCol <- brewer.pal(8,"Set1")
+vLabels_F <- setNames(vLabels, paste0(letters[1:length(vecPercTimepoint)],"_", vecPercTimepoint))
+chosenFont <- "Cambria"
+
+# - Create ROC-graph
+(gg <- ggplot(datGraph, aes(x=x,y=y,group=PredictTime)) + theme_minimal() + 
+    theme(text = element_text(family=chosenFont), legend.position="inside", 
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90),
+          legend.position.inside = c(0.55,0.45),
+          legend.background = element_rect(fill="snow2", color="black",
+                                           linetype="solid", linewidth=0.1)) +
+    labs(x = bquote("False Positive Rate "*italic(F^"+")), y = 
+           bquote("True Positive Rate "*italic(T^"+"))) + 
+    # Add 45-degree line
+    geom_segment(x = 0, y = 0, xend = 1, yend = 1, color = "grey", linewidth=0.2) +
+    # Main line graph
+    geom_step(aes(x=x, y=y, linetype=PredictTime, colour=PredictTime), linewidth=0.05) + 
+    geom_point(aes(x=x, y=y, shape=PredictTime, colour=PredictTime), size=0.25) +
+    # Facets and scales
+    facet_grid(FacetLabel ~ .) +  
+    scale_color_manual(name=bquote("ROC"*(italic(t))), values=vCol, labels=vLabels) + 
+    scale_linetype_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+    scale_shape_discrete(name=bquote("ROC"*(italic(t))), labels=vLabels) + 
+    scale_y_continuous(label=percent) + scale_x_continuous(label=percent))
+
+
+# - Save graph
+dpi <- 300
+ggsave(gg, file=paste0(paste0(genFigPath, "AG/DefaultSurvModel-Cox-AG-CombinedROC_Depedendence.png")), 
+       width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
+
+
+
 
 # ------ Prentice-Williams-Peterson (PWP) Total-time definition
 
@@ -409,12 +583,12 @@ for (i in 1:length(vecPercTimepoint)) {
   
   # - Create a data object for the current prediction time
   if (i == 1) {
-    datGraph <- data.table(PredictTime=as.character(vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
+    datGraph <- data.table(PredictTime=paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
                            x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR)
     
   } else {
     datGraph <- rbind(datGraph, 
-                      data.table(PredictTime= vecPercTimepoint[i], Threshold=vecTROC[[i]]$Thresholds, 
+                      data.table(PredictTime= paste0(letters[i], "_", vecPercTimepoint[i]), Threshold=vecTROC[[i]]$Thresholds, 
                                  x=vecTROC[[i]]$FPR, y=vecTROC[[i]]$TPR))
   }
   vLabels[[i]] <- bquote("Prediction time "*italic(t)==.(vecPercTimepoint[i])*"; AUC: "*.(percent(vecTROC[[i]]$AUC, accuracy=0.01)))
@@ -425,7 +599,7 @@ for (i in 1:length(vecPercTimepoint)) {
 # - Aesthetic parameters
 datGraph[, FacetLabel := "Prentice-Williams-Peterson (PWP) spell-time model"]
 vCol <- brewer.pal(8,"Set1")
-vLabels_F <- setNames(vLabels, vecPercTimepoint)
+vLabels_F <- setNames(vLabels, paste0(letters[1:length(vecPercTimepoint)],"_", vecPercTimepoint))
 chosenFont <- "Cambria"
 
 # - Create ROC-graph
@@ -459,7 +633,9 @@ ggsave(gg, file=paste0(paste0(genFigPath, "PWP ST/DefaultSurvModel-Cox-PWPST-Com
 
 # - cleanup
 suppressWarnings( rm(gg, vLabels, vLabels_F, vecTROC, datGraph, dat, 
-                     objROC1_TFD, objROC2_TFD, objROC3_TFD, objROC4_TFD, objROC1_PWPST, objROC2_PWPST, objROC3_PWPST, objROC4_PWPST,
-   km_TFD, km_TFD_survFitSummary, km_PWPST, km_PWPST_survFitSummary, cox_PWPST, cox_TFD, 
-   datCredit_train_TFD, datCredit_valid_TFD, datCredit_train_PWPST, datCredit_valid_PWPST,
+                     objROC1_TFD, objROC2_TFD, objROC3_TFD, objROC4_TFD, objROC1_AG, objROC2_AG, objROC3_AG, objROC4_AG,
+                     objROC1_PWPST, objROC2_PWPST, objROC3_PWPST, objROC4_PWPST,
+   km_TFD, km_TFD_survFitSummary, km_PWPST, km_PWPST_survFitSummary, cox_PWPST, cox_TFD, cox_AG,
+   datCredit_train_TFD, datCredit_valid_TFD, datCredit_train_AG, datCredit_valid_AG,
+   datCredit_train_PWPST, datCredit_valid_PWPST
    ) )

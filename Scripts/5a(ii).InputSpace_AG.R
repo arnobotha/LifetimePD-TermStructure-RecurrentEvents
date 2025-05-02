@@ -960,4 +960,4 @@ pack.ffdf(paste0(genObjPath,"AG_Univariate_Models"), Table_AG)
 pack.ffdf(paste0(genPath,"AG_Cox_Model"), cox_AG)
 
 # - Cleanup
-rm(datCredit_train_TFD, datCredit_valid_TFD, cox_TFD, c); gc()
+rm(datCredit_train_AG, datCredit_valid_AG, cox_AG, c); gc()

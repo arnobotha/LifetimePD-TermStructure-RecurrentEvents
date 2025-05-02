@@ -903,7 +903,7 @@ vars2 <- c("PerfSpell_Num_binned","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", 
 
 # - Build model based on variables
 cox_AG <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vars2,collapse=" + "))),
-                 id=LoanID, datCredit_train_AG, ties="efron")
+                 id=PerfSpell_Key, datCredit_train_AG, ties="efron")
 summary(cox_AG); AIC(cox_AG); concordance(cox_AG)
 ### RESULTS: AIC: 130465 Harrell's c: 0.9967
 

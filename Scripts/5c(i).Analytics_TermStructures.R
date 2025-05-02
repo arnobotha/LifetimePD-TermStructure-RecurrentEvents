@@ -73,7 +73,7 @@ summary(cox_TFD); AIC(cox_TFD); concordance(cox_TFD)
 
 # ------ Time to first Default (TFD) definition
 # - Initialize variables | AB-variant
-vecVars_AG <- c("PerfSpell_Num","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",
+vecVars_AG <- c("PerfSpell_Num_binned","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "TimeInDelinqState_Lag_1",
                 "slc_acct_arr_dir_3_Change_Ind", "slc_acct_roll_ever_24_imputed_mean","LN_TPE",
                 "slc_acct_pre_lim_perc_imputed_med","pmnt_method_grp","M_Inflation_Growth",
                 "InterestRate_Nom", "BalanceToPrincipal","AgeToTerm_Aggr_Mean","M_DTI_Growth_9")

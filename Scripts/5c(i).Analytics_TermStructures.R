@@ -81,7 +81,7 @@ vecVars_AG <- c("PerfSpell_Num","g0_Delinq_SD_4", "Arrears", "g0_Delinq_Ave", "T
 # - Fit a Cox Proportional Hazards model with time-varying covariates, and clustered observations
 # NOTE: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
 cox_AG <- coxph(as.formula(paste0("Surv(Start,End,Default_Ind) ~ ", paste(vecVars_AG,collapse=" + "))), 
-                 ties="efron", id=LoanID, datCredit_train_AG, model=T) # Keep model frame (model=T)
+                 ties="efron", id=PerfSpell_Key, datCredit_train_AG, model=T) # Keep model frame (model=T)
 summary(cox_AG); AIC(cox_AG); concordance(cox_AG)
 
 

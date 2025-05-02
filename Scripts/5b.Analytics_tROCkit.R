@@ -89,7 +89,7 @@ if (!exists('datCredit_valid_AG')) unpack.ffdf(paste0(genPath,"creditdata_valid_
 # All competing events preclude the main event from happening and are therefore considered as censored
 # ID is set as the spell key, with no stratification
 km_AG <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                    id=LoanID, data=datCredit_train_AG)
+                    id=PerfSpell_Key, data=datCredit_train_AG)
 summary(km_AG)$table # overall summary statistics
 ### RESULTS: 62k events, with no median survival probability
 (km_AG_survFitSummary <- surv_summary(km_AG)) # Survival table
@@ -106,7 +106,7 @@ if (!exists('datCredit_valid_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_val
 # All competing events preclude the main event from happening and are therefore considered as censored
 # ID is set as the spell key, with no stratification
 km_PWPST <- survfit(Surv(time=Start, time2=End, event=Default_Ind==1,type="counting") ~ 1, 
-                  id=LoanID, data=datCredit_train_PWPST)
+                  id=PerfSpell_Key, data=datCredit_train_PWPST)
 summary(km_PWPST)$table # overall summary statistics
 ### RESULTS: 62k events, with no median survival probability
 (km_PWPST_survFitSummary <- surv_summary(km_PWPST)) # Survival table

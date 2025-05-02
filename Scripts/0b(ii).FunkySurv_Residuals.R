@@ -15,8 +15,8 @@
 # ----------------- 1. Functions related to Cox-Snell residuals ------------------
 
 # --- Function to calculate Cox-Snell residuals, as adjusted for censoring.
-# Input: [cox]: A fitted Cox proportional hazard model; [vIDS]: vector of spell IDs; [vEvents]: vector of spell-level events
-# Output: [cs]: Cox-Snell residuals
+# Input: [model]: A fitted Cox proportional hazard model; [vIDS]: vector of spell IDs; [vEvents]: vector of spell-level events
+# Output: [vCS]: Cox-Snell residuals
 calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
   # First, get residuals from fitted model
   vResid <- residuals(model,type="martingale",collapse=vIDs)
@@ -32,7 +32,13 @@ calc_CoxSnell_Adj <- function(model, vIDs, vEvents) {
 # and a random unit exponential distribution. The similarity degree is summarised by
 # using the complement of the Kolmogorov-Smirnov test statistic (1-KS), which becomes
 # our similarity measure; higher values = greater similarity = better fit.
-# Input: [cox]: A fitted Cox proportional hazard model; [data_train]: Training data;
+# Input:  [cox]: A fitted Cox proportional hazard model; [data_train]: Training data;
+#         [data_valid]: Validation data; [GraphInd]: Indicates whether a graph should be generated;
+#         [legPos]: Graph title position; [panelTitle]: Graph's facet title.; fileName: Name of file.
+#         [fldLstRowInd]: Variable name representing each subjects last observation;
+#         [fldEventInd]: Variable name representing the last event; fldSPellID: Variable name representing
+#                         unique subject identifier; [dpi]: Display resolution of graphs;
+#         [chosenFont]: Name of text font.
 # Output: [Stat]: The test statistic value (1 - KS) as a measure of goodness-of-fit
 #         [KS_graph]: A graph that combines the Cox-Snell empirical cumulative distribution
 #                     with the unit exponential distribution function.

@@ -910,23 +910,23 @@ summary(cox_AG); AIC(cox_AG); concordance(cox_AG)
 c <- coefficients(cox_AG)
 (c <- data.table(Variable=names(c),Coefficient=c))
 #                             Variable    Coefficient
-# 1:                      PerfSpell_Num -0.20630235488
-# 2:                     g0_Delinq_SD_4  6.81423605606
-# 3:                            Arrears  0.00001030938
-# 4:                      g0_Delinq_Ave -5.90157780002
-# 5:            TimeInDelinqState_Lag_1 -0.00745803414
-# 6:      slc_acct_arr_dir_3_Change_Ind  0.96866454411
-# 7: slc_acct_roll_ever_24_imputed_mean  0.62337615735
-# 8:                          LN_TPEWHL -0.11086984241
-# 9:  slc_acct_pre_lim_perc_imputed_med -2.65629798410
-# 10:        pmnt_method_grpMISSING_DATA  1.06225377324
-# 11:     pmnt_method_grpSalary/Suspense  0.68306479484
-# 12:           pmnt_method_grpStatement  0.35717717856
-# 13:                 M_Inflation_Growth  4.45652192630
-# 14:                   InterestRate_Nom  2.57363049626
-# 15:                 BalanceToPrincipal  0.27707160422
-# 16:                AgeToTerm_Aggr_Mean -4.37292412467
-# 17:                     M_DTI_Growth_9 -2.24999020807
+#1:               PerfSpell_Num_binned -0.24508682626
+#2:                     g0_Delinq_SD_4  6.81174643986
+#3:                            Arrears  0.00001029733
+#4:                      g0_Delinq_Ave -6.00455861524
+#5:            TimeInDelinqState_Lag_1 -0.00719281717
+#6:      slc_acct_arr_dir_3_Change_Ind  0.96410503046
+#7: slc_acct_roll_ever_24_imputed_mean  0.63416390620
+#8:                          LN_TPEWHL -0.11479813795
+#9:  slc_acct_pre_lim_perc_imputed_med -2.65764500753
+#10:        pmnt_method_grpMISSING_DATA  1.08217256453
+#11:     pmnt_method_grpSalary/Suspense  0.68522656615
+#12:           pmnt_method_grpStatement  0.36291864635
+#13:                 M_Inflation_Growth  4.46077469559
+#14:                   InterestRate_Nom  2.56822098859
+#15:                 BalanceToPrincipal  0.28129085495
+#16:                AgeToTerm_Aggr_Mean -4.39417001418
+#17:                     M_DTI_Growth_9 -2.27078230596
 
 
 # -Test Goodness of fit using bootstrapped B-statistics (1-KS statistic) over single-factor models

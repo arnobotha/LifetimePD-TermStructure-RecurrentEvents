@@ -1,4 +1,4 @@
-# ============================= RESAMPLING SCHEMES FOR SURVIVAL MODELS - PWP ST version =================================
+# ============================= RESAMPLING SCHEMES FOR SURVIVAL MODELS - TFD version =================================
 # A tool for implementing subsampling & resampling on a survival (panel) dataset using simple clustered
 # sampling, with either random sampling or n-way stratified sampling. In the case of n-way stratified sampling,
 # a frequency analysis is conducted where observations/ records from stratum who have sizes smaller than a
@@ -27,12 +27,10 @@
 #   - datCredit_TFD | Prepared from script 3a.Data_Fusion2.
 #
 # -- Outputs:
-#   - Series of graphs for testing the time-dependent sampling bias of the chosen (simple clustered sampling)
-#     resampling scheme and inner sampling technique:
-#       - Frequency analysis of strata size graph (stratification specified as the inner sampling technique);
-#       - Resolution rates for spell entry (for first performance spells);
-#       - Resolution rates for spell entry (for all performance spells);
-#       - Resolution rates for spell exit/ stop.
+#   - Frequency analysis of strata size graph (stratification specified as the inner sampling technique);
+#   - Resolution rates for spell entry (for first performance spells);
+#   - Resolution rates for spell entry (for all performance spells);
+#   - Resolution rates for spell exit/ stop.
 # ------------------------------------------------------------------------------------------------------------
 
 
@@ -41,25 +39,23 @@
 
 # ------ 1. Preliminaries
 # --- Load in Dataset
-if (!exists('datCredit_PWPST')) unpack.ffdf(paste0(genPath,"creditdata_final_PWPST"), tempPath)
+if (!exists('datCredit_TFD')) unpack.ffdf(paste0(genPath,"creditdata_final_TFD"), tempPath)
 
 # - Creating new spell resolution types for analytical purposes
-datCredit_PWPST <- datCredit_PWPST %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
+datCredit_TFD <- datCredit_TFD %>% mutate(PerfSpellResol_Type_Hist2 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
                                                                                   PerfSpellResol_Type_Hist=="Censored" ~ "Censored",
                                                                                   PerfSpellResol_Type_Hist %in% c("Settled", "Paid-up", "Written-off") ~ "Settled & Other",
                                                                                   TRUE ~ NA))
-datCredit_PWPST <- datCredit_PWPST %>% mutate(PerfSpellResol_Type_Hist3 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
+datCredit_TFD <- datCredit_TFD %>% mutate(PerfSpellResol_Type_Hist3 = case_when(PerfSpellResol_Type_Hist=="Defaulted" ~ "Defaulted",
                                                                                   PerfSpellResol_Type_Hist %in% c("Censored", "Settled", "Paid-up", "Written-off") ~ "Other",
                                                                                   TRUE ~ NA))
 ### NOTE: [PerfSpellResol_Type_Hist3] is exclusively used in graphing resolution rates over time given spell stop time as cohort-definition
 # As such, there will only be a single right-censored cohort (last date).
 # [SANITY CHECKS]: Any missing spells keys or mismatch between spell keys and associated resolution types?
-datCredit_PWPST[is.na(PerfSpell_Key),.N] == datCredit_PWPST[is.na(PerfSpellResol_Type_Hist2),.N] # TRUE, field created successfully
-datCredit_PWPST[is.na(PerfSpell_Key),.N] == datCredit_PWPST[is.na(PerfSpellResol_Type_Hist3),.N] # TRUE, field created successfully
+datCredit_TFD[is.na(PerfSpell_Key),.N] == datCredit_TFD[is.na(PerfSpellResol_Type_Hist2),.N] # TRUE, field created successfully
+datCredit_TFD[is.na(PerfSpell_Key),.N] == datCredit_TFD[is.na(PerfSpellResol_Type_Hist3),.N] # TRUE, field created successfully
 
 # - Field Names and other parameters
-targetVar <- "Default_Ind" # Main target (i.e., the 12-month default rate)
-CurStatus <- "Default_Ind" # The current status of an account (default vs non-default)
 clusVar <- "LoanID" # for clustered random sampling on subject-level
 clusVar_Spell <- "PerfSpell_Key" # for clustered random sampling on spell-level within a subject's history
 timeVar <- "Date" # calendar time variable over which main event is observed & predicted, used in strata analysis
@@ -79,27 +75,29 @@ spellNum <- "PerfSpell_Num" # current spell number (integer value, expected to s
 
 # - Collect all relevant variables together to be selected dynamically from dataset, as specified
 selectionVar <- unique(c(clusVar, clusVar_Spell, timeVar, counter,
-                         resolType, resolType2, stratifiers, spellNum, targetVar)) # Variables to subset
+                         resolType, resolType2, stratifiers, spellNum)) # Variables to subset
 selectionVar <- selectionVar[!is.na(selectionVar)] # Facilitating cases where the variables are left unspecified (specifically for use of no stratifiers)
 
 # - Subset given dataset accordingly; a memory efficiency enhancement
-datCredit <- subset(datCredit_PWPST, select=selectionVar)
+datCredit <- subset(datCredit_TFD, select=selectionVar)
 
 # - Subsampling parameters
 smp_size <- 90000 # fixed size of downsampled set in terms of the number of unique loan accounts
-cat("NOTE: A fixed sample size of", comma(smp_size), "is", percent(smp_size/length(unique(datCredit[,get(clusVar)])), accuracy=0.1), "of all loans.\n")
-### RESULTS: 90k constitutes 14% of all loans
 # Implied sampling fraction for downsampling step
-smp_perc <- smp_size/length(unique(datCredit[,get(clusVar)]))
+smp_perc <- smp_size/length(unique(datCredit[!is.na(get(clusVar_Spell)),get(clusVar)]))
+cat("NOTE: A fixed sample size of", comma(smp_size), "is", percent(smp_perc, accuracy=0.1), "of all loans.\n")
+### RESULTS: 90k constitutes 14% of all loans
 
 # - Resampling, stratification, and other general parameters
 smp_frac <- 0.7 # sampling fraction for resampling scheme
 minStrata_size <- 0 # Minimum strata size specified for subsample
 confLevel <- 0.95 # Confidence interval parameter
-timeDef_TFD <- F # Special logic during resampling for "TFD". 
+timeDef_TFD <- T # Special logic during resampling for "TFD". 
+### AB: VERY IMPORTANT: Switch off [timeDef_TFD] when translating this script to other time definition scripts!!
+# Delete this comment of mine when done, as with all my comments. can't have "### AB" in the final/eventual codebase when publishing
 
 # - Clean up
-rm(datCredit_PWPST); gc()
+rm(datCredit_TFD); gc()
 
 
 
@@ -117,12 +115,12 @@ set.seed(1, kind="Mersenne-Twister")
 # - Training Key population
 if (all(is.na(stratifiers))){ # - No stratifiers
   # Get unique subject IDs or keys from the full dataset
-  datKeys <- unique(datCredit[, mget(c(clusVar))])
+  datKeys <- unique(datCredit[!is.na(get(clusVar_Spell)), mget(c(clusVar))])
   # Use simple random sampling to select at random some keys from which the training set will be populated 
   datKeys_sampled <- datKeys %>% slice_sample(prop=smp_perc) %>% as.data.table()
 } else { # - Stratifiers
   # Get unique loan account IDs from the full dataset
-  datKeys <- unique(datCredit[, mget(c(clusVar, stratifiers))])
+  datKeys <- unique(datCredit[!is.na(get(clusVar_Spell)), mget(c(clusVar, stratifiers))])
   # Use stratified random sampling to select at random some keys from which the training set will be populated 
   datKeys_sampled <- datKeys %>% group_by(across(all_of(stratifiers))) %>% slice_sample(prop=smp_perc) %>% as.data.table()
 }
@@ -210,11 +208,11 @@ if (timeDef_TFD) {
   datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],]) %>% 
     subset(PerfSpell_Num == 1)  
 } else {
-  datCredit_train_PWPST <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],])
+  datCredit_train_TFD <- copy(datCredit_smp[get(clusVar) %in% dat_train_keys[, get(clusVar)],])
 }
 
 # - Extract the entire loan histories into the validation set for those remaining subjects
-datCredit_valid_PWPST <- copy(datCredit_smp[!(get(clusVar) %in% dat_train_keys[, get(clusVar)]),])
+datCredit_valid_TFD <- copy(datCredit_smp[!(get(clusVar) %in% dat_train_keys[, get(clusVar)]),])
 
 # - [SANITY CHECKS]
 if (timeDef_TFD) {
@@ -226,7 +224,7 @@ if (timeDef_TFD) {
   check.3 <- datCredit_valid_TFD[get(spellNum) != 1,.N] > 0 # Should be TRUE
 } else {
   # Can subsample be reconstituted?
-  check.1 <- datCredit_smp[,.N] == datCredit_train_PWPST[,.N] + datCredit_valid_PWPST[,.N]
+  check.1 <- datCredit_smp[,.N] == datCredit_train_TFD[,.N] + datCredit_valid_TFD[,.N]
   # Does training set contain only first-time spells?
   check.2 <- T # Irrelevant for this time definition, so assign default
   # Does validation spell contain spell numbers other than 1?
@@ -256,13 +254,13 @@ suppressWarnings(rm(check.1, check.2, check.3,
 # the ancillary nature of this script
 colnames(datCredit)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
 colnames(datCredit_smp)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
-colnames(datCredit_train_PWPST)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
-colnames(datCredit_valid_PWPST)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
+colnames(datCredit_train_TFD)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
+colnames(datCredit_valid_TFD)[1:4] <- c("ClusVar", "ClusVar_Perf", "timeVar", "Counter")
 
 # - Merge datasets together for graphing purposes
 datGraph <- rbind(datCredit[, Sample:="a_Full"],
-                  datCredit_train_PWPST[, Sample:="b_Train"],
-                  datCredit_valid_PWPST[, Sample:="c_Valid"])
+                  datCredit_train_TFD[, Sample:="b_Train"],
+                  datCredit_valid_TFD[, Sample:="c_Valid"])
 
 
 # --- Conduct analysis only if there are stratifiers
@@ -275,7 +273,7 @@ if (all(!is.na(stratifiers))){
   
   # - Aggregate data according to the same n-way stratified sampling technique used within subsampling/resampling scheme
   selectionVar_train <- c("ClusVar", "timeVar", stratifiers)
-  datStrata <- copy(datCredit_train_PWPST[Counter==1, ..selectionVar_train][, list(Freq = .N), by=stratifiers])
+  datStrata <- copy(datCredit_train_TFD[Counter==1, ..selectionVar_train][, list(Freq = .N), by=stratifiers])
   
   # - Aesthetics engineering
   datStrata[, Facet_label := "Strata Frequency Analysis"]
@@ -288,13 +286,13 @@ if (all(!is.na(stratifiers))){
   
   # - Graphing parameters
   chosenFont <- "Cambria"; dpi <- 340
-  vCol <- brewer.pal(8, "Dark2") # [1:length(targetVars_Perf)]
-  vFill <- brewer.pal(8, "Set2") # [1:length(targetVars_Perf)]
+  vCol <- brewer.pal(8, "Dark2")
+  vFill <- brewer.pal(8, "Set2")
   x_pos <- median(as.vector(data.table(datStrata[,..stratifiers])[,1])[[1]]) + years(5)
   
   # - Create graph to evidence minimum strata sizes
   (g1 <- ggplot(datStrata[get(stratifiers[1])>=minDate & get(stratifiers[1])<=maxDate,], aes(x=get(stratifiers[1]), y=Freq)) + theme_minimal() + 
-      labs(x=bquote("Date "*italic(t)), y=bquote("Proporionate volume (%) of stratifiers within "*italic(D[T])~"("*.(round(datCredit_train_PWPST[,.N]/1000))*"k)")) + 
+      labs(x=bquote("Date "*italic(t)), y=bquote("Proporionate volume (%) of stratifiers within "*italic(D[T])~"("*.(round(datCredit_train_TFD[,.N]/1000))*"k)")) + 
       theme(text=element_text(family=chosenFont),legend.position = "bottom",
             axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
             strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -322,7 +320,7 @@ if (all(!is.na(stratifiers))){
         scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
   
   # - Save graph
-  ggsave(g1, file=paste0(genFigPath, "PWP ST/StrataDesign_Train_", round(datCredit_smp[,.N]/1000),"k.png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
+  ggsave(g1, file=paste0(genFigPath, "/TFD/StrataDesign_Train_", round(datCredit_smp[,.N]/1000),"k.png"), width=2550/dpi, height=2000/dpi, dpi=dpi, bg="white")
   
   # --- Clean up
   rm(datStrata, datStrata_aggr, selectionVar_train, vCol, vFill, chosenFont, g1)
@@ -338,14 +336,14 @@ if (all(!is.na(stratifiers))){
 
 # - Check representatives | dataset-level proportions should be similar
 datCredit[timeVar==timeVar_SpellMin, get(resolType)] %>% table() %>% prop.table()
-datCredit_train_PWPST[timeVar==timeVar_SpellMin, get(resolType)] %>% table() %>% prop.table()
-datCredit_valid_PWPST[timeVar==timeVar_SpellMin, get(resolType)] %>% table() %>% prop.table()
-### RESULTS: Proportions are fairly equal.
+datCredit_train_TFD[timeVar==timeVar_SpellMin, get(resolType)] %>% table() %>% prop.table()
+datCredit_valid_TFD[timeVar==timeVar_SpellMin, get(resolType)] %>% table() %>% prop.table()
+### RESULTS: The training set has proportions that are materially different, though this is sensible given its special resampling scheme for TFD-definition
 
 # --- Merge datasets together for graphing purposes, subset necessary fields, and rename columns for graphing ease
 datGraph <- rbind(datCredit[, Sample:="a_Full"],
-                  datCredit_train_PWPST[, Sample:="b_Train"],
-                  datCredit_valid_PWPST[, Sample:="c_Valid"]) %>%
+                  datCredit_train_TFD[, Sample:="b_Train"],
+                  datCredit_valid_TFD[, Sample:="c_Valid"]) %>%
   subset(!is.na(ClusVar_Perf), select = c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", resolType, "Sample"))
 colnames(datGraph) <- c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", "Spell_Resol", "Sample")
 
@@ -415,13 +413,13 @@ datAnnotate <- merge(datAnnotate, unique(datAggr_cohorts[, .(Spell_Resol, Facet)
 chosenFont <- "Cambria"; dpi <- 340
 vCol <- brewer.pal(9, "Set1")
 vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
-             "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_PWPST[,.N]/1000))*"k)"),
-             "c_Valid"=bquote(italic(C)[t]*": Validation set "*italic(D)[italic(V)]~"("*.(round(datCredit_valid_PWPST[,.N]/1000))*"k)"))
+             "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_TFD[,.N]/1000))*"k)"),
+             "c_Valid"=bquote(italic(C)[t]*": Validation set "*italic(D)[italic(V)]~"("*.(round(datCredit_valid_TFD[,.N]/1000))*"k)"))
 
 
 # --- Create graph
 (g2 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-    labs(x=bquote("Performing spell cohorts (ccyymm): entry time "*italic(t[e])), y=bquote("PWP ST resolution rate (%) of type "*~italic(kappa))) +
+    labs(x=bquote("Performing spell cohorts (ccyymm): entry time "*italic(t[e])), y=bquote("TFD (first spell) resolution rate (%) of type "*~italic(kappa))) +
     theme(text=element_text(family=chosenFont),legend.position = "bottom",
           axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -439,14 +437,75 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
     scale_linetype_discrete(name=bquote("Sample "*italic(bar(D))), labels=vLabel) + 
     scale_y_continuous(breaks=pretty_breaks(), label=percent) + 
     scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
-### RESULTS:  There is very little deviation between the training set (represented in blue) from the full and validation set,
-###           indicating that the training and validation sets are well-representative of the full dataset. The fact is
-###           emphasized with the low MAE values.
+### RESULTS: The deviation of the training set (represented in blue) from the full and validation set highlights the lack of representation in the
+###           training set. This disparity arises because the performance spells beyond the first performance spell of each loan were discarded.
+###           When these previously discarded performance spells are included, the training set should tend toward the full and validation set.
 
 # - Save graph
 dpi <- 200
-ggsave(g2, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_te_Subsample_", 
+ggsave(g2, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_te_Subsample_", 
                        round(datCredit_smp[,.N]/1000),"k.png"), width=1200/(dpi), height=1800/(dpi), dpi=dpi, bg="white")
+
+
+# --- Investigate whether the addition of discarded performance spells will improve the representatives of the training set.
+# We want to add back the performance spells that were removed from the training dataset
+
+# --- Merge datasets together for graphing purposes, subset necessary fields, and rename columns for graphing ease
+# NOTE: We simply resample the training set again, but without the condition of containing only first-time spells
+datGraph2 <- rbind(datCredit[, Sample:="a_Full"],
+                  copy(datCredit_smp[ClusVar %in% dat_train_keys[, get(clusVar)],]) %>% mutate(Sample="b_Train") %>% as.data.table(),
+                  datCredit_valid_TFD[, Sample:="c_Valid"]) %>%
+  subset(!is.na(ClusVar_Perf), select = c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", resolType, "Sample"))
+colnames(datGraph2) <- c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", "Spell_Resol", "Sample")
+
+# - Aggregate to monthly level and observe up to given point
+datAggr_cohorts <- merge(datGraph2[timeVar==timeVar_SpellMin, list(Sum_Total = .N), by=list(Sample,timeVar)],
+                         datGraph2[timeVar==timeVar_SpellMin, list(Sum_Resol = .N), by=list(Sample,timeVar,Spell_Resol)],
+                        by=c("Sample", "timeVar"))[timeVar >= minDate & timeVar <= maxDate,]
+datAggr_cohorts[, Prop := Sum_Resol/Sum_Total]
+
+
+# --- Aesthetic engineering
+# - Aggregate by spell type towards creating the prior probabilities, and rename columns accordingly
+datFacetsProp <- datGraph[timeVar==timeVar_SpellMin, .(Prior = .N/ datGraph[timeVar==timeVar_SpellMin,.N]), keyby=.(Spell_Resol)]
+resolPerf_levels <- unique(datFacetsProp$Spell_Resol) # Get the unique factors of the spell resolution type (used as facets)
+
+# Enrich aggregated dataset with prior probabilities
+datAggr_cohorts <- merge(datAggr_cohorts, datFacetsProp, by="Spell_Resol")
+datAggr_cohorts[, Facet:=paste0('"', Spell_Resol, ' (', sprintf("%.2f", Prior*100), '%)"')] # Facetting purposes
+
+# --- Create graph
+(g3 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
+    labs(x=bquote("Performing spell cohorts (ccyymm): entry time "*italic(t[e])), y=bquote("TFD (all spells) resolution rate (%) of type "*~italic(kappa))) +
+    theme(text=element_text(family=chosenFont),legend.position = "bottom",
+          axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
+          strip.background=element_rect(fill="snow2", colour="snow2"),
+          strip.text=element_text(size=8, colour="gray50"), strip.text.y.right=element_text(angle=90)) + 
+    # main line graph with overlaid points
+    geom_line(aes(colour=Sample, linetype=Sample)) + 
+    geom_point(aes(colour=Sample, shape=Sample), size=1) + 
+    # facets
+    facet_wrap(Facet~., labeller = label_parsed, scales = "free", nrow=length(resolPerf_levels), strip.position="right") + 
+    # scale options
+    scale_colour_manual(name=bquote("Sample "*italic(bar(D))), values=vCol, labels=vLabel) + 
+    scale_shape_discrete(name=bquote("Sample "*italic(bar(D))), labels=vLabel) + 
+    scale_linetype_discrete(name=bquote("Sample "*italic(bar(D))), labels=vLabel) + 
+    scale_y_continuous(breaks=pretty_breaks(), label=percent) + 
+    scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
+
+### RESULTS: The training set (represented in blue) tends towards the full and validation set, therefore it can be concluded that
+###           the exclusion of the performance spell beyond the first performance spell of each loan deteriates the representativeness
+###           of the training set.
+### NOTE: This above code was merely for illustrative purposes and will not be referenced in furhter scripts.
+
+# - Save graph
+dpi <- 200
+ggsave(g3, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_te_FULL_ANCIL_Subsample_", round(datCredit_smp[,.N]/1000),"k.png"), 
+       width=1200/dpi, height=1800/dpi, dpi=dpi, bg="white")
+
+# - Cleanup
+suppressWarnings( rm(datGraph, datGraph2, datAggr_cohorts, datAnnotate, resolPerf_levels, chosenFont, g2,g3,
+                     vCol, vLabel, colnames, datGraph_Perf, datAggr_cohorts, datAggr_cohorts2, maxDate, minDate, datFacetsProp) )
 
 
 
@@ -456,14 +515,14 @@ ggsave(g2, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_te_Subsample_",
 
 # - Check representatives | dataset-level proportions should be similar
 datCredit[timeVar==timeVar_SpellMax, get(resolType)] %>% table() %>% prop.table()
-datCredit_train_PWPST[timeVar==timeVar_SpellMax, get(resolType)] %>% table() %>% prop.table()
-datCredit_valid_PWPST[timeVar==timeVar_SpellMax, get(resolType)] %>% table() %>% prop.table()
-### RESULTS: Proportions are fairly equal.
+datCredit_train_TFD[timeVar==timeVar_SpellMax, get(resolType)] %>% table() %>% prop.table()
+datCredit_valid_TFD[timeVar==timeVar_SpellMax, get(resolType)] %>% table() %>% prop.table()
+### RESULTS: The training set has proportions that are materially different, though this is sensible given its special resampling scheme for TFD-definition
 
 # --- Merge datasets together for graphing purposes, subset necessary fields, and rename columns for graphing ease
 datGraph <- rbind(datCredit[, Sample:="a_Full"],
-                  datCredit_train_PWPST[, Sample:="b_Train"],
-                  datCredit_valid_PWPST[, Sample:="c_Valid"]) %>%
+                  datCredit_train_TFD[, Sample:="b_Train"],
+                  datCredit_valid_TFD[, Sample:="c_Valid"]) %>%
   subset(!is.na(ClusVar_Perf), select = c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", resolType, resolType2, "Sample"))
 colnames(datGraph) <- c("ClusVar_Perf", "timeVar", "timeVar_SpellMin", "timeVar_SpellMax", "Spell_Resol", "Spell_Resol2", "Sample")
 
@@ -487,7 +546,7 @@ resolPerf_levels <- unique(datFacetsProp$Spell_Resol2) # Get the unique factors 
 
 # Enrich aggregated dataset with prior probabilities
 datAggr_cohorts <- merge(datAggr_cohorts, datFacetsProp, by="Spell_Resol2")
-datAggr_cohorts[, Facet:=paste0('"', Spell_Resol2, ' (', sprintf("%.2f", Prior*100), '%): PWP-technique"')] # Facetting purposes
+datAggr_cohorts[, Facet:=paste0('"', Spell_Resol2, ' (', sprintf("%.2f", Prior*100), '%): TFD-technique"')] # Facetting purposes
 
 # - Pivot aggregated dataset to wider based on the combination field of Sample & Spell_Resol
 datAggr_cohorts2 <- datAggr_cohorts %>% pivot_wider(id_cols = c(timeVar), names_from = c(Sample, Spell_Resol2), values_from = Prop) %>% data.table()
@@ -507,7 +566,7 @@ datAnnotate <- data.table(MAE = rep(0,anno_n*4), Mean_EventRate = rep(0, anno_n*
                                         paste0("'MAE between '*italic(B[t])*' and '*italic(C[t])*'"), 
                                         paste0("'TTC-mean '*E(italic(B[t]))*'")), anno_n),
                           x = rep(x_pos,anno_n*4), y = rep(Inf, anno_n*4),
-                          vjust = c(5,6,7,9,19,20,21,21), hjust=rep(0.5, anno_n*4))
+                          vjust = c(5,6,7,9,19,20,21,23), hjust=rep(0.5, anno_n*4))
 # Get the column names to help compute the MAEs
 vCols <- colnames(datAggr_cohorts2)
 
@@ -540,13 +599,13 @@ datAnnotate <- merge(datAnnotate, unique(datAggr_cohorts[, .(Spell_Resol2, Facet
 chosenFont <- "Cambria"; dpi <- 340
 vCol <- brewer.pal(9, "Set1")
 vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
-            "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_PWPST[,.N]/1000))*"k)"),
-            "c_Valid"=bquote(italic(C)[t]*": Validation set "*italic(D)[italic(V)]~"("*.(round(datCredit_valid_PWPST[,.N]/1000))*"k)"))
+            "b_Train"=bquote(italic(B)[t]*": Training set "*italic(D)[italic(T)]~"("*.(round(datCredit_train_TFD[,.N]/1000))*"k)"),
+            "c_Valid"=bquote(italic(C)[t]*": Validation set "*italic(D)[italic(V)]~"("*.(round(datCredit_valid_TFD[,.N]/1000))*"k)"))
 
 
 # --- Create graph: Multi-facets
-(g3 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-    labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[e])), y=bquote("PWP ST resolution rate (%) of type "*~italic(kappa))) +
+(g4 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
+    labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[e])), y=bquote("TFD (first spell) resolution rate (%) of type "*~italic(kappa))) +
     theme(text=element_text(family=chosenFont),legend.position = "bottom",
           axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -564,14 +623,13 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
     scale_linetype_discrete(name=bquote("Sample "*italic(bar(D))), labels=vLabel) + 
     scale_y_continuous(breaks=pretty_breaks(), label=percent) + 
     scale_x_date(date_breaks=paste0(6, " month"), date_labels = "%b %Y"))
-### RESULTS:  There is little deviation between the training set (represented in blue) from the full and validation set,
-###           indicating that the training and validation sets are well-representative of the full dataset. 
-###           Although there seems to be a massive deviation between the training set and validation set from May 2022 until
-###           the end of the period. The low MAE values are sufficient to conclude representativeness.
+### RESULTS: The deviation of the training set (represented in blue) from the full and validation set highlights the lack of representation in the
+###           training set. This disparity arises because the performance spells beyond the first performance spell of each loan were discarded.
+###           When these previously discarded performance spells are included, the training set should tend toward the full and validation set.
 
 # - Save graph
 dpi <- 180
-ggsave(g3, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_ts_Subsample_", 
+ggsave(g4, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_ts_Subsample_", 
                        round(datCredit_smp[,.N]/1000),"k.png"), width=1200/(dpi), height=1600/(dpi), dpi=dpi, bg="white")
 
 # --- Create graph: Single-facet
@@ -580,7 +638,7 @@ if (!is.na(resolType2_Val)){
   # - Cap dates for graphing purposes
   sDateMax <- max(datAggr_cohorts$timeVar) %m-% months(1)
 
-  (g4 <- ggplot(datAggr_cohorts[Spell_Resol2==resolType2_Val & timeVar <= sDateMax,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
+  (g5 <- ggplot(datAggr_cohorts[Spell_Resol2==resolType2_Val & timeVar <= sDateMax,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
      labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa)==1)) +
      theme(text=element_text(family=chosenFont),legend.position = "bottom",
            axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
@@ -601,7 +659,7 @@ if (!is.na(resolType2_Val)){
   
   # Save graph
   dpi <- 200
-  ggsave(g4, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_ts_Subsample_Single_Facet-", 
+  ggsave(g5, file=paste0(genFigPath, "TFD/ResolutionRates_Perf_ts_Subsample_Single_Facet-", 
                          round(datCredit_smp[,.N]/1000),"k.png"), width=1200/dpi, height=1000/dpi, dpi=dpi, bg="white")
 
 }
@@ -611,6 +669,6 @@ rm(datAnnotate, resolPerf_levels, ind, chosenFont, vCol, vLabel, colnames, datGr
    datAggr_cohorts2, maxDate, minDate, datFacetsProp, datGraph2)
 
 # --- Cleanup
-suppressWarnings(rm(g1, g2, g3, g4, datCredit, datCredit_smp, stratifiers, clusVar, Counter, timeVar, End_Dte,
-                    Start_Dte, datGraph, datCredit_train_PWPST, datCredit_valid_PWPST, 
+suppressWarnings(rm(g1, g2, g3, g4, g5, datCredit, datCredit_smp, stratifiers, clusVar, Counter, timeVar, End_Dte,
+                    Start_Dte, datGraph, datCredit_train_TFD, datCredit_valid_TFD, 
                     dat_train_keys, datKeys, datKeys_sampled))

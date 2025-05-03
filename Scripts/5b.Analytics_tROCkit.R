@@ -293,7 +293,7 @@ objROC1_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=pred
                             caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
 objROC1_AG$AUC; objROC1_AG$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 82.83%, achieved in 686.18  secs ( 11.4 mins)
+### RESULTS: AUC up to t: 82.8%, achieved in 686.18  secs ( 11.4 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 12 in following the CD-approach
@@ -307,7 +307,7 @@ objROC2_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=pred
                             caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
 objROC2_AG$AUC; objROC2_AG$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 95.71%, achieved in 1418.35  secs (23.6 mins)
+### RESULTS: AUC up to t: 95.70%, achieved in 1418.35  secs (23.6 mins)
 
 
 # -- Multi-threaded calculation of the # AUC from given start up to given prediction time 36 in following the CD-approach
@@ -335,7 +335,7 @@ objROC4_AG <- tROC.multi(datGiven=datCredit_valid_AG, cox=cox_AG, month_End=pred
                             caseStudyName=paste0("AG_", predictTime), numThreads=12, logPath=genPath)
 objROC4_AG$AUC; objROC4_AG$ROC_graph
 proc.time() - ptm
-### RESULTS: AUC up to t: 95.99%, achieved in 3102.89 secs (51.7 mins)
+### RESULTS: AUC up to t: 95.98%, achieved in 3102.89 secs (51.7 mins)
 
 
 # -- Store experimental objects | Memory optimisation

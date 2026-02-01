@@ -419,7 +419,8 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 
 # --- Create graph
 (g2 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-    labs(x=bquote("Performing spell cohorts (ccyymm): entry time "*italic(t[e])), y=bquote("PWP ST resolution rate (%) of type "*~italic(kappa))) +
+    labs(x=bquote("Performing spell cohorts (ccyymm): entry time "*italic(t[e])), 
+         y="PWP ST resolution rate (%)") +
     theme(text=element_text(family=chosenFont),legend.position = "bottom",
           axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -528,8 +529,7 @@ for (i in 1:anno_n){
 datAnnotate[, Label2 := paste0(Label, " = ", sprintf("%.4f",MAE*100), "%'")]
 # Override the label for the TTC-mean rates
 datAnnotate[seq(from=4, to=4*anno_n, by=4), 
-            Label2 := paste0(Label, " = ", sprintf("%.2f", mean_EventRate*100) , "% ±", 
-                            sprintf("%.3f", margin_EventRate*100), "%'")]
+            Label2 := paste0(Label, " = ", sprintf("%.2f", mean_EventRate*100) , "%'")]
 
 # - Enrich annotation object with facet labels to ensure positioning across facets is correct
 datAnnotate <- merge(datAnnotate, unique(datAggr_cohorts[, .(Spell_Resol2, Facet)]), by="Spell_Resol2")
@@ -544,7 +544,8 @@ vLabel <- c("a_Full"=expression(italic(A)[t]*": Full set "*italic(D)),
 
 # --- Create graph: Multi-facets
 (g3 <- ggplot(datAggr_cohorts, aes(x=timeVar, y=Prop)) + theme_minimal() + 
-    labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[e])), y=bquote("PWP ST resolution rate (%) of type "*~italic(kappa))) +
+    labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[e])), 
+         y="PWP ST resolution rate (%)") +
     theme(text=element_text(family=chosenFont),legend.position = "bottom",
           axis.text.x=element_text(angle=90), legend.text=element_text(family=chosenFont), 
           strip.background=element_rect(fill="snow2", colour="snow2"),
@@ -576,10 +577,11 @@ ggsave(g3, file=paste0(genFigPath, "PWP ST/ResolutionRates_Perf_ts_Subsample_",
 if (!is.na(resolType2_Val)){
   
   # - Cap dates for graphing purposes
-  sDateMax <- max(datAggr_cohorts$timeVar) %m-% months(1)
+  sDateMax <- max(datAggr_cohorts$timeVar) %m-% months(6)
 
   (g4 <- ggplot(datAggr_cohorts[Spell_Resol2==resolType2_Val & timeVar <= sDateMax,], aes(x=timeVar, y=Prop)) + theme_minimal() + 
-     labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), y=bquote("Resolution rate (%) of type "*italic(kappa)==1)) +
+     labs(x=bquote("Performing spell cohorts (ccyymm): stop time "*italic(t[s])), 
+          y="PWP ST resolution rate (%)") +
      theme(text=element_text(family=chosenFont),legend.position = "bottom",
            axis.text.x=element_text(angle=90), #legend.text=element_text(family=chosenFont), 
            strip.background=element_rect(fill="snow2", colour="snow2"),

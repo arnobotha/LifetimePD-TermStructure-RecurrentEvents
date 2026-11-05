@@ -5,8 +5,7 @@
 # for Cox regression modelling.
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Marcel Muller (MM), Roland Breedt (RB), 
-#                   Bernard Scheepers (BS)
+# SCRIPT AUTHOR(S): Dr Arno Botha (AB), Marcel Muller (MM), Bernard Scheepers (BS)
 #
 # DESCRIPTION:
 # This script performs the following high-level tasks:

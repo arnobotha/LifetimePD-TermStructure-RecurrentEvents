@@ -2,7 +2,7 @@
 # Setting up R environment, parameters, and function definitions
 # ---------------------------------------------------------------------------------------
 # PROJECT TITLE: Default survival modelling
-# SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Roland Breedt, Bernard Scheepers
+# SCRIPT AUTHOR(S): Dr Arno Botha, Marcel Muller, Bernard Scheepers
 
 # DESCRIPTION: 
 # This script installs and  loads various libraries and packages, compiles all
@@ -127,5 +127,5 @@ source(paste0(path_cust,'0b(i).FunkySurv.R'))
 # - Custom survival-related functions - Residuals (Cox-Snell, Schoenfeld)
 source(paste0(path_cust,'0b(ii).FunkySurv_Residuals.R'))
 
-# - Custom survival-related functions - time-dependent ROC-analyses and unit tests
+# - Custom survival-related functions - time-dependent ROC-analyses
 source(paste0(path_cust,'0b(iii).FunkySurv_tROCkit.R'))

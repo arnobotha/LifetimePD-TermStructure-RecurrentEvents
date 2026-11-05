@@ -4,16 +4,49 @@
 # --------------------------------------------------------------------------------
 # PROJECT TITLE: Default Survival Modelling
 # SCRIPT AUTHOR(S): Dr Arno Botha (AB)
-# VERSION: 1.0 (November-2024)
-# --------------------------------------------------------------------------------
-# -- Script dependencies:
-#   - 0.Setup.R
+# VERSION: 2.0 (September-2026)
 # ================================================================================
 
 
 
+# ----  0. Preliminaries ----  
+library(dplyr)
+library(data.table)
+library(survival)
+library(survivalROC)
+library(ggplot2)
+library(survminer)
+library(RColorBrewer)
+library(scales)
+library(doBy)
+library(foreach)
+library(doParallel)
 
-# ----------------- 1. Extract and prepare an example dataset and models for unit tests
+
+# - general R options
+options(scipen=999) # Suppress showing scientific notation
+
+# - Path variables | User-dependent
+
+if (Sys.getenv("USERNAME") %in% c("Arno Botha","arnos")) { # Dr Arno Botha | Kralkatorrik-machine
+  # - Common path for saving large R-objects as back-up and/or as reusable checkpoints
+  genPath <- "E:/DataDump/RetailMortgages-FNB/LifetimePD-TermStructure-RecurrentEvents_Data/"
+  # - Common path from which raw big datasets are imported
+  genRawPath <- "E:/DataDump/RetailMortgages-FNB/"
+  # - Common path for sourcing R-scripts in main codebase
+  path_cust <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Scripts/"
+  # - Common path for storing important (but small!) R-objects as back-up
+  genObjPath <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Objects/"
+  # - Common path for saving important analytics and figures
+  genFigPath <- "E:/Backupz/Google Drive/WorkLife/Analytix/R&D Codebases/LifetimePD-TermStructure-RecurrentEvents/Figures/"
+}
+
+# - Custom survival-related functions - time-dependent ROC-analyses
+source(paste0(path_cust,'0b(iii).FunkySurv_tROCkit.R'))
+
+
+
+# ----  1. Extract and prepare an example dataset and models for unit tests ----
 # The cgd dataset from the survival package contains survival data from a clinical
 # trial on patients with chronic granulomatous disease (CGD), a rare immune deficiency.
 force(data(cgd,package="survival"))
@@ -24,7 +57,7 @@ dat <- as.data.table(cgd)[, .(id, tstart, tstop, status, sex, age, height, weigh
 
 
 
-# ----------------- 2. Conduct preliminary Kaplan-Meier analyses
+# ---- 2. Conduct preliminary Kaplan-Meier analyses ----
 
 # --- Fit Kaplan-Meier (KM) nonparametric (and "empty-of-covariates") model
 # Compute Kaplan-Meier survival estimates (product-limit) for main-event | Spell-level with right-censoring & left-truncation
@@ -37,25 +70,6 @@ summary(kmExample)$table # overall summary statistics
 (kmExample_survFitSummary <- surv_summary(kmExample)) # Survival table
 ### RESULTS: Median survival time of 334 has standard error of 5.8%, which is relatively large
 
-# -- Calculate various summary statistics
-# - Chosen percentile of survival times, used later as a prediction time, e.g., 75%
-# NOTE: Median would also work, though sample sizes typically dwindle at that point, which can complicate analyses
-survPercentile <- 0.75
-cat(paste0("Kaplan-Meier: Survival time at the xth percentile of the distribution of unique survival times: \n\t",
-           percTimepoint <- min(kmExample$time[kmExample$surv <= survPercentile],na.rm=T)))
-# - Calculate the Truncated Mean (or "Restricted Mean Survival Time" [RMST]) of survival times
-# NOTE: The classical mean survival time is only defined when S(t) can reach 0
-# NOTE2: Calculating RMST involves integrating the KM-curve up to the last (hence truncated) observed unique event time
-#         I.e., sum the survival probabilities, as weighted by the time difference between two successive survival times
-cat(paste0("Kaplan-Meier: Truncated/Restricted Mean Survival Time: \n\t", 
-           sum(kmExample$surv*diff(c(0,kmExample$time)), na.rm=T)))
-# - Retrieve the mean survival probability at the previously found percentile-basd prediction point
-cat(paste0("Kaplan-Meier: Retrieved mean survival probability at a given time point (t=", percTimepoint, "): \n\t",
-           percent(kmExample$surv[max(which(kmExample$time <= percTimepoint))], accuracy=0.01)))
-# - Retrieve the mean survival probability at the last unique event time as prediction time, i.e., 
-# the "pooled mean survival probability"
-cat(paste0("Kaplan-Meier: Retrieved mean survival probability at last unique event point as time point (t=", max(kmExample$time), "): \n\t",
-           percent(kmExample$surv[max(which(kmExample$time <= max(kmExample$time)))], accuracy=0.01)))
 
 
 # --- Graphing survival and related quantities from fitted KM-model | S(t), h(t)
@@ -149,7 +163,7 @@ ggsave(gsurv1c_d, file=paste0(genFigPath,"Proof of Concepts/Example1_SurvFig1c_d
 
 
 
-# ----------------- 3. Fit Cox regression models
+# ----3. Fit Cox regression models ----
 # NOTE: 'Best' model was fit interactively by changing input space until statistical significance is obtained.
 # The goal is not to get the best model, but just a baseline upon which ROC-analyses
 
@@ -169,7 +183,7 @@ summary(coxExample_wrong)
   
 
 
-# ----------------- 4. Compare ROC-analyses using the same fitted Cox model
+# ----4. Compare ROC-analyses using the same fitted Cox model ----
 
 # - Decide prediction point t at which we would like to conduct a time-dependent ROC-analysis
 # assuming the cumulative/dynamic (CD) context, i.e., that TPR is calculated given that 
@@ -202,6 +216,8 @@ survivalROC::survivalROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start,
                          marker=round(predict(coxExample, type="lp"),2))
 ### RESULTS: AUC: 59.53% up to t
 
+### CONCLUSION: Package seems useful, although it cannot contend with clustered observations given a spell id
+
 
 
 # ----- Package: timeROC()
@@ -224,6 +240,7 @@ timeROC::timeROC(T=datFiltered$End, delta=datFiltered$Event_Ind, cause=1, times=
 # expected given: 1) different estimation method;
 # and 2) cannot accommodate non-zero starting times without filtering.
 #   When filtered: AUC is NA, though the approach is misspecified and flawed.
+
 ### CONCLUSION: Discard and disavow the use of timeROC at present.
 
 
@@ -254,70 +271,15 @@ risksetROC::risksetROC(Stime=dat$End, status=dat$Event_Ind, entry=dat$Start,
                        method="Schoenfeld", span=0.05, #only used when using the NNE-method with "LocalCox" or "Schoenfeld" (presumably different kernels)
                        predict.time=predictTime, marker=round(predict(coxExample, type="risk"),2))
 ### RESULTS: AUC: 98.7% at t
+
 ### CONCLUSION: The AUC-results vary widely, which definitely hints at "functional misspecification", though it is
-#               obvious how exactly, despite consulting the developer notes extensively.
-
-
-
-# ----- Package: tROCkit() | custom "package"/function
-# Using custom tROC()-function from script 0b(iii) under the CD-approach with an NN-estimator
-
-# - Calculate AUC up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
-tROC1 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
-              fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
-tROC1$AUC; tROC1$ROC_graph
-### RESULTS: AUC: 57.69% up to t, which is very close to that of survivalROC
-# In fact, we discovered a small indexing error in survivalROC() which explain this small discrepancy exactly
-
-
-# - Calculate AUC up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-tROC2 <- tROC(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
-              fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_dependence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
-tROC2$AUC; tROC2$ROC_graph
-### RESULTS: AUC: 59.36% up to t
-
-
-# - Multi-threaded calculation of the AUC up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume dependence (by specifying ID-field) amongst certain observations clustered around ID-values
-tROC2.multi <- tROC.multi(datGiven=dat, cox=coxExample, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
-              fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_dependence", genFigPath=paste0(genFigPath, "Proof of Concepts/"), numThreads=6)
-tROC2.multi$AUC; tROC2.multi$ROC_graph
-### RESULTS: AUC: 59.36% up to t. Same AUC, validated as in tROC2.
-
-
-# - Calculate AUC from given start up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
-# NOTE3: For comparison with risksetsROC, in mimicking the ID-approach roughly
-tROC3 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
-              fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
-tROC3$AUC; tROC3$ROC_graph
-### RESULTS: AUC: 95.48% at t. Closest to the "LocalCox"-method of risksetsROC, which yielded 94.16%
-
-
-# - Calculate AUC from given start up to given prediction time in following the CD-approach
-# NOTE: Uses the superior Nearest Neighbour Estimator (NNE) method for S(t) with a 0/1-kernelNNE-kernel for S(t)
-# NOTE2: Assume independence amongst all row (by not specifying ID-field), for comparative purposes with survivalROC()
-# NOTE3: For comparison with tROC2, in mimicking the ID-approach roughly
-tROC4 <- tROC(datGiven=dat, cox=coxExample, month_Start=predictTime-1, month_End=predictTime, estMethod="NN-0/1", numDigits=2, 
-              fld_ID="ID", fld_Event="Event_Ind", eventVal=1, fld_StartTime="Start", fld_EndTime="End",
-              graphName="coxExample1_cgd_independence", genFigPath=paste0(genFigPath, "Proof of Concepts/"))
-tROC4$AUC; tROC4$ROC_graph
-### RESULTS: AUC: 98.39% at t.
+#               not obvious how exactly, despite consulting the developer notes extensively.
 
 
 
 
-# ----------------- 5. Compare ROC-analyses using the same fitted Cox model across various prediction times
+
+# ---- 5. Compare ROC-analyses using the same fitted Cox model across various prediction times ----
 # NOTE: The previous KM-analyses can be used to deduce meaningful prediction times
 
 # - Set ROC-parameters and initialize data structures

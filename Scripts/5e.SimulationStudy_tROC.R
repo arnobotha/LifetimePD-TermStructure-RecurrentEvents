@@ -21,7 +21,7 @@
 # Set various simulation parameters
 
 B <- 500 # number of Monte Carlo replications
-vecN <- c(2500, 5000, 10000, 20000) # Number of independent loans per simulated portfolio
+vecN <- c(2500, 5000, 10000, 20000, 40000) # Number of independent loans per simulated portfolio
 sT <- 36 # Number of observations per typical spell
 maxNumSpells <- 5 # maximum number of spells that can be generated per loan
 t_eval <- 12 # Time horizon(s) at which tROC/tAUC is to be evaluated
@@ -219,7 +219,7 @@ ptm <- proc.time() #IGNORE: for computation time calculation;
 objROC_0 <- tROC.Clustered_compact(datCreditSim, t_eval = 12, sLambda = 0.05, numDigits = 2, numThreads = 12)
 objROC_0$AUC; proc.time() - ptm
 ### RESULTS: 0.6434665 (when not ordering vStartTimes)
-### RESULTS: 0.7050944 (when ordering vStartTimes; now the default implementation)
+### RESULTS: 0.682703 (when ordering vStartTimes; now the default implementation)
 
 
 # -- Calculate the clustered tAUC (verbose) by KeyID
@@ -232,7 +232,7 @@ objROC <- tROC.multi(datGiven=datCreditSim, Markers=datCreditSim$M, month_End=t_
 objROC$AUC; objROC$ROC_graph
 proc.time() - ptm
 ### RESULTS: 0.6434665 (when not ordering vStartTimes)
-### RESULTS: 0.7050944 (when ordering vStartTimes; now the default implementation)
+### RESULTS: 0.682703 (when ordering vStartTimes; now the default implementation)
 
 
 # -- Calculate the classical tAUC (compact)
@@ -242,10 +242,11 @@ tROC1.classic <- tROC.Classical_compact(datCreditSim, t_eval=t_eval, sLambda = 0
 tROC1.classic$AUC
 proc.time() - ptm
 ### RESULTS: 0.6421406  (when not ordering vStartTimes; ImplementFix=F)
-### RESULTS: 0.7052204 (when ordering vStartTimes; now the default implementation)
+### RESULTS: 0.6840698 (when ordering vStartTimes; now the default implementation)
 
 
 # -- Calculate the classical tAUC (verbose)
+### NOTE: tROC.multi resorts to the classical tAUC-estimator when no ID field has been specified
 ptm <- proc.time() #IGNORE: for computation time calculation;
 tROC2.classic <- tROC.multi(datGiven=datCreditSim, Markers=datCreditSim$M, month_End=t_eval, sLambda=0.05, 
                      numDigits=2, eventVal=1, fld_Event="Event_Ind", fld_StartTime="Start", fld_EndTime="TimeInSpell", 
@@ -254,7 +255,7 @@ tROC2.classic <- tROC.multi(datGiven=datCreditSim, Markers=datCreditSim$M, month
 tROC2.classic$AUC; tROC2.classic$ROC_graph
 proc.time() - ptm
 ### RESULTS: 0.6421406 (when not ordering vStartTimes)
-### RESULTS: 0.7052204 (when ordering vStartTimes; now the default implementation)
+### RESULTS: 0.6840698 (when ordering vStartTimes; now the default implementation)
 
 
 # -- Calculate the classical tAUC (Heagerty version from survivalROC package)
@@ -264,7 +265,7 @@ objROC_Heagerty <- survivalROC::survivalROC(Stime=datCreditSim$TimeInSpell, stat
                                             predict.time=t_eval, marker=round(datCreditSim$M,2))
 objROC_Heagerty$AUC
 proc.time() - ptm
-### RESULTS: 0.6421406 (vStartTimes is unordered by ranks of end times, which is a latent bug in this function)
+### RESULTS: 0.6884072 (vStartTimes is unordered by ranks of end times, which is a latent bug in this function)
 
 
 
